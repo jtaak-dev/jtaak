@@ -44,11 +44,14 @@ jobs:
       # pnpm packs, so the CLI's workspace:* dependency becomes the engine's
       # exact version; npm publishes, since trusted publishing needs npm 11.5.1+.
       - run: npm install -g npm@latest
+      # pnpm pack runs in each package folder: with --filter it becomes a
+      # recursive command, which pnpm 9's pack doesn't support.
       - name: Pack
         run: |
           mkdir -p "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter @jtaak/engine pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
-          pnpm --filter jtaak pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          (cd packages/engine && pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
+          (cd packages/cli && pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
+          ls -l "$GITHUB_WORKSPACE/tarballs"
       # The engine first: the CLI depends on it.
       - run: npm publish "tarballs/jtaak-engine-$VERSION.tgz" --access public
       - run: npm publish "tarballs/jtaak-$VERSION.tgz" --access public
