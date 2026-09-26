@@ -55,7 +55,21 @@ jobs:
           (cd packages/engine && pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
           (cd packages/cli && pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs")
           ls -l "$GITHUB_WORKSPACE/tarballs"
-      # The engine first: the CLI depends on it. The ./ matters: without it,
-      # npm reads tarballs/<file> as a GitHub user/repo and refuses it.
-      - run: npm publish "./tarballs/jtaak-engine-$VERSION.tgz" --access public
-      - run: npm publish "./tarballs/jtaak-$VERSION.tgz" --access public
+      # The engine first: the CLI depends on it. Each step skips a version
+      # that's already on npm, so a run that failed after publishing the engine
+      # can simply be run again. The ./ matters: without it, npm reads
+      # tarballs/<file> as a GitHub user/repo and refuses it.
+      - name: Publish @jtaak/engine
+        run: |
+          if npm view "@jtaak/engine@$VERSION" version > /dev/null 2>&1; then
+            echo "@jtaak/engine@$VERSION is already published; skipping."
+          else
+            npm publish "./tarballs/jtaak-engine-$VERSION.tgz" --access public
+          fi
+      - name: Publish jtaak
+        run: |
+          if npm view "jtaak@$VERSION" version > /dev/null 2>&1; then
+            echo "jtaak@$VERSION is already published; skipping."
+          else
+            npm publish "./tarballs/jtaak-$VERSION.tgz" --access public
+          fi
