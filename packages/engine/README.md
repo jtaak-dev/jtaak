@@ -84,7 +84,9 @@ Scripts use the `jt` object: `jt.test`, `jt.expect` (`toBe`, `toEqual`,
 
 Scripts run in [QuickJS](https://github.com/justjake/quickjs-emscripten), a
 separate JavaScript engine compiled to WebAssembly: a fresh runtime per script,
-a 1 s deadline (including promise callbacks) and a 64 MB memory cap. They get no
+a 1 s deadline (including promise callbacks) and a 64 MB memory cap. The
+deadline is hard: a script still running just after it, even inside one long
+built-in call such as a large `sort`, is terminated. They get no
 Node.js or host objects, no timers and no network; data goes in and out only as
 JSON.
 

@@ -6,6 +6,7 @@ import {
   type QuickJSWASMModule,
 } from 'quickjs-emscripten-core';
 import quickJsVariant from '@jitl/quickjs-singlefile-cjs-release-sync';
+import { createContext, Script, type Context } from 'node:vm';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { AssertionResult, ExecutedResponse, RequestConfig } from '../types.js';
 
@@ -161,6 +162,8 @@ const PRELUDE = String.raw`
 `;
 
 let quickJs: Promise<QuickJSWASMModule> | undefined;
+/** Modules a hard stop left in an unknown state (see withHardStop). */
+const discarded = new WeakSet<QuickJSWASMModule>();
 
 /** Loads the QuickJS WebAssembly module once (about 25 ms), on first use. */
 function loadQuickJs(): Promise<QuickJSWASMModule> {
@@ -177,6 +180,34 @@ export async function preloadScriptEngine(): Promise<void> {
 }
 
 class ScriptError extends Error {}
+
+/** How long past its deadline a script may run before the hard stop. QuickJS's
+ * interrupt normally stops it at the deadline; this only catches a single
+ * long built-in call. */
+const HARD_STOP_GRACE_MS = 50;
+
+let hardStop: { context: Context; script: Script } | undefined;
+
+/**
+ * Runs `task`, terminating it if it takes longer than `timeoutMs`. QuickJS
+ * checks its deadline only between bytecode instructions, so one long built-in
+ * call (a default `sort` of a million numbers, or garbage collection near the
+ * memory cap) can run for seconds past it. Node's `vm` timeout stops even that:
+ * its watchdog thread terminates whatever JavaScript or WebAssembly is running.
+ * Returns undefined if it did.
+ */
+function withHardStop<T>(task: () => T, timeoutMs: number): { value: T } | undefined {
+  hardStop ??= { context: createContext({ task: undefined }), script: new Script('task()') };
+  hardStop.context.task = task;
+  try {
+    return { value: hardStop.script.runInContext(hardStop.context, { timeout: timeoutMs }) as T };
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') return undefined;
+    throw error;
+  } finally {
+    hardStop.context.task = undefined;
+  }
+}
 
 /** Unwraps a QuickJS call result, turning a script exception into a host Error. */
 function unwrap(
@@ -200,7 +231,9 @@ function unwrap(
  * the script API (named by the profile's `scriptNamespace`) and a capturing
  * `console`, and nothing else — no Node or
  * host objects, no timers, no network. Each script gets a fresh runtime with
- * a memory cap and a deadline that also covers promise callbacks.
+ * a memory cap and a deadline that also covers promise callbacks. The
+ * deadline is hard: a script still running shortly after it is terminated,
+ * even inside a single long built-in call.
  *
  * Throws (with the script's error message) if the script itself throws,
  * outside a `test` callback, or runs out of time or memory.
@@ -216,52 +249,67 @@ export async function runScript(
   if (!/^[A-Za-z_$][\w$]*$/.test(profile.scriptNamespace)) {
     throw new Error(`Invalid script namespace: ${JSON.stringify(profile.scriptNamespace)}`);
   }
-  const module = await loadQuickJs();
-  const runtime = module.newRuntime();
-  runtime.setMemoryLimit(limits.memoryBytes);
-  runtime.setMaxStackSize(1024 * 1024);
-  const deadline = Date.now() + limits.timeoutMs;
-  runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
-  const ctx = runtime.newContext();
-  try {
-    const input = ctx.newString(
-      JSON.stringify({
-        namespace: profile.scriptNamespace,
-        request: context.request,
-        response: context.response,
-        variables: context.variables,
-      }),
-    );
-    ctx.setProp(ctx.global, '__input', input);
-    input.dispose();
-    unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits).dispose();
+  let module = await loadQuickJs();
+  // Another script's hard stop may have discarded this module while we waited.
+  while (discarded.has(module)) module = await loadQuickJs();
 
-    unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
-    // Let promise callbacks the script queued run too, within the same deadline.
-    const jobs = runtime.executePendingJobs();
-    if (jobs.error) {
-      const dumped = ctx.dump(jobs.error) as { message?: string };
-      jobs.error.dispose();
-      throw new ScriptError(dumped?.message ?? String(dumped));
+  const run = withHardStop(() => {
+    const runtime = module.newRuntime();
+    runtime.setMemoryLimit(limits.memoryBytes);
+    runtime.setMaxStackSize(1024 * 1024);
+    const deadline = Date.now() + limits.timeoutMs;
+    runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
+    const ctx = runtime.newContext();
+    try {
+      const input = ctx.newString(
+        JSON.stringify({
+          namespace: profile.scriptNamespace,
+          request: context.request,
+          response: context.response,
+          variables: context.variables,
+        }),
+      );
+      ctx.setProp(ctx.global, '__input', input);
+      input.dispose();
+      unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits).dispose();
+
+      unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
+      // Let promise callbacks the script queued run too, within the same deadline.
+      const jobs = runtime.executePendingJobs();
+      if (jobs.error) {
+        const dumped = ctx.dump(jobs.error) as { message?: string };
+        jobs.error.dispose();
+        throw new ScriptError(dumped?.message ?? String(dumped));
+      }
+      // An interrupt inside a promise callback rejects that promise rather than
+      // failing the call, so check the deadline directly.
+      if (Date.now() >= deadline) throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+
+      const outputHandle = unwrap(ctx, ctx.evalCode('__output()', 'output.js'), limits);
+      const output = ctx.getString(outputHandle);
+      outputHandle.dispose();
+      return output;
+    } finally {
+      ctx.dispose();
+      runtime.dispose();
     }
-    // An interrupt inside a promise callback rejects that promise rather than
-    // failing the call, so check the deadline directly.
-    if (Date.now() >= deadline) throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+  }, limits.timeoutMs + HARD_STOP_GRACE_MS);
 
-    const outputHandle = unwrap(ctx, ctx.evalCode('__output()', 'output.js'), limits);
-    const output = JSON.parse(ctx.getString(outputHandle)) as ScriptRunResult & { variables: Record<string, string> };
-    outputHandle.dispose();
-
-    // Write variable changes back, so a pre-request script's `jt.variables.x = …`
-    // reaches this request's variable resolution (see runRequest.ts).
-    for (const key of Object.keys(context.variables)) {
-      if (!(key in output.variables)) delete context.variables[key];
-    }
-    Object.assign(context.variables, output.variables);
-
-    return { results: output.results, logs: output.logs };
-  } finally {
-    ctx.dispose();
-    runtime.dispose();
+  if (!run) {
+    // Stopped mid-call, the module's memory is in an unknown state, so it's
+    // never used again: the next script loads a fresh one (a few ms).
+    discarded.add(module);
+    quickJs = undefined;
+    throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
   }
+  const output = JSON.parse(run.value) as ScriptRunResult & { variables: Record<string, string> };
+
+  // Write variable changes back, so a pre-request script's `jt.variables.x = …`
+  // reaches this request's variable resolution (see runRequest.ts).
+  for (const key of Object.keys(context.variables)) {
+    if (!(key in output.variables)) delete context.variables[key];
+  }
+  Object.assign(context.variables, output.variables);
+
+  return { results: output.results, logs: output.logs };
 }
