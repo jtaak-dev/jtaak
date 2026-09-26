@@ -1,0 +1,36 @@
+{
+  "name": "jtaak-workspace",
+  "private": true,
+  "description": "jtaak: a local-first API request engine and command-line client.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build:engine": "pnpm --filter @jtaak/engine build",
+    "pretest": "pnpm build:engine",
+    "test": "pnpm -r test",
+    "pretypecheck": "pnpm build:engine",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:pack": "pnpm -r check:pack",
+    "check:install": "pnpm --filter jtaak check:install"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}

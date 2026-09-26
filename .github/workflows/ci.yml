@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The DCO check reads every commit in a pull request.
+          fetch-depth: 0
+      # Every commit in a pull request must carry a Signed-off-by line
+      # (git commit -s); see CONTRIBUTING.md.
+      - name: Check DCO sign-off
+        if: github.event_name == 'pull_request'
+        run: |
+          missing=0
+          for sha in $(git rev-list --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+            if ! git log -1 --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+>$'; then
+              echo "::error::Commit $sha has no Signed-off-by line. Sign it off with: git commit -s"
+              missing=1
+            fi
+          done
+          exit $missing
+      # No `version:` here: the action reads `packageManager` from package.json.
+      # Giving both makes it fail with "Multiple versions of pnpm specified".
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      # `pretypecheck` builds the engine first: the CLI typechecks against it.
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      # Both packages as they will be published: layout and type resolution.
+      - run: pnpm check:pack
+      # Installs the packed engine and CLI with npm into an empty folder and
+      # runs the installed `jt` command.
+      - run: pnpm check:install

@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The published build is native ESM (the package is "type": "module").
+    // NodeNext makes tsc check what Node itself will resolve at runtime,
+    // including the .js extension on every relative import.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    // src/ isn't published, so maps pointing into it would only dangle.
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -1,0 +1,54 @@
+name: Publish
+
+# Publishes @jtaak/engine and jtaak to npm when a v* tag is pushed. Both
+# packages are released together at the same version (the CLI depends on the
+# engine's exact version). Uses npm trusted publishing: no npm token is stored
+# here; npm checks this workflow's identity, and adds provenance.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:pack
+      - run: pnpm check:install
+      - name: Check the tag matches both package versions
+        run: |
+          engine=$(node -p "require('./packages/engine/package.json').version")
+          cli=$(node -p "require('./packages/cli/package.json').version")
+          if [ "v$engine" != "$GITHUB_REF_NAME" ] || [ "v$cli" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match engine $engine and CLI $cli."
+            exit 1
+          fi
+          echo "VERSION=$engine" >> "$GITHUB_ENV"
+      # pnpm packs, so the CLI's workspace:* dependency becomes the engine's
+      # exact version; npm publishes, since trusted publishing needs npm 11.5.1+.
+      - run: npm install -g npm@latest
+      - name: Pack
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter @jtaak/engine pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          pnpm --filter jtaak pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+      # The engine first: the CLI depends on it.
+      - run: npm publish "tarballs/jtaak-engine-$VERSION.tgz" --access public
+      - run: npm publish "tarballs/jtaak-$VERSION.tgz" --access public

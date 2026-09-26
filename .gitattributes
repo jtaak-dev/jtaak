@@ -1,0 +1,5 @@
+# Native exports are deterministic, byte-for-byte output of the exporter
+# (LF line endings). Keep them LF on every checkout, including Windows with
+# core.autocrlf=true, so the sample matches what the exporter writes and
+# sampleWorkspace.test.ts's re-export comparison holds.
+*.jt text eol=lf

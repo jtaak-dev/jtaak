@@ -1,0 +1,8 @@
+node_modules
+dist
+pnpm-lock.yaml
+# Markdown docs keep their hand-written layout (tables, wrapping).
+*.md
+# Native exports are the exporter's exact byte output (see
+# sampleWorkspace.test.ts); reformatting would break the comparison.
+*.jt

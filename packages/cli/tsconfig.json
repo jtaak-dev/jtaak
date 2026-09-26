@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Published as native ESM ("type": "module"); NodeNext checks what Node
+    // resolves at runtime.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // src/ isn't published, so maps pointing into it would only dangle.
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

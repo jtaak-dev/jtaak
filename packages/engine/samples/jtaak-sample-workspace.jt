@@ -1,0 +1,1396 @@
+{
+  "format": "jtaak-export",
+  "version": 1,
+  "scope": "workspace",
+  "exportedAt": "2026-09-24T00:00:00.000Z",
+  "secretsStripped": false,
+  "collections": [
+    {
+      "category": "api",
+      "name": "Sample — HTTP",
+      "folders": [
+        {
+          "name": "HTTP methods",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "GET — fetch a resource",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/get",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "POST — create with a JSON body",
+              "config": {
+                "method": "POST",
+                "url": "{{baseUrl}}/post",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"name\": \"jtaak\",\n  \"tagline\": \"Fast. Local. Reliable.\",\n  \"tags\": [\"api\", \"testing\"]\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\n\njt.test(\"server echoed the JSON body\", () => {\n  jt.expect(jt.response.json().json.name).toBe(\"jtaak\");\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "PUT — replace a resource",
+              "config": {
+                "method": "PUT",
+                "url": "{{baseUrl}}/put",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"id\": 1,\n  \"status\": \"replaced\"\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "PATCH — partial update",
+              "config": {
+                "method": "PATCH",
+                "url": "{{baseUrl}}/patch",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"status\": \"patched\"\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "DELETE — remove a resource",
+              "config": {
+                "method": "DELETE",
+                "url": "{{baseUrl}}/delete",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "HEAD — headers only, no body",
+              "config": {
+                "method": "HEAD",
+                "url": "{{baseUrl}}/get",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "OPTIONS — allowed methods",
+              "config": {
+                "method": "OPTIONS",
+                "url": "{{baseUrl}}/get",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Params & headers",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Query params (one disabled)",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/get",
+                "params": [
+                  {
+                    "key": "search",
+                    "value": "jtaak",
+                    "enabled": true
+                  },
+                  {
+                    "key": "page",
+                    "value": "2",
+                    "enabled": true
+                  },
+                  {
+                    "key": "debug",
+                    "value": "true",
+                    "enabled": false
+                  }
+                ],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"enabled params were sent\", () => {\n  jt.expect(jt.response.json().args).toEqual({ search: \"jtaak\", page: \"2\" });\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Custom headers",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/headers",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "enabled": true
+                  },
+                  {
+                    "key": "X-Client",
+                    "value": "jtaak-sample",
+                    "enabled": true
+                  },
+                  {
+                    "key": "X-Disabled",
+                    "value": "not sent",
+                    "enabled": false
+                  }
+                ],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Variables in path, params and headers",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/posts/{{postId}}/comments",
+                "params": [
+                  {
+                    "key": "_limit",
+                    "value": "{{pageSize}}",
+                    "enabled": true
+                  }
+                ],
+                "headers": [
+                  {
+                    "key": "X-Sample-Env",
+                    "value": "{{envName}}",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\n\njt.test(\"respects the page size\", () => {\n  jt.expect(jt.response.json().length).toBe(Number(jt.variables.pageSize));\n});"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request bodies",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "JSON body",
+              "config": {
+                "method": "POST",
+                "url": "{{baseUrl}}/post",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"order\": 1042,\n  \"items\": [\n    { \"sku\": \"A-1\", \"qty\": 2 },\n    { \"sku\": \"B-7\", \"qty\": 1 }\n  ]\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Raw text body",
+              "config": {
+                "method": "POST",
+                "url": "{{baseUrl}}/post",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "text/plain",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "Plain text sent exactly as typed.\nLine two."
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Form URL-encoded body",
+              "config": {
+                "method": "POST",
+                "url": "{{baseUrl}}/post",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/x-www-form-urlencoded",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "urlencoded",
+                  "formData": [
+                    {
+                      "key": "username",
+                      "value": "jtaak-user",
+                      "enabled": true
+                    },
+                    {
+                      "key": "remember",
+                      "value": "true",
+                      "enabled": true
+                    },
+                    {
+                      "key": "skipped",
+                      "value": "x",
+                      "enabled": false
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"form fields arrived\", () => {\n  jt.expect(jt.response.json().form).toHaveProperty(\"username\", \"jtaak-user\");\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Multipart form-data body",
+              "config": {
+                "method": "POST",
+                "url": "{{baseUrl}}/post",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "form-data",
+                  "formData": [
+                    {
+                      "key": "title",
+                      "value": "Quarterly report",
+                      "enabled": true
+                    },
+                    {
+                      "key": "category",
+                      "value": "finance",
+                      "enabled": true
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Authentication",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Basic auth",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/basic-auth/{{username}}/{{password}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "basic",
+                  "basic": {
+                    "username": "{{username}}",
+                    "password": "{{password}}"
+                  }
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\n\njt.test(\"authenticated\", () => {\n  jt.expect(jt.response.json().authenticated).toBe(true);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Bearer token",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/bearer",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": {
+                    "token": "{{token}}"
+                  }
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "API key in a header",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/headers",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "apiKey",
+                  "apiKey": {
+                    "key": "X-Api-Key",
+                    "value": "{{apiKey}}",
+                    "addTo": "header"
+                  }
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "API key in the query string",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/get",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "apiKey",
+                  "apiKey": {
+                    "key": "api_key",
+                    "value": "{{apiKey}}",
+                    "addTo": "query"
+                  }
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Missing credentials (401)",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/bearer",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 401\", () => {\n  jt.expect(jt.response.status).toBe(401);\n});"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Response variations",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "404 Not Found",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/status/404",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 404\", () => {\n  jt.expect(jt.response.status).toBe(404);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "500 Server Error",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/status/500",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Redirect (followed automatically)",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/redirect/2",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Slow response (2 s)",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/delay/2",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Large response (~1 MB preview)",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/photos",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "HTML response",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/html",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            },
+            {
+              "type": "request",
+              "name": "XML response",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/xml",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Scripts & tests",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Pre-request script sets a variable",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/headers",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "X-Sample-Request",
+                    "value": "{{requestId}}",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "preRequestScript": "// Runs before the request is sent. Variables set here can be used as {{name}}.\njt.variables.requestId = \"req-\" + Date.now();\nconsole.log(\"Sending request\", jt.variables.requestId);",
+                "testScript": "jt.test(\"header carried the generated id\", () => {\n  jt.expect(jt.response.json().headers[\"X-Sample-Request\"]).toContain(\"req-\");\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Assertions on a JSON response",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/users/1",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "const user = jt.response.json();\n\njt.test(\"status is 200\", () => jt.expect(jt.response.status).toBe(200));\njt.test(\"has an id and name\", () => {\n  jt.expect(user).toHaveProperty(\"id\", 1);\n  jt.expect(user.name).toBeDefined();\n});\njt.test(\"email looks valid\", () => jt.expect(user.email).toContain(\"@\"));\njt.test(\"responds quickly\", () => jt.expect(jt.response.timings.durationMs).toBeLessThan(5000));\nconsole.log(\"User:\", user.name);"
+              }
+            },
+            {
+              "type": "request",
+              "name": "A failing test (on purpose)",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/status/418",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"expects 200 — fails, the server replies 418\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\njt.test(\"is not a 404\", () => jt.expect(jt.response.status).not.toBe(404));"
+              }
+            }
+          ]
+        },
+        {
+          "name": "REST CRUD (JSONPlaceholder)",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "List posts",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/posts",
+                "params": [
+                  {
+                    "key": "_limit",
+                    "value": "{{pageSize}}",
+                    "enabled": true
+                  }
+                ],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Get one post",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/posts/{{postId}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Create a post",
+              "config": {
+                "method": "POST",
+                "url": "{{jsonUrl}}/posts",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"title\": \"Hello from jtaak\",\n  \"body\": \"Created from the sample workspace.\",\n  \"userId\": 1\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 201\", () => {\n  jt.expect(jt.response.status).toBe(201);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Update a post",
+              "config": {
+                "method": "PUT",
+                "url": "{{jsonUrl}}/posts/{{postId}}",
+                "params": [],
+                "headers": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "enabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "json",
+                  "raw": "{\n  \"id\": 1,\n  \"title\": \"Updated title\",\n  \"body\": \"Updated body\",\n  \"userId\": 1\n}"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Delete a post",
+              "config": {
+                "method": "DELETE",
+                "url": "{{jsonUrl}}/posts/{{postId}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "http",
+                "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            }
+          ]
+        }
+      ],
+      "items": []
+    },
+    {
+      "category": "api",
+      "name": "Sample — GraphQL",
+      "folders": [
+        {
+          "name": "Countries API",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Simple query",
+              "config": {
+                "method": "POST",
+                "url": "{{countriesGraphqlUrl}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "{\n  country(code: \"IN\") {\n    name\n    capital\n    currency\n    emoji\n  }\n}"
+                },
+                "testScript": "jt.test(\"returns India\", () => {\n  jt.expect(jt.response.json().data.country.name).toBe(\"India\");\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Query with variables",
+              "config": {
+                "method": "POST",
+                "url": "{{countriesGraphqlUrl}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "query CountryByCode($code: ID!) {\n  country(code: $code) {\n    name\n    capital\n    languages {\n      name\n    }\n  }\n}",
+                  "variables": {
+                    "code": "JP"
+                  }
+                }
+              }
+            },
+            {
+              "type": "request",
+              "name": "Several operations — pick one by name",
+              "config": {
+                "method": "POST",
+                "url": "{{countriesGraphqlUrl}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "query Continents {\n  continents {\n    code\n    name\n  }\n}\n\nquery Languages {\n  languages {\n    code\n    name\n  }\n}",
+                  "operationName": "Continents"
+                }
+              }
+            },
+            {
+              "type": "request",
+              "name": "Nested fields and filters",
+              "config": {
+                "method": "POST",
+                "url": "{{countriesGraphqlUrl}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "query EuropeanCountries($continent: String!) {\n  countries(filter: { continent: { eq: $continent } }) {\n    code\n    name\n    continent {\n      name\n    }\n  }\n}",
+                  "variables": {
+                    "continent": "EU"
+                  }
+                }
+              }
+            },
+            {
+              "type": "request",
+              "name": "Error response (unknown field)",
+              "config": {
+                "method": "POST",
+                "url": "{{countriesGraphqlUrl}}",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "{\n  country(code: \"IN\") {\n    name\n    population\n  }\n}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rick and Morty API",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Paginated list with variables",
+              "config": {
+                "method": "POST",
+                "url": "https://rickandmortyapi.com/graphql",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "query Characters($page: Int, $name: String) {\n  characters(page: $page, filter: { name: $name }) {\n    info {\n      count\n      pages\n      next\n    }\n    results {\n      id\n      name\n      status\n      species\n    }\n  }\n}",
+                  "variables": {
+                    "page": 1,
+                    "name": "rick"
+                  }
+                },
+                "testScript": "jt.test(\"found characters\", () => {\n  jt.expect(jt.response.json().data.characters.results.length).toBeGreaterThan(0);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Single item by id",
+              "config": {
+                "method": "POST",
+                "url": "https://rickandmortyapi.com/graphql",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "protocol": "graphql",
+                "protocolConfig": {
+                  "query": "query Character($id: ID!) {\n  character(id: $id) {\n    name\n    origin {\n      name\n    }\n    episode {\n      name\n      air_date\n    }\n  }\n}",
+                  "variables": {
+                    "id": "1"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": []
+    },
+    {
+      "category": "api",
+      "name": "Sample — Server-Sent Events",
+      "folders": [],
+      "items": [
+        {
+          "type": "request",
+          "name": "Named events with ids (5 events after ~5 s, then closes)",
+          "config": {
+            "method": "GET",
+            "url": "https://postman-echo.com/server-events/5",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "sse"
+          }
+        },
+        {
+          "type": "request",
+          "name": "Wikimedia live edits (busy stream)",
+          "config": {
+            "method": "GET",
+            "url": "https://stream.wikimedia.org/v2/stream/recentchange",
+            "params": [],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "sse"
+          }
+        }
+      ]
+    },
+    {
+      "category": "api",
+      "name": "Sample — gRPC",
+      "folders": [],
+      "items": [
+        {
+          "type": "request",
+          "name": "SayHello (plaintext)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto2\";\n\npackage hello;\n\n// Greeting service on the public grpcb.in test server (github.com/moul/pb).\nservice HelloService {\n  rpc SayHello(HelloRequest) returns (HelloResponse);\n}\n\nmessage HelloRequest {\n  optional string greeting = 1;\n}\n\nmessage HelloResponse {\n  required string reply = 1;\n}\n",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "SayHello",
+              "requestMessage": {
+                "greeting": "jtaak"
+              },
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "SayHello (TLS)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9001",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto2\";\n\npackage hello;\n\n// Greeting service on the public grpcb.in test server (github.com/moul/pb).\nservice HelloService {\n  rpc SayHello(HelloRequest) returns (HelloResponse);\n}\n\nmessage HelloRequest {\n  optional string greeting = 1;\n}\n\nmessage HelloResponse {\n  required string reply = 1;\n}\n",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "SayHello",
+              "requestMessage": {
+                "greeting": "secure jtaak"
+              },
+              "usePlaintext": false
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Server index (empty request)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto3\";\n\npackage grpcbin;\n\n// Unary methods of the public grpcb.in test server (github.com/moul/pb).\n// jtaak supports unary calls, so the streaming methods are left out.\nservice GRPCBin {\n  // Describes the server's endpoints.\n  rpc Index(EmptyMessage) returns (IndexReply) {}\n  // Replies with an empty message.\n  rpc Empty(EmptyMessage) returns (EmptyMessage) {}\n  // Echoes back the DummyMessage it receives.\n  rpc DummyUnary(DummyMessage) returns (DummyMessage) {}\n  // Fails with the status code you ask for.\n  rpc SpecificError(SpecificErrorRequest) returns (EmptyMessage) {}\n  // Returns the request metadata it received.\n  rpc HeadersUnary(EmptyMessage) returns (HeadersMessage) {}\n}\n\nmessage HeadersMessage {\n  message Values {\n    repeated string values = 1;\n  }\n  map<string, Values> Metadata = 1;\n}\n\nmessage SpecificErrorRequest {\n  uint32 code = 1;\n  string reason = 2;\n}\n\nmessage EmptyMessage {}\n\nmessage DummyMessage {\n  message Sub {\n    string f_string = 1;\n  }\n  enum Enum {\n    ENUM_0 = 0;\n    ENUM_1 = 1;\n    ENUM_2 = 2;\n  }\n  string f_string = 1;\n  repeated string f_strings = 2;\n  int32 f_int32 = 3;\n  repeated int32 f_int32s = 4;\n  Enum f_enum = 5;\n  repeated Enum f_enums = 6;\n  Sub f_sub = 7;\n  repeated Sub f_subs = 8;\n  bool f_bool = 9;\n  repeated bool f_bools = 10;\n  int64 f_int64 = 11;\n  repeated int64 f_int64s = 12;\n  bytes f_bytes = 13;\n  repeated bytes f_bytess = 14;\n  float f_float = 15;\n  repeated float f_floats = 16;\n}\n\nmessage IndexReply {\n  message Endpoint {\n    string path = 1;\n    string description = 2;\n  }\n  string description = 1;\n  repeated Endpoint endpoints = 2;\n}\n",
+              "serviceFullName": "grpcbin.GRPCBin",
+              "methodName": "Index",
+              "requestMessage": {},
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Echo every field type",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto3\";\n\npackage grpcbin;\n\n// Unary methods of the public grpcb.in test server (github.com/moul/pb).\n// jtaak supports unary calls, so the streaming methods are left out.\nservice GRPCBin {\n  // Describes the server's endpoints.\n  rpc Index(EmptyMessage) returns (IndexReply) {}\n  // Replies with an empty message.\n  rpc Empty(EmptyMessage) returns (EmptyMessage) {}\n  // Echoes back the DummyMessage it receives.\n  rpc DummyUnary(DummyMessage) returns (DummyMessage) {}\n  // Fails with the status code you ask for.\n  rpc SpecificError(SpecificErrorRequest) returns (EmptyMessage) {}\n  // Returns the request metadata it received.\n  rpc HeadersUnary(EmptyMessage) returns (HeadersMessage) {}\n}\n\nmessage HeadersMessage {\n  message Values {\n    repeated string values = 1;\n  }\n  map<string, Values> Metadata = 1;\n}\n\nmessage SpecificErrorRequest {\n  uint32 code = 1;\n  string reason = 2;\n}\n\nmessage EmptyMessage {}\n\nmessage DummyMessage {\n  message Sub {\n    string f_string = 1;\n  }\n  enum Enum {\n    ENUM_0 = 0;\n    ENUM_1 = 1;\n    ENUM_2 = 2;\n  }\n  string f_string = 1;\n  repeated string f_strings = 2;\n  int32 f_int32 = 3;\n  repeated int32 f_int32s = 4;\n  Enum f_enum = 5;\n  repeated Enum f_enums = 6;\n  Sub f_sub = 7;\n  repeated Sub f_subs = 8;\n  bool f_bool = 9;\n  repeated bool f_bools = 10;\n  int64 f_int64 = 11;\n  repeated int64 f_int64s = 12;\n  bytes f_bytes = 13;\n  repeated bytes f_bytess = 14;\n  float f_float = 15;\n  repeated float f_floats = 16;\n}\n\nmessage IndexReply {\n  message Endpoint {\n    string path = 1;\n    string description = 2;\n  }\n  string description = 1;\n  repeated Endpoint endpoints = 2;\n}\n",
+              "serviceFullName": "grpcbin.GRPCBin",
+              "methodName": "DummyUnary",
+              "requestMessage": {
+                "f_string": "hello",
+                "f_strings": [
+                  "one",
+                  "two"
+                ],
+                "f_int32": 42,
+                "f_int32s": [
+                  1,
+                  2,
+                  3
+                ],
+                "f_enum": 1,
+                "f_enums": [
+                  0,
+                  2
+                ],
+                "f_sub": {
+                  "f_string": "nested"
+                },
+                "f_subs": [
+                  {
+                    "f_string": "first"
+                  },
+                  {
+                    "f_string": "second"
+                  }
+                ],
+                "f_bool": true,
+                "f_bools": [
+                  true,
+                  false
+                ],
+                "f_int64": 1234567890123,
+                "f_float": 3.5,
+                "f_floats": [
+                  0.5,
+                  1.5
+                ]
+              },
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Request metadata",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [
+              {
+                "key": "x-client",
+                "value": "jtaak-sample",
+                "enabled": true
+              },
+              {
+                "key": "x-trace-id",
+                "value": "trace-123",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto3\";\n\npackage grpcbin;\n\n// Unary methods of the public grpcb.in test server (github.com/moul/pb).\n// jtaak supports unary calls, so the streaming methods are left out.\nservice GRPCBin {\n  // Describes the server's endpoints.\n  rpc Index(EmptyMessage) returns (IndexReply) {}\n  // Replies with an empty message.\n  rpc Empty(EmptyMessage) returns (EmptyMessage) {}\n  // Echoes back the DummyMessage it receives.\n  rpc DummyUnary(DummyMessage) returns (DummyMessage) {}\n  // Fails with the status code you ask for.\n  rpc SpecificError(SpecificErrorRequest) returns (EmptyMessage) {}\n  // Returns the request metadata it received.\n  rpc HeadersUnary(EmptyMessage) returns (HeadersMessage) {}\n}\n\nmessage HeadersMessage {\n  message Values {\n    repeated string values = 1;\n  }\n  map<string, Values> Metadata = 1;\n}\n\nmessage SpecificErrorRequest {\n  uint32 code = 1;\n  string reason = 2;\n}\n\nmessage EmptyMessage {}\n\nmessage DummyMessage {\n  message Sub {\n    string f_string = 1;\n  }\n  enum Enum {\n    ENUM_0 = 0;\n    ENUM_1 = 1;\n    ENUM_2 = 2;\n  }\n  string f_string = 1;\n  repeated string f_strings = 2;\n  int32 f_int32 = 3;\n  repeated int32 f_int32s = 4;\n  Enum f_enum = 5;\n  repeated Enum f_enums = 6;\n  Sub f_sub = 7;\n  repeated Sub f_subs = 8;\n  bool f_bool = 9;\n  repeated bool f_bools = 10;\n  int64 f_int64 = 11;\n  repeated int64 f_int64s = 12;\n  bytes f_bytes = 13;\n  repeated bytes f_bytess = 14;\n  float f_float = 15;\n  repeated float f_floats = 16;\n}\n\nmessage IndexReply {\n  message Endpoint {\n    string path = 1;\n    string description = 2;\n  }\n  string description = 1;\n  repeated Endpoint endpoints = 2;\n}\n",
+              "serviceFullName": "grpcbin.GRPCBin",
+              "methodName": "HeadersUnary",
+              "requestMessage": {},
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Error status (NOT_FOUND)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto3\";\n\npackage grpcbin;\n\n// Unary methods of the public grpcb.in test server (github.com/moul/pb).\n// jtaak supports unary calls, so the streaming methods are left out.\nservice GRPCBin {\n  // Describes the server's endpoints.\n  rpc Index(EmptyMessage) returns (IndexReply) {}\n  // Replies with an empty message.\n  rpc Empty(EmptyMessage) returns (EmptyMessage) {}\n  // Echoes back the DummyMessage it receives.\n  rpc DummyUnary(DummyMessage) returns (DummyMessage) {}\n  // Fails with the status code you ask for.\n  rpc SpecificError(SpecificErrorRequest) returns (EmptyMessage) {}\n  // Returns the request metadata it received.\n  rpc HeadersUnary(EmptyMessage) returns (HeadersMessage) {}\n}\n\nmessage HeadersMessage {\n  message Values {\n    repeated string values = 1;\n  }\n  map<string, Values> Metadata = 1;\n}\n\nmessage SpecificErrorRequest {\n  uint32 code = 1;\n  string reason = 2;\n}\n\nmessage EmptyMessage {}\n\nmessage DummyMessage {\n  message Sub {\n    string f_string = 1;\n  }\n  enum Enum {\n    ENUM_0 = 0;\n    ENUM_1 = 1;\n    ENUM_2 = 2;\n  }\n  string f_string = 1;\n  repeated string f_strings = 2;\n  int32 f_int32 = 3;\n  repeated int32 f_int32s = 4;\n  Enum f_enum = 5;\n  repeated Enum f_enums = 6;\n  Sub f_sub = 7;\n  repeated Sub f_subs = 8;\n  bool f_bool = 9;\n  repeated bool f_bools = 10;\n  int64 f_int64 = 11;\n  repeated int64 f_int64s = 12;\n  bytes f_bytes = 13;\n  repeated bytes f_bytess = 14;\n  float f_float = 15;\n  repeated float f_floats = 16;\n}\n\nmessage IndexReply {\n  message Endpoint {\n    string path = 1;\n    string description = 2;\n  }\n  string description = 1;\n  repeated Endpoint endpoints = 2;\n}\n",
+              "serviceFullName": "grpcbin.GRPCBin",
+              "methodName": "SpecificError",
+              "requestMessage": {
+                "code": 5,
+                "reason": "Requested on purpose by the jtaak sample"
+              },
+              "usePlaintext": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "category": "websocket",
+      "name": "Sample — WebSocket",
+      "folders": [
+        {
+          "name": "With headers and auth",
+          "folders": [],
+          "items": [
+            {
+              "type": "websocket",
+              "name": "Echo with custom headers",
+              "url": "wss://echo.websocket.org",
+              "headers": [
+                {
+                  "key": "X-Client",
+                  "value": "jtaak-sample",
+                  "enabled": true
+                }
+              ],
+              "subprotocols": [],
+              "auth": {
+                "type": "none"
+              }
+            },
+            {
+              "type": "websocket",
+              "name": "Echo with a bearer token",
+              "url": "wss://echo.websocket.org",
+              "headers": [],
+              "subprotocols": [],
+              "auth": {
+                "type": "bearer",
+                "bearer": {
+                  "token": "sample-token"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": [
+        {
+          "type": "websocket",
+          "name": "Echo server",
+          "url": "wss://echo.websocket.org",
+          "headers": [],
+          "subprotocols": [],
+          "auth": {
+            "type": "none"
+          }
+        },
+        {
+          "type": "websocket",
+          "name": "Postman echo server",
+          "url": "wss://ws.postman-echo.com/raw",
+          "headers": [],
+          "subprotocols": [],
+          "auth": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    {
+      "category": "mcp",
+      "name": "Sample — MCP",
+      "folders": [
+        {
+          "name": "Local servers (need Node.js)",
+          "folders": [],
+          "items": [
+            {
+              "type": "mcp",
+              "name": "Everything (reference server: tools, resources, prompts)",
+              "transport": "stdio",
+              "command": "npx",
+              "args": [
+                "-y",
+                "@modelcontextprotocol/server-everything"
+              ],
+              "env": [
+                {
+                  "key": "NODE_NO_WARNINGS",
+                  "value": "1",
+                  "enabled": true
+                }
+              ],
+              "headers": []
+            },
+            {
+              "type": "mcp",
+              "name": "Memory (knowledge graph)",
+              "transport": "stdio",
+              "command": "npx",
+              "args": [
+                "-y",
+                "@modelcontextprotocol/server-memory"
+              ],
+              "env": [],
+              "headers": []
+            }
+          ]
+        },
+        {
+          "name": "Remote servers",
+          "folders": [],
+          "items": [
+            {
+              "type": "mcp",
+              "name": "DeepWiki (docs for public GitHub repos)",
+              "transport": "http",
+              "command": "https://mcp.deepwiki.com/mcp",
+              "args": [],
+              "env": [],
+              "headers": []
+            }
+          ]
+        }
+      ],
+      "items": []
+    }
+  ],
+  "environments": [
+    {
+      "name": "Sample — Postman Echo",
+      "variables": {
+        "envName": "postman-echo",
+        "baseUrl": "https://postman-echo.com",
+        "jsonUrl": "https://jsonplaceholder.typicode.com",
+        "countriesGraphqlUrl": "https://countries.trevorblades.com/graphql",
+        "postId": "1",
+        "pageSize": "5",
+        "username": "jtaak-user",
+        "password": "jtaak-demo-password",
+        "token": "sample-token",
+        "apiKey": "sample-api-key"
+      }
+    },
+    {
+      "name": "Sample — httpbin",
+      "variables": {
+        "envName": "httpbin",
+        "baseUrl": "https://httpbin.org",
+        "jsonUrl": "https://jsonplaceholder.typicode.com",
+        "countriesGraphqlUrl": "https://countries.trevorblades.com/graphql",
+        "postId": "1",
+        "pageSize": "5",
+        "username": "jtaak-user",
+        "password": "jtaak-demo-password",
+        "token": "sample-token",
+        "apiKey": "sample-api-key"
+      }
+    }
+  ]
+}
