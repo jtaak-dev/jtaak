@@ -494,9 +494,9 @@ export interface AssertionResult {
 }
 
 /** A single `console.log`/`warn`/`error`/`info` call captured while running a
- * pre-request or test script — scripts run inside a `vm` sandbox (see
- * scripting/sandbox.ts), so this is how their output reaches a UI instead
- * of disappearing into the host process's own stdout. */
+ * pre-request or test script — scripts run in a QuickJS sandbox with no
+ * console of its own (see scripting/sandbox.ts), so this is how their output
+ * reaches a UI. */
 export interface ScriptLogEntry {
   phase: 'pre-request' | 'test';
   level: 'log' | 'info' | 'warn' | 'error';
@@ -644,8 +644,10 @@ export interface NativeImportPreview {
   secretsStripped: boolean;
   collections: { name: string; category: CollectionCategory; folderCount: number; itemCount: number }[];
   environments: string[];
-  /** Requests carrying a pre-request or test script. Scripts run in a `vm`
-   * sandbox that is not a security boundary, so the user opts in to them. */
+  /** Requests carrying a pre-request or test script. Scripts run in the
+   * QuickJS sandbox, but a pre-request script from someone else's file can
+   * still change the variables its request is sent with (and so where
+   * credentials go), so the user opts in to them. */
   scriptRequestCount: number;
   /** Every stdio MCP server's command line — connecting one runs it locally. */
   mcpStdioCommands: string[];
