@@ -211,20 +211,56 @@ describe('isolation and limits', () => {
     ).rejects.toThrow(/timed out/);
   });
 
-  // Takes about 3 s on its own, close to Vitest's 5 s default, so it timed out
-  // when the whole suite ran in parallel; hence the explicit test timeout.
-  it('stops a script that exceeds its memory limit', { timeout: 15_000 }, async () => {
-    // Large chunks, so the 16 MB cap is hit at once rather than approached slowly.
+  it('stops a script that exceeds its memory limit', async () => {
+    // One allocation over the 16 MB cap fails at once. (Approaching the cap in
+    // steps makes QuickJS collect garbage over and over, which the hard stop
+    // below covers.)
+    await expect(
+      runScript(
+        'new Uint8Array(32 * 1024 * 1024);',
+        { request: baseRequest, variables: {} },
+        { ...limits, timeoutMs: 1000 },
+      ),
+    ).rejects.toThrow(/out of memory/i);
+  });
+
+  // Built by one fast native call, then a default sort of about 2 s: a single
+  // built-in call, which QuickJS's interrupt can't stop. (Unstopped, the
+  // garbage collection case below takes about 3 s.) The 1 s ceilings leave room
+  // for a busy machine.
+  const longBuiltIn = 'new Array(6e6).fill(0.5).sort();';
+  const longLimits = { timeoutMs: 100, memoryBytes: 256 * 1024 * 1024 };
+
+  it('stops a long built-in call shortly after the deadline', async () => {
+    const start = performance.now();
+    await expect(runScript(longBuiltIn, { request: baseRequest, variables: {} }, longLimits)).rejects.toThrow(
+      'Script timed out after 100 ms',
+    );
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it('stops garbage collection near the memory cap shortly after the deadline', async () => {
+    const start = performance.now();
     await expect(
       runScript(
         'const a = []; while (true) a.push(new Array(1000000).fill(1));',
         { request: baseRequest, variables: {} },
-        {
-          ...limits,
-          timeoutMs: 2000,
-        },
+        limits,
       ),
-    ).rejects.toThrow(/out of memory/i);
+    ).rejects.toThrow('Script timed out after 100 ms');
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it('runs scripts normally after a stopped one, including ones already waiting', async () => {
+    const script = 'jt.test("t", () => jt.expect(1).toBe(1));';
+    const [before, stopped, after] = await Promise.allSettled([
+      runScript(script, { request: baseRequest, variables: {} }),
+      runScript(longBuiltIn, { request: baseRequest, variables: {} }, longLimits),
+      runScript(script, { request: baseRequest, variables: {} }),
+    ]);
+    expect(before).toMatchObject({ status: 'fulfilled', value: { results: [{ name: 't', passed: true }] } });
+    expect(stopped).toMatchObject({ status: 'rejected', reason: { message: 'Script timed out after 100 ms' } });
+    expect(after).toMatchObject({ status: 'fulfilled', value: { results: [{ name: 't', passed: true }] } });
   });
 
   it('reports a script error with its message', async () => {
