@@ -1,4 +1,6 @@
+import { describeError } from './errors.js';
 import { buildRequestHeaders, buildUrl, hasHeader } from './executor.js';
+import { fetchFor } from './tls.js';
 import type { RequestConfig, SseMessage, StreamEvent, StreamHandle } from '../types.js';
 
 /**
@@ -76,7 +78,7 @@ export function openSseStream(config: RequestConfig, onEvent: (event: StreamEven
       const headers = buildRequestHeaders(config);
       if (!hasHeader(headers, 'accept')) headers.Accept = 'text/event-stream';
 
-      const response = await fetch(buildUrl(config), { method: 'GET', headers, signal: controller.signal });
+      const response = await fetchFor(config)(buildUrl(config), { method: 'GET', headers, signal: controller.signal });
       if (!response.ok || !response.body) {
         onEvent({
           type: 'error',
@@ -102,7 +104,7 @@ export function openSseStream(config: RequestConfig, onEvent: (event: StreamEven
     } catch (error) {
       onEvent({
         type: closedByCaller ? 'close' : 'error',
-        data: closedByCaller ? undefined : { message: (error as Error).message },
+        data: closedByCaller ? undefined : { message: describeError(error) },
         timestamp: Date.now(),
       });
     }

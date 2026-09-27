@@ -87,6 +87,12 @@ function optStr(value: unknown, path: string): string | undefined {
   return value === undefined ? undefined : str(value, path);
 }
 
+function optBool(value: unknown, path: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') fail(path, 'expected true or false');
+  return value;
+}
+
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], path: string): T {
   if (typeof value !== 'string' || !allowed.includes(value as T)) fail(path, `expected one of ${allowed.join(', ')}`);
   return value as T;
@@ -157,6 +163,8 @@ function requestConfig(value: unknown, path: string): Omit<RequestConfig, 'id' |
   if (pre !== undefined) out.preRequestScript = pre;
   const test = optStr(c.testScript, `${path}.testScript`);
   if (test !== undefined) out.testScript = test;
+  const verifyTls = optBool(c.verifyTls, `${path}.verifyTls`);
+  if (verifyTls !== undefined) out.verifyTls = verifyTls;
   // Protocol-specific payloads (GraphQL query, gRPC proto source, …) are
   // owned by each protocol's editor, which already tolerates missing fields;
   // only its overall shape is checked here. A JSON round-trip guarantees a
@@ -181,6 +189,7 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
       headers: keyValues(i.headers, `${path}.headers`),
       subprotocols: strList(i.subprotocols, `${path}.subprotocols`),
       auth: auth(i.auth, `${path}.auth`),
+      ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
     };
   }
   return {
@@ -191,7 +200,13 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
     args: strList(i.args, `${path}.args`),
     env: keyValues(i.env, `${path}.env`),
     headers: keyValues(i.headers, `${path}.headers`),
+    ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
   };
+}
+
+function withVerifyTls(value: unknown, path: string): { verifyTls?: boolean } {
+  const verifyTls = optBool(value, path);
+  return verifyTls === undefined ? {} : { verifyTls };
 }
 
 function folder(value: unknown, category: CollectionCategory, path: string, depth: number): NativeExportFolder {
@@ -343,6 +358,7 @@ export function importNative(
         headers: i.headers,
         subprotocols: i.subprotocols,
         auth: i.auth,
+        verifyTls: i.verifyTls ?? true,
       });
     } else {
       const created = createMcpServerConnection(db, {
@@ -357,6 +373,7 @@ export function importNative(
         args: i.args,
         env: i.env,
         headers: i.headers,
+        verifyTls: i.verifyTls ?? true,
       });
     }
     result.itemCount++;

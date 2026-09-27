@@ -102,6 +102,8 @@ function wsItem(c: WebSocketConnection, includeSecrets: boolean): NativeExportIt
     headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
     subprotocols: c.subprotocols,
     auth: includeSecrets ? c.auth : stripAuth(c.auth),
+    // Only when off, so files for the usual case don't change.
+    ...(!c.verifyTls && { verifyTls: false }),
   };
 }
 
@@ -114,6 +116,7 @@ function mcpItem(c: McpServerConnection, includeSecrets: boolean): NativeExportI
     args: c.args,
     env: includeSecrets ? c.env : stripKeyValues(c.env),
     headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
+    ...(!c.verifyTls && { verifyTls: false }),
   };
 }
 

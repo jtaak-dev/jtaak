@@ -48,6 +48,16 @@ request and any redirects.
 (`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`, and for unary gRPC
 calls from a pasted `.proto` file, `executeGrpcUnaryCall(config)`.
 
+`verifyTls: false` skips checking the server's TLS certificate, for testing a
+server with a self-signed, expired or wrong-host certificate. It works for every
+protocol above (gRPC when it uses TLS). The connection is still encrypted, but not
+authenticated, so leave it on for anything else.
+
+When a request can't be sent, the error message includes the reason Node keeps
+in the error's `cause`, for example
+`fetch failed: self-signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT)`, not just
+`fetch failed`.
+
 ## Variables
 
 `{{name}}` tokens in a request resolve against a `VariableScope` with a fixed

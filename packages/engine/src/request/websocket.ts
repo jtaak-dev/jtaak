@@ -1,5 +1,7 @@
 import WebSocket from 'ws';
+import { describeError } from './errors.js';
 import { buildRequestHeaders, buildUrl } from './executor.js';
+import { verifiesTls } from './tls.js';
 import type { RequestConfig, StreamEvent, StreamHandle, WebSocketProtocolConfig } from '../types.js';
 
 /**
@@ -14,7 +16,7 @@ export function openWebSocketStream(config: RequestConfig, onEvent: (event: Stre
   const headers = buildRequestHeaders(config);
   const subprotocols = (config.protocolConfig as WebSocketProtocolConfig | undefined)?.subprotocols ?? [];
 
-  const ws = new WebSocket(buildUrl(config), subprotocols, { headers });
+  const ws = new WebSocket(buildUrl(config), subprotocols, { headers, rejectUnauthorized: verifiesTls(config) });
 
   ws.on('open', () => onEvent({ type: 'open', timestamp: Date.now() }));
 
@@ -39,7 +41,7 @@ export function openWebSocketStream(config: RequestConfig, onEvent: (event: Stre
   });
 
   ws.on('error', (error: Error) => {
-    onEvent({ type: 'error', data: { message: error.message }, timestamp: Date.now() });
+    onEvent({ type: 'error', data: { message: describeError(error) }, timestamp: Date.now() });
   });
 
   ws.on('close', (code: number, reason: Buffer) => {

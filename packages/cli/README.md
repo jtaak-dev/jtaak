@@ -24,6 +24,10 @@ jt <METHOD> <URL>
 jt <URL>            (GET)
 ```
 
+Add `-k` (or `--insecure`), as in curl, to skip checking the server's TLS
+certificate: for testing a server with a self-signed or expired certificate.
+The connection is still encrypted, but not authenticated.
+
 It prints the status line, the time taken and the response size, then the
 response body:
 

@@ -48,8 +48,14 @@ describe('parseCurlCommand', () => {
   });
 
   it('ignores flags that do not affect the request shape', () => {
-    const config = parseCurlCommand('curl -s -k -L https://api.example.com/users');
+    const config = parseCurlCommand('curl -s -L https://api.example.com/users');
     expect(config.url).toBe('https://api.example.com/users');
     expect(config.method).toBe('GET');
+    expect(config.verifyTls).toBeUndefined();
+  });
+
+  it('turns off the TLS certificate check for -k and --insecure', () => {
+    expect(parseCurlCommand('curl -k https://self-signed.example').verifyTls).toBe(false);
+    expect(parseCurlCommand('curl --insecure https://self-signed.example').verifyTls).toBe(false);
   });
 });

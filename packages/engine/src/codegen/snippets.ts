@@ -33,12 +33,18 @@ function bodyString(config: RequestConfig): string | undefined {
   return undefined;
 }
 
+/** The request skips checking the server's TLS certificate (`RequestConfig.verifyTls`). */
+function skipsTlsCheck(config: RequestConfig): boolean {
+  return config.verifyTls === false;
+}
+
 function escapeSingleQuotes(value: string): string {
   return value.replace(/'/g, `'\\''`);
 }
 
 function generateCurl(config: RequestConfig): string {
   const lines = [`curl -X ${config.method} '${escapeSingleQuotes(fullUrl(config))}'`];
+  if (skipsTlsCheck(config)) lines.push('  --insecure');
   for (const header of enabled(config.headers)) {
     lines.push(`  -H '${escapeSingleQuotes(`${header.key}: ${header.value}`)}'`);
   }
@@ -80,7 +86,11 @@ function generateJsFetch(config: RequestConfig): string {
   const body = bodyString(config);
   if (body !== undefined) options.push(`  body: ${JSON.stringify(body)}`);
 
-  return `fetch('${fullUrl(config)}', {\n${options.join(',\n')}\n})\n  .then((res) => res.json())\n  .then(console.log);`;
+  // fetch has no option to skip certificate checks.
+  const note = skipsTlsCheck(config)
+    ? `// fetch can't skip TLS certificate checks. In Node, for testing only, run with\n// NODE_TLS_REJECT_UNAUTHORIZED=0.\n`
+    : '';
+  return `${note}fetch('${fullUrl(config)}', {\n${options.join(',\n')}\n})\n  .then((res) => res.json())\n  .then(console.log);`;
 }
 
 function generateJsAxios(config: RequestConfig): string {
@@ -98,7 +108,10 @@ function generateJsAxios(config: RequestConfig): string {
   }
   const body = bodyString(config);
   if (body !== undefined) optionLines.push(`  data: ${JSON.stringify(body)}`);
-  return `const axios = require('axios');\n\naxios({\n${optionLines.join(',\n')}\n}).then((res) => console.log(res.data));`;
+  const skip = skipsTlsCheck(config);
+  if (skip) optionLines.push(`  httpsAgent: new https.Agent({ rejectUnauthorized: false })`);
+  const requires = `const axios = require('axios');\n${skip ? `const https = require('https');\n` : ''}`;
+  return `${requires}\naxios({\n${optionLines.join(',\n')}\n}).then((res) => console.log(res.data));`;
 }
 
 function generatePythonRequests(config: RequestConfig): string {
@@ -113,12 +126,16 @@ function generatePythonRequests(config: RequestConfig): string {
   }
   const body = bodyString(config);
   if (body !== undefined) args.push(`    data=${JSON.stringify(body)}`);
+  if (skipsTlsCheck(config)) args.push('    verify=False');
   return `import requests\n\nresponse = requests.${config.method.toLowerCase()}(\n${args.join(',\n')},\n)\nprint(response.status_code)\nprint(response.json())`;
 }
 
 function generateGo(config: RequestConfig): string {
   const body = bodyString(config);
-  const lines = ['package main', '', 'import (', '\t"fmt"', '\t"net/http"'];
+  const skip = skipsTlsCheck(config);
+  const lines = ['package main', '', 'import ('];
+  if (skip) lines.push('\t"crypto/tls"');
+  lines.push('\t"fmt"', '\t"net/http"');
   if (body !== undefined) lines.push('\t"strings"');
   lines.push(')', '', 'func main() {');
   if (body !== undefined) {
@@ -138,7 +155,9 @@ function generateGo(config: RequestConfig): string {
   }
   lines.push(
     '',
-    '\tclient := &http.Client{}',
+    skip
+      ? '\tclient := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}'
+      : '\tclient := &http.Client{}',
     '\tresp, _ := client.Do(req)',
     '\tdefer resp.Body.Close()',
     '\tfmt.Println(resp.Status)',

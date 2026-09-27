@@ -80,6 +80,26 @@ describe('importPostmanCollection', () => {
     expect(full.config.body).toEqual({ mode: 'json', raw: '{"item":"widget"}' });
   });
 
+  it("turns off the TLS certificate check where Postman's strictSSL is false", () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const result = importPostmanCollection(db, workspace.id, {
+      info: { name: 'API' },
+      item: [
+        {
+          name: 'Insecure',
+          request: { url: 'https://self-signed.example' },
+          protocolProfileBehavior: { strictSSL: false },
+        },
+        { name: 'Normal', request: { url: 'https://api.example.com' } },
+      ],
+    });
+    const saved = getCollectionTree(db, workspace.id).find((n) => n.id === result.collectionId)!.requests;
+    const byName = Object.fromEntries(saved.map((r) => [r.name, getRequest(db, r.id)!.config]));
+    expect(byName.Insecure.verifyTls).toBe(false);
+    expect(byName.Normal.verifyTls).toBeUndefined();
+  });
+
   it('converts bearer, basic, and apiKey auth', () => {
     const db = freshDb();
     const { workspace } = getOrCreateDefaultWorkspace(db);

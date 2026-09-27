@@ -1,4 +1,6 @@
+import { withErrorDetail } from '../request/errors.js';
 import { SseFrameParser } from '../request/sse.js';
+import { fetchFor } from '../request/tls.js';
 import type { JsonRpcMessage } from './jsonRpc.js';
 import type { McpTransport } from './transport.js';
 
@@ -14,10 +16,18 @@ import type { McpTransport } from './transport.js';
  * Session tracking follows the spec too: the `Mcp-Session-Id` header the
  * server returns on its first response is echoed back on every request
  * after that.
+ *
+ * `send` returns the POST's promise, which rejects (with the reason Node
+ * keeps in the error's cause, see errors.ts) when the message couldn't be
+ * delivered; client.ts turns that into a failed call.
  */
-export function connectHttpTransport(url: string, headers: Record<string, string>): McpTransport {
+export function connectHttpTransport(
+  url: string,
+  headers: Record<string, string>,
+  options: { verifyTls?: boolean } = {},
+): McpTransport {
+  const send = fetchFor(options);
   const messageListeners: Array<(message: JsonRpcMessage) => void> = [];
-  const errorListeners: Array<(error: Error) => void> = [];
   const closeListeners: Array<() => void> = [];
 
   let sessionId: string | undefined;
@@ -30,7 +40,12 @@ export function connectHttpTransport(url: string, headers: Record<string, string
     };
     if (sessionId) requestHeaders['Mcp-Session-Id'] = sessionId;
 
-    const response = await fetch(url, { method: 'POST', headers: requestHeaders, body: JSON.stringify(message) });
+    let response: Response;
+    try {
+      response = await send(url, { method: 'POST', headers: requestHeaders, body: JSON.stringify(message) });
+    } catch (error) {
+      throw withErrorDetail(error);
+    }
 
     const returnedSessionId = response.headers.get('mcp-session-id');
     if (returnedSessionId) sessionId = returnedSessionId;
@@ -74,13 +89,11 @@ export function connectHttpTransport(url: string, headers: Record<string, string
   }
 
   return {
-    send: (message) => {
-      post(message).catch((error: Error) => {
-        for (const listener of errorListeners) listener(error);
-      });
-    },
+    send: (message) => post(message),
     onMessage: (callback) => messageListeners.push(callback),
-    onError: (callback) => errorListeners.push(callback),
+    // Delivery failures reject send's promise instead; nothing else fails
+    // asynchronously in this transport.
+    onError: () => {},
     onClose: (callback) => closeListeners.push(callback),
     close: () => {
       for (const listener of closeListeners) listener();

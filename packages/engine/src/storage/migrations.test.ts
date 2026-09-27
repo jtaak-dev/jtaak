@@ -43,6 +43,26 @@ describe('migrations', () => {
     db.close();
   });
 
+  it('v3: saved connections gain the TLS check setting, on for existing ones', () => {
+    const filePath = tempDbPath();
+    // A v2 database: connection tables without verify_tls.
+    const v2 = openDatabase(filePath);
+    v2.exec('ALTER TABLE ws_connections DROP COLUMN verify_tls; ALTER TABLE mcp_connections DROP COLUMN verify_tls');
+    v2.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'Old', 0)").run();
+    v2.prepare(
+      "INSERT INTO ws_connections (id, workspace_id, name, url, created_at, updated_at) VALUES ('c1', 'w1', 'Chat', 'wss://x', 0, 0)",
+    ).run();
+    v2.pragma('user_version = 2');
+    v2.close();
+
+    const db = openDatabase(filePath);
+    expect(schemaVersion(db)).toBe(LATEST);
+    expect(db.prepare("SELECT verify_tls FROM ws_connections WHERE id = 'c1'").get()).toEqual({ verify_tls: 1 });
+    const mcpColumns = db.prepare('PRAGMA table_info(mcp_connections)').all() as { name: string }[];
+    expect(mcpColumns.map((c) => c.name)).toContain('verify_tls');
+    db.close();
+  });
+
   it('applies only the migrations a database has not had yet, in order', () => {
     const applied: number[] = [];
     const migrations: Migration[] = [1, 2, 3].map((version) => ({

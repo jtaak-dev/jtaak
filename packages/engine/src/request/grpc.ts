@@ -2,6 +2,7 @@ import * as grpc from '@grpc/grpc-js';
 import { performance } from 'node:perf_hooks';
 import { buildRequestHeaders } from './executor.js';
 import { parseProtoRoot } from './grpcProto.js';
+import { verifiesTls } from './tls.js';
 import type { GrpcProtocolConfig, GrpcUnaryResult, RequestConfig } from '../types.js';
 
 function metadataToRecord(metadata: grpc.Metadata): Record<string, string> {
@@ -63,7 +64,9 @@ export async function executeGrpcUnaryCall(config: RequestConfig): Promise<GrpcU
 
   const target = normalizeGrpcTarget(config.url);
   const credentials =
-    protocolConfig.usePlaintext === false ? grpc.credentials.createSsl() : grpc.credentials.createInsecure();
+    protocolConfig.usePlaintext === false
+      ? grpc.credentials.createSsl(null, null, null, { rejectUnauthorized: verifiesTls(config) })
+      : grpc.credentials.createInsecure();
   const client = new grpc.Client(target, credentials);
 
   const metadata = new grpc.Metadata();

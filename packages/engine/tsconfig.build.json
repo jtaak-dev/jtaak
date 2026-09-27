@@ -13,5 +13,6 @@
     "sourceMap": false
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts"]
+  // src/test/ holds helpers shared by the tests (see src/test/tls.ts).
+  "exclude": ["src/**/*.test.ts", "src/test"]
 }

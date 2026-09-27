@@ -60,10 +60,17 @@ describe('jt CLI', () => {
     expect(stdout).toMatch(/^404 Not Found/);
   });
 
+  it('accepts -k/--insecure anywhere, as curl does (the engine tests cover what it does)', async () => {
+    expect((await runCli('-k', 'POST', `${baseUrl}/k-first`)).code).toBe(0);
+    expect(seen.at(-1)).toEqual({ method: 'POST', url: '/k-first' });
+    expect((await runCli('GET', `${baseUrl}/insecure-last`, '--insecure')).code).toBe(0);
+    expect(seen.at(-1)).toEqual({ method: 'GET', url: '/insecure-last' });
+  });
+
   it('prints usage and exits 1 without arguments', async () => {
     const { code, stderr } = await runCli();
     expect(code).toBe(1);
-    expect(stderr).toContain('Usage: jt <METHOD> <URL>');
+    expect(stderr).toContain('Usage: jt [-k|--insecure] <METHOD> <URL>');
   });
 
   it('exits 1 when the server is unreachable', async () => {

@@ -319,3 +319,60 @@ describe('importNative', () => {
     expect(elapsed).toBeLessThan(5000);
   });
 });
+
+describe('the TLS certificate check setting', () => {
+  // The fixture's request, WebSocket and MCP items with the check turned off.
+  function insecureDoc(): NativeExportDocument {
+    const d = doc();
+    for (const collection of d.collections) {
+      for (const i of collection.items) {
+        if (i.type === 'request') i.config.verifyTls = false;
+        else i.verifyTls = false;
+      }
+    }
+    return d;
+  }
+
+  it('survives an import and a re-export, and is only written when off', () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    importNative(db, workspaceId, validateNativeExport(insecureDoc()), {
+      includeScripts: true,
+      includeEnvironments: false,
+    });
+
+    const api = getCollectionTree(db, workspaceId).find((c) => c.name === 'Users API')!;
+    expect(getRequest(db, api.requests[0].id)?.config.verifyTls).toBe(false);
+    expect(getRequest(db, api.children[0].requests[0].id)?.config.verifyTls).toBeUndefined();
+    expect(getWebSocketTree(db, workspaceId).find((c) => c.name === 'Sockets')?.connections[0].verifyTls).toBe(false);
+    expect(getMcpTree(db, workspaceId).find((c) => c.name === 'Servers')?.connections[0].verifyTls).toBe(false);
+
+    const exported = exportNative(
+      db,
+      workspaceId,
+      { scope: 'workspace' },
+      { includeSecrets: true, environmentIds: [] },
+    );
+    const imported = exported.collections.filter((c) => ['Users API', 'Sockets', 'Servers'].includes(c.name));
+    const items = imported.flatMap((c) => c.items);
+    expect(items.map((i) => (i.type === 'request' ? i.config.verifyTls : i.verifyTls))).toEqual([false, false, false]);
+    // The nested request kept the check on, so its export has no verifyTls at all.
+    const nested = imported[0].folders[0].items[0];
+    expect(nested.type === 'request' && 'verifyTls' in nested.config).toBe(false);
+  });
+
+  it('leaves the check on for items without it', () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    importNative(db, workspaceId, validateNativeExport(doc()), { includeScripts: true, includeEnvironments: false });
+    expect(getWebSocketTree(db, workspaceId).find((c) => c.name === 'Sockets')?.connections[0].verifyTls).toBe(true);
+    expect(getMcpTree(db, workspaceId).find((c) => c.name === 'Servers')?.connections[0].verifyTls).toBe(true);
+  });
+
+  it('rejects a value that is not true or false', () => {
+    const d = doc();
+    const [echo] = d.collections[1].items as Array<Record<string, unknown>>;
+    echo.verifyTls = 'no';
+    expect(() => validateNativeExport(d)).toThrow(/verifyTls.*expected true or false/);
+  });
+});

@@ -4,21 +4,26 @@
 // of sync with what a GUI built on the engine does — one engine, one source of truth.
 import { executeRequest, type RequestConfig } from '@jtaak/engine';
 
-function parseArgs(argv: string[]): { method: RequestConfig['method']; url: string } {
-  const [first, second] = argv;
+function parseArgs(argv: string[]): { method: RequestConfig['method']; url: string; insecure: boolean } {
+  // -k/--insecure, as in curl: don't check the server's TLS certificate.
+  const insecure = argv.some((arg) => arg === '-k' || arg === '--insecure');
+  const [first, second] = argv.filter((arg) => arg !== '-k' && arg !== '--insecure');
   const url = second ?? first;
   const method = (second ? first : 'GET').toUpperCase() as RequestConfig['method'];
 
   if (!url) {
-    console.error('Usage: jt <METHOD> <URL>\n  e.g. jt GET https://api.example.com/users');
+    console.error(
+      'Usage: jt [-k|--insecure] <METHOD> <URL>\n  e.g. jt GET https://api.example.com/users\n' +
+        "  -k, --insecure  don't check the server's TLS certificate (for testing only)",
+    );
     process.exit(1);
   }
 
-  return { method, url };
+  return { method, url, insecure };
 }
 
 async function main(): Promise<void> {
-  const { method, url } = parseArgs(process.argv.slice(2));
+  const { method, url, insecure } = parseArgs(process.argv.slice(2));
 
   const config: RequestConfig = {
     id: 'cli',
@@ -29,6 +34,7 @@ async function main(): Promise<void> {
     headers: [],
     body: { mode: 'none' },
     auth: { type: 'none' },
+    ...(insecure && { verifyTls: false }),
   };
 
   const result = await executeRequest(config);
