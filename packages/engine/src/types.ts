@@ -12,11 +12,16 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 
  * implemented. `graphql` and `soap` stay one-shot, riding the same HTTP
  * transport as `http` once they land.
  */
-export type Protocol = 'http' | 'graphql' | 'websocket' | 'sse' | 'grpc' | 'mcp' | 'soap';
+export type Protocol = 'http' | 'graphql' | 'websocket' | 'sse' | 'grpc' | 'mcp' | 'soap' | MessagingProtocol;
+
+/** Brokers and event servers: connect, subscribe to channels and publish to
+ * them (see request/messaging/). Each is an adapter behind the same
+ * `MessagingStreamHandle`. */
+export type MessagingProtocol = 'mqtt' | 'kafka' | 'socketio' | 'amqp' | 'nats';
 
 /** The subset of `Protocol` that doesn't fit a single awaited request/response
  * and is routed through `openStream` instead of `executeRequest`. */
-export type StreamingProtocol = 'websocket' | 'sse' | 'grpc' | 'mcp';
+export type StreamingProtocol = 'websocket' | 'sse' | 'grpc' | 'mcp' | MessagingProtocol;
 
 export interface KeyValue {
   key: string;
@@ -64,7 +69,12 @@ export interface RequestConfig {
    * Widened to the protocol-specific type (e.g. `GraphQlProtocolConfig`) as
    * each protocol adds its own shape. */
   protocolConfig?:
-    Record<string, unknown> | GraphQlProtocolConfig | WebSocketProtocolConfig | GrpcProtocolConfig | McpProtocolConfig;
+    | Record<string, unknown>
+    | GraphQlProtocolConfig
+    | WebSocketProtocolConfig
+    | GrpcProtocolConfig
+    | McpProtocolConfig
+    | MqttProtocolConfig;
 }
 
 /** `protocolConfig` shape for `protocol: 'graphql'` — POSTed as
@@ -215,6 +225,72 @@ export interface WebSocketConnection {
   verifyTls: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+/** What a messaging connection subscribes to. `channel` is the protocol's
+ * name for it: an MQTT topic filter, a Kafka topic, a Socket.IO event name,
+ * an AMQP queue or a NATS subject. `options` holds the protocol's own
+ * settings (for MQTT, `qos`). */
+export interface MessagingSubscription {
+  channel: string;
+  options?: Record<string, unknown>;
+}
+
+/** A message to publish. `payload` is text, or base64 with
+ * `encoding: 'base64'` for binary data. `options` holds the protocol's own
+ * settings (for MQTT, `qos` and `retain`). */
+export interface MessagingPublish {
+  channel: string;
+  payload: string;
+  encoding?: 'utf8' | 'base64';
+  key?: string;
+  headers?: KeyValue[];
+  options?: Record<string, unknown>;
+}
+
+/** What the broker reported for a publish, when it reports anything (for
+ * MQTT QoS 1 and 2, the packet id it acknowledged). */
+export interface MessagingPublishResult {
+  meta?: Record<string, unknown>;
+}
+
+/** The `data` of a messaging stream's `'message'` event: a message received
+ * on a subscription, or one this client published (`direction: 'sent'`), so
+ * a timeline shows both. `payload` is text, or base64 with `isBinary: true`
+ * when it isn't valid UTF-8. `meta` holds the protocol's details (MQTT:
+ * `qos`, `retain`, `dup`). */
+export interface MessagingMessage {
+  direction: 'sent' | 'received';
+  channel: string;
+  payload: string;
+  isBinary: boolean;
+  key?: string;
+  headers?: Record<string, string>;
+  meta?: Record<string, unknown>;
+}
+
+/** The handle `openStream` returns for a `MessagingProtocol`. Every call
+ * rejects with the reason (see errors.ts) if the connection isn't open or
+ * the broker refuses. */
+export interface MessagingStreamHandle extends StreamHandle {
+  subscribe(subscription: MessagingSubscription): Promise<void>;
+  unsubscribe(channel: string): Promise<void>;
+  publish(message: MessagingPublish): Promise<MessagingPublishResult>;
+}
+
+/** `protocolConfig` for `protocol: 'mqtt'`. `url` is `mqtt://`, `mqtts://`,
+ * `ws://` or `wss://`; a username and password come from `auth` (basic). */
+export interface MqttProtocolConfig {
+  /** 4 is MQTT 3.1.1 (the default), 5 is MQTT 5. */
+  protocolVersion?: 4 | 5;
+  /** Generated when absent. */
+  clientId?: string;
+  /** Start without the session a previous connection left; defaults to true. */
+  clean?: boolean;
+  /** Seconds; defaults to 60. */
+  keepalive?: number;
+  /** Seconds to wait for the broker to accept the connection; defaults to 30. */
+  connectTimeout?: number;
 }
 
 /**

@@ -2,10 +2,10 @@
 
 A local-first API request engine for Node.js. It sends and times HTTP, GraphQL,
 Server-Sent Events, unary gRPC, WebSocket and MCP (Model Context Protocol)
-requests; runs pre-request and test scripts in a sandbox; resolves `{{variables}}`;
-imports Postman, OpenAPI and cURL; and stores workspaces, collections and
-environments in SQLite. It has no UI, no account and no telemetry: it only ever
-talks to the APIs you send requests to.
+requests; connects to MQTT brokers; runs pre-request and test scripts in a
+sandbox; resolves `{{variables}}`; imports Postman, OpenAPI and cURL; and stores
+workspaces, collections and environments in SQLite. It has no UI, no account and
+no telemetry: it only ever talks to the APIs you send requests to.
 
 It's the engine behind the [`jtaak` CLI](https://www.npmjs.com/package/jtaak), and
 is built to be embedded in other tools.
@@ -57,6 +57,45 @@ When a request can't be sent, the error message includes the reason Node keeps
 in the error's `cause`, for example
 `fetch failed: self-signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT)`, not just
 `fetch failed`.
+
+## Messaging
+
+`openStream` also connects to message brokers: `protocol: 'mqtt'` today, with
+Kafka, Socket.IO, AMQP and NATS to follow behind the same handle. Subscribe to
+channels, publish to them, and every message sent and received arrives as a
+`message` event:
+
+```ts
+import { openStream, type MessagingStreamHandle } from '@jtaak/engine';
+
+const mqtt = openStream(
+  {
+    id: 'm1',
+    name: 'Sensors',
+    protocol: 'mqtt',
+    method: 'GET',
+    url: 'mqtts://broker.example.com:8883',
+    params: [],
+    headers: [],
+    body: { mode: 'none' },
+    auth: { type: 'basic', basic: { username: 'alice', password: 'secret' } },
+    protocolConfig: { protocolVersion: 5 },
+  },
+  (event) => console.log(event.type, event.data),
+) as MessagingStreamHandle;
+
+await mqtt.subscribe({ channel: 'sensors/+/temp', options: { qos: 1 } });
+await mqtt.publish({ channel: 'sensors/kitchen/temp', payload: '21.5', options: { retain: true } });
+mqtt.close();
+```
+
+Calls made before the broker accepts the connection wait for it. A message's
+`payload` is text, or base64 with `isBinary: true` (publish binary data with
+`encoding: 'base64'`), and its `meta` has the protocol's details (for MQTT, `qos`,
+`retain`, `dup`). MQTT supports 3.1.1 (the default) and 5 (`protocolVersion: 5`,
+with `headers` as user properties), over `mqtt://`, `mqtts://`, `ws://` and
+`wss://`. It doesn't reconnect by itself: a lost connection ends with `close`.
+Each protocol's client library loads only when one of its connections opens.
 
 ## Variables
 

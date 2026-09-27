@@ -26,6 +26,11 @@ export type {
   GrpcServiceSummary,
   GrpcProtoSummary,
   EnvironmentUpdates,
+  MessagingProtocol,
+  MessagingSubscription,
+  MessagingPublish,
+  MessagingMessage,
+  MqttProtocolConfig,
 } from './types.js';
 export { emptyScopes } from './types.js';
 
