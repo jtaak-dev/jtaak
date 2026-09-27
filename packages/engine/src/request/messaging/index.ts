@@ -13,6 +13,7 @@ import { headerRecord } from './payload.js';
  * that protocol opens: nothing here runs for HTTP requests or the CLI. */
 const ADAPTERS: Partial<Record<MessagingProtocol, () => Promise<ConnectAdapter>>> = {
   mqtt: async () => (await import('./mqtt.js')).connectMqtt,
+  socketio: async () => (await import('./socketio.js')).connectSocketIo,
 };
 
 export const MESSAGING_PROTOCOLS: readonly MessagingProtocol[] = ['mqtt', 'kafka', 'socketio', 'amqp', 'nats'];
@@ -39,10 +40,10 @@ export function openMessagingStream(
   const emit = (event: Omit<StreamEvent, 'timestamp'>) => {
     if (!closedByCaller) onEvent({ ...event, timestamp: Date.now() });
   };
-  const reportClose = () => {
+  const reportClose = (reason?: string) => {
     if (closeReported) return;
     closeReported = true;
-    emit({ type: 'close' });
+    emit({ type: 'close', ...(reason && { data: { reason } }) });
   };
 
   const connecting: Promise<MessagingAdapter> = (async () => {
