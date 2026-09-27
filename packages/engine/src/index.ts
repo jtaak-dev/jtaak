@@ -58,6 +58,10 @@ export type {
   ConnectionTreeNode,
   Environment,
   AssertionResult,
+  HistoryEntryInput,
+  HistoryEntrySummary,
+  HistoryEntry,
+  HistoryQuery,
   ScriptLogEntry,
   RequestRunResult,
   CollectionRunItemResult,
@@ -109,6 +113,15 @@ export { importNative, isNativeExport, previewNativeImport, validateNativeExport
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
+export {
+  DEFAULT_HISTORY_BODY_LIMIT,
+  addHistoryEntry,
+  listHistory,
+  getHistoryEntry,
+  deleteHistoryEntry,
+  clearHistory,
+  pruneHistory,
+} from './storage/history.js';
 
 export {
   listWorkspaces,
