@@ -23,6 +23,14 @@ export class PendingCalls {
     return true;
   }
 
+  /** Rejects one pending call, when its request couldn't be sent. */
+  reject(id: string | number, error: Error): void {
+    const entry = this.pending.get(id);
+    if (!entry) return;
+    this.pending.delete(id);
+    entry.reject(error);
+  }
+
   /** Called when the connection closes/errors — every still-outstanding
    * call would otherwise hang forever waiting for a response that can no
    * longer arrive. */

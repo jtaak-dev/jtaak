@@ -83,6 +83,32 @@ describe('generateSnippet', () => {
     expect(snippet).toContain('http.NewRequest("GET"');
   });
 
+  describe('with the TLS certificate check off', () => {
+    const insecure = config({ verifyTls: false });
+
+    it("adds each language's option for it", () => {
+      expect(generateSnippet(insecure, 'curl')).toContain('--insecure');
+      expect(generateSnippet(insecure, 'python-requests')).toContain('verify=False');
+      const axios = generateSnippet(insecure, 'js-axios');
+      expect(axios).toContain("const https = require('https');");
+      expect(axios).toContain('httpsAgent: new https.Agent({ rejectUnauthorized: false })');
+      const go = generateSnippet(insecure, 'go');
+      expect(go).toContain('"crypto/tls"');
+      expect(go).toContain('InsecureSkipVerify: true');
+    });
+
+    it("notes that fetch can't do it", () => {
+      expect(generateSnippet(insecure, 'js-fetch')).toMatch(/^\/\/ fetch can't skip TLS certificate checks/);
+    });
+
+    it('adds nothing when the check is on', () => {
+      for (const language of ['curl', 'js-fetch', 'js-axios', 'python-requests', 'go'] as const) {
+        const snippet = generateSnippet(config(), language);
+        expect(snippet).not.toMatch(/insecure|verify=False|rejectUnauthorized|InsecureSkipVerify|crypto\/tls/i);
+      }
+    });
+  });
+
   it('does not skip disabled headers or params', () => {
     const snippet = generateSnippet(
       config({

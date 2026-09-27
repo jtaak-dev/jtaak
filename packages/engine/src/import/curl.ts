@@ -58,6 +58,7 @@ export function parseCurlCommand(command: string): RequestConfig {
   const headers: KeyValue[] = [];
   let rawBody: string | undefined;
   let basicAuth: { username: string; password: string } | undefined;
+  let insecure = false;
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -98,6 +99,8 @@ export function parseCurlCommand(command: string): RequestConfig {
         break;
       case '-k':
       case '--insecure':
+        insecure = true;
+        break;
       case '-s':
       case '--silent':
       case '-v':
@@ -120,5 +123,6 @@ export function parseCurlCommand(command: string): RequestConfig {
     headers,
     body: rawBody !== undefined ? { mode: 'raw', raw: rawBody } : { mode: 'none' },
     auth: basicAuth ? { type: 'basic', basic: basicAuth } : { type: 'none' },
+    ...(insecure && { verifyTls: false }),
   };
 }

@@ -52,7 +52,7 @@ describe('migration 2', () => {
     db.prepare("INSERT INTO request_history (id, executed_at, status, duration_ms) VALUES ('old', 1, 204, 3)").run();
 
     migrate(db);
-    expect(schemaVersion(db)).toBe(2);
+    expect(schemaVersion(db)).toBe(MIGRATIONS.at(-1)!.version);
     expect(
       db.prepare("SELECT status, tests_total, response_truncated FROM request_history WHERE id = 'old'").get(),
     ).toEqual({ status: 204, tests_total: 0, response_truncated: 0 });

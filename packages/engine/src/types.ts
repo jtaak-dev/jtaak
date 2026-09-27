@@ -52,6 +52,12 @@ export interface RequestConfig {
   auth: AuthConfig;
   preRequestScript?: string;
   testScript?: string;
+  /** Check the server's TLS certificate. On unless set to `false`, which
+   * accepts expired, self-signed and wrong-host certificates: for testing a
+   * server you control (the connection is still encrypted, but not
+   * authenticated). Applies to HTTP, GraphQL, SSE, WebSocket, gRPC over TLS
+   * and MCP over HTTP (see request/tls.ts). */
+  verifyTls?: boolean;
   /** Payload specific to `protocol` (e.g. a GraphQL query/variables, gRPC
    * service/method) — shape is owned by each protocol; `http`
    * doesn't use it since `method`/`url`/`body`/`auth` above already cover it.
@@ -205,6 +211,8 @@ export interface WebSocketConnection {
   headers: KeyValue[];
   subprotocols: string[];
   auth: AuthConfig;
+  /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
+  verifyTls: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -421,6 +429,8 @@ export interface McpServerConnection {
   env: KeyValue[];
   /** http only. */
   headers: KeyValue[];
+  /** http only. See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
+  verifyTls: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -676,7 +686,16 @@ export type ExportScope = 'collection' | 'category' | 'workspace';
  * and every import creates fresh rows, so the file stays stable and diffable. */
 export type NativeExportItem =
   | { type: 'request'; name: string; config: Omit<RequestConfig, 'id' | 'name'> }
-  | { type: 'websocket'; name: string; url: string; headers: KeyValue[]; subprotocols: string[]; auth: AuthConfig }
+  | {
+      type: 'websocket';
+      name: string;
+      url: string;
+      headers: KeyValue[];
+      subprotocols: string[];
+      auth: AuthConfig;
+      /** Only written when `false` (see `RequestConfig.verifyTls`); absent means on. */
+      verifyTls?: boolean;
+    }
   | {
       type: 'mcp';
       name: string;
@@ -685,6 +704,8 @@ export type NativeExportItem =
       args: string[];
       env: KeyValue[];
       headers: KeyValue[];
+      /** As for websocket items. */
+      verifyTls?: boolean;
     };
 
 export interface NativeExportFolder {

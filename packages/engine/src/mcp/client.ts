@@ -42,7 +42,7 @@ export function connectMcpClient(
   const transport =
     protocolConfig.transport === 'stdio'
       ? connectStdioTransport(config.url, protocolConfig.args ?? [], protocolConfig.env ?? {})
-      : connectHttpTransport(config.url, buildRequestHeaders(config));
+      : connectHttpTransport(config.url, buildRequestHeaders(config), { verifyTls: config.verifyTls });
 
   transport.onMessage((message) => {
     if (isResponse(message)) {
@@ -66,12 +66,15 @@ export function connectMcpClient(
   function request(method: string, params?: unknown): Promise<unknown> {
     const message = createRequest(method, params);
     const result = pending.track(message.id);
-    transport.send(message);
+    // A request that couldn't be delivered fails its own call (and so
+    // `ready`, for initialize) instead of waiting forever for a response.
+    Promise.resolve(transport.send(message)).catch((error: Error) => pending.reject(message.id, error));
     return result;
   }
 
   function notify(method: string, params?: unknown): void {
-    transport.send(createNotification(method, params));
+    // A notification has no call to fail, so report it on the connection.
+    Promise.resolve(transport.send(createNotification(method, params))).catch(onError);
   }
 
   const ready = request('initialize', {

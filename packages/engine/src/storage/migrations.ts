@@ -83,6 +83,17 @@ export const MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    // Saved connections gain the TLS certificate check setting
+    // (RequestConfig.verifyTls), on for every existing connection. Saved
+    // requests carry it in config_json, so they need no change.
+    version: 3,
+    name: 'connection TLS verification',
+    up(db) {
+      ensureColumn(db, 'ws_connections', 'verify_tls', 'INTEGER NOT NULL DEFAULT 1');
+      ensureColumn(db, 'mcp_connections', 'verify_tls', 'INTEGER NOT NULL DEFAULT 1');
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

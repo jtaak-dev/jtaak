@@ -1,6 +1,8 @@
 import { performance } from 'node:perf_hooks';
 import type { ExecutedResponse, GraphQlProtocolConfig, KeyValue, RequestConfig } from '../types.js';
+import { withErrorDetail } from './errors.js';
 import { timingPhases, withTiming } from './timing.js';
+import { fetchFor } from './tls.js';
 
 function toHeaderRecord(headers: KeyValue[]): Record<string, string> {
   return headers
@@ -123,12 +125,16 @@ export async function executeRequest(config: RequestConfig): Promise<ExecutedRes
     result: { response, bodyText },
     marks,
   } = await withTiming(async () => {
-    const response = await fetch(buildUrl(config), {
-      method,
-      headers,
-      body: hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined,
-    });
-    return { response, bodyText: await response.text() };
+    try {
+      const response = await fetchFor(config)(buildUrl(config), {
+        method,
+        headers,
+        body: hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined,
+      });
+      return { response, bodyText: await response.text() };
+    } catch (error) {
+      throw withErrorDetail(error);
+    }
   });
   const end = performance.now();
 

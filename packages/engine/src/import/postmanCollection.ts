@@ -44,6 +44,8 @@ interface PostmanItem {
   item?: PostmanItem[];
   request?: PostmanRequest;
   event?: PostmanEvent[];
+  /** `strictSSL: false` is Postman's per-request "SSL certificate verification" off. */
+  protocolProfileBehavior?: { strictSSL?: boolean };
 }
 interface PostmanCollectionRoot {
   info?: { name?: string };
@@ -128,6 +130,7 @@ function convertRequest(item: PostmanItem): RequestConfig {
     body: convertBody(request.body),
     auth: convertAuth(request.auth),
     ...extractScripts(item.event),
+    ...(item.protocolProfileBehavior?.strictSSL === false && { verifyTls: false }),
   };
 }
 

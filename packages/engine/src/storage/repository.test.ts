@@ -396,6 +396,22 @@ describe('WebSocket connections', () => {
     expect(updated.auth).toEqual({ type: 'bearer', bearer: { token: 'abc' } });
   });
 
+  it('checks TLS certificates by default, and keeps the setting when an update leaves it out', () => {
+    const db = freshDb();
+    const { wsCollectionId } = seededWorkspace(db);
+    const connection = createWebSocketConnection(db, { collectionId: wsCollectionId, name: 'Chat', url: 'wss://x' });
+    expect(connection.verifyTls).toBe(true);
+    expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(true);
+
+    const patch = { url: 'wss://x', headers: [], subprotocols: [], auth: { type: 'none' as const } };
+    updateWebSocketConnection(db, connection.id, { ...patch, verifyTls: false });
+    expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(false);
+    updateWebSocketConnection(db, connection.id, patch);
+    expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(false);
+    updateWebSocketConnection(db, connection.id, { ...patch, verifyTls: true });
+    expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(true);
+  });
+
   it('deletes a connection', () => {
     const db = freshDb();
     const { workspace, wsCollectionId } = seededWorkspace(db);
@@ -507,6 +523,23 @@ describe('MCP server connections', () => {
     expect(updated.transport).toBe('http');
     expect(updated.command).toBe('https://example.com/mcp');
     expect(updated.headers).toEqual([{ key: 'Authorization', value: 'Bearer abc', enabled: true }]);
+  });
+
+  it('checks TLS certificates by default for MCP servers, and keeps the setting when an update leaves it out', () => {
+    const db = freshDb();
+    const { mcpCollectionId } = seededWorkspace(db);
+    const connection = createMcpServerConnection(db, {
+      collectionId: mcpCollectionId,
+      name: 'Remote',
+      transport: 'http',
+      command: 'https://x/mcp',
+    });
+    expect(getMcpServerConnection(db, connection.id)!.verifyTls).toBe(true);
+
+    const patch = { transport: 'http' as const, command: 'https://x/mcp', args: [], env: [], headers: [] };
+    updateMcpServerConnection(db, connection.id, { ...patch, verifyTls: false });
+    updateMcpServerConnection(db, connection.id, patch);
+    expect(getMcpServerConnection(db, connection.id)!.verifyTls).toBe(false);
   });
 
   it('deletes a connection', () => {

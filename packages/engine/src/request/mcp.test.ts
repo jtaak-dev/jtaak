@@ -142,4 +142,19 @@ describe('openMcpStream (HTTP transport)', () => {
     await expect(handle.request('does/not-exist')).rejects.toThrow(/Method not found/);
     handle.close();
   });
+
+  it("fails a call whose request can't be delivered, saying why, instead of waiting forever", async () => {
+    const url = await startHttpMcpServer();
+    const events: StreamEvent[] = [];
+    const handle = openMcpStream(baseConfig(url), (e) => events.push(e));
+    await waitForEvents(1, events);
+
+    // The server goes away after the handshake.
+    server!.closeAllConnections();
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+    server = undefined;
+
+    await expect(handle.request('tools/list')).rejects.toThrow(/fetch failed: .*ECONNREFUSED/);
+    handle.close();
+  });
 });
