@@ -2,9 +2,10 @@
 
 A local-first API request engine and command-line client. It sends and times
 HTTP, GraphQL, Server-Sent Events, unary gRPC, WebSocket and MCP (Model Context
-Protocol) requests, runs pre-request and test scripts in a sandbox, imports
-Postman, OpenAPI and cURL, and stores its data in SQLite. No account, no cloud,
-no telemetry: it only talks to the APIs you send requests to.
+Protocol) requests, connects to MQTT brokers, runs pre-request and test scripts
+in a sandbox, imports Postman, OpenAPI and cURL, and stores its data in SQLite.
+No account, no cloud, no telemetry: it only talks to the APIs you send requests
+to.
 
 | Package | What it is |
 |---|---|

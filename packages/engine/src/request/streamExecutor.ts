@@ -1,10 +1,17 @@
 import { openSseStream } from './sse.js';
 import { openWebSocketStream } from './websocket.js';
 import { openMcpStream } from './mcp.js';
+import { MESSAGING_PROTOCOLS, isMessagingProtocol, openMessagingStream } from './messaging/index.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { RequestConfig, StreamEvent, StreamHandle, StreamingProtocol } from '../types.js';
 
-const STREAMING_PROTOCOLS: ReadonlySet<StreamingProtocol> = new Set(['websocket', 'sse', 'grpc', 'mcp']);
+const STREAMING_PROTOCOLS: ReadonlySet<StreamingProtocol> = new Set([
+  'websocket',
+  'sse',
+  'grpc',
+  'mcp',
+  ...MESSAGING_PROTOCOLS,
+]);
 
 function isStreamingProtocol(protocol: string): protocol is StreamingProtocol {
   return STREAMING_PROTOCOLS.has(protocol as StreamingProtocol);
@@ -26,13 +33,15 @@ export function openStream(
   const protocol = config.protocol ?? 'http';
   if (!isStreamingProtocol(protocol)) {
     throw new Error(
-      `openStream only supports streaming protocols (websocket, sse, grpc, mcp) — got "${protocol}". Use executeRequest instead.`,
+      `openStream only supports streaming protocols (${[...STREAMING_PROTOCOLS].join(', ')}) — got "${protocol}". Use executeRequest instead.`,
     );
   }
 
   if (protocol === 'sse') return openSseStream(config, onEvent);
   if (protocol === 'websocket') return openWebSocketStream(config, onEvent);
   if (protocol === 'mcp') return openMcpStream(config, onEvent, profile);
+  // Returns a MessagingStreamHandle (subscribe, unsubscribe, publish).
+  if (isMessagingProtocol(protocol)) return openMessagingStream(config, onEvent);
   if (protocol === 'grpc') {
     throw new Error(
       "openStream doesn't support gRPC streaming methods yet (server/client/bidi); " +
