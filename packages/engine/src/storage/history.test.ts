@@ -152,6 +152,16 @@ describe('history', () => {
     expect(pages.flat()).toEqual(all.map((e) => e.id));
   });
 
+  it('orders entries from the same millisecond by when they were added, and prunes by that too', () => {
+    const { db, workspaceId } = setup();
+    for (const name of ['first', 'second', 'third', 'fourth']) {
+      addHistoryEntry(db, { workspaceId, config: config({ name }), response: response(), executedAt: 500 });
+    }
+    expect(listHistory(db, workspaceId).map((e) => e.name)).toEqual(['fourth', 'third', 'second', 'first']);
+    pruneHistory(db, workspaceId, 2);
+    expect(listHistory(db, workspaceId).map((e) => e.name)).toEqual(['fourth', 'third']);
+  });
+
   it('searches names and URLs, case-insensitively, taking % and _ literally', () => {
     const { db, workspaceId } = setup();
     addHistoryEntry(db, { workspaceId, config: config({ name: 'List users' }), response: response() });
