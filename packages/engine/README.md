@@ -86,8 +86,29 @@ console.log(result.testResults); // [{ name: 'status is 200', passed: true }, ..
 
 Scripts use the `jt` object: `jt.test`, `jt.expect` (`toBe`, `toEqual`,
 `toContain`, `toHaveProperty`, `toBeGreaterThan`, `not`, and more),
-`jt.response`, `jt.request` (read-only) and `jt.variables`. They also get
-`console`, whose output is returned in `scriptLogs`.
+`jt.response`, `jt.request` (read-only), `jt.variables` and
+`jt.environment`. They also get `console`, whose output is returned in
+`scriptLogs`.
+
+Both `jt.variables` and `jt.environment` start as the environment's values
+(`scopes.environment`), and the request resolves `{{name}}` against what
+scripts set in either. What they set in `jt.variables` lasts only for this
+request. What they set in `jt.environment` (or delete from it) comes back
+as `result.environmentUpdates`, a new value per name or `null` for one
+removed, so the caller can save it. The engine never changes the
+environment itself; `applyEnvironmentUpdates(values, updates)` applies them:
+
+```ts
+import { applyEnvironmentUpdates, runRequestWithScripts } from '@jtaak/engine';
+
+const login = await runRequestWithScripts(
+  { ...loginRequest, testScript: 'jt.environment.token = jt.response.json().token;' },
+  scopes,
+);
+if (login.environmentUpdates) {
+  environment.variables = applyEnvironmentUpdates(environment.variables, login.environmentUpdates);
+}
+```
 
 Scripts run in [QuickJS](https://github.com/justjake/quickjs-emscripten), a
 separate JavaScript engine compiled to WebAssembly: a fresh runtime per script,
@@ -98,7 +119,10 @@ Node.js or host objects, no timers and no network; data goes in and out only as
 JSON.
 
 `runCollection(requests, scopes, onProgress)` runs a list of requests in order
-with their scripts and returns a pass/fail report.
+with their scripts and returns a pass/fail report. What one request's scripts
+set in `jt.environment` reaches the requests after it (a login request's
+token, say), and the report's `environmentUpdates` has the run's net
+changes.
 
 ## Storage
 

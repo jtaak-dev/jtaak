@@ -80,6 +80,7 @@ export type {
   NativeImportOptions,
   NativeImportResult,
   EngineProfile,
+  EnvironmentUpdates,
 } from './types.js';
 export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION } from './types.js';
 
@@ -94,6 +95,7 @@ export { parseGrpcProto, clearGrpcProtoCache } from './request/grpcProto.js';
 export { executeGrpcUnaryCall } from './request/grpc.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
+export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
 export type { ScriptContext } from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';

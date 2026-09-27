@@ -88,6 +88,39 @@ describe('runCollection', () => {
   });
 });
 
+describe('environment changes in a run', () => {
+  it('passes what one request sets in the environment to the requests after it', async () => {
+    const requests: RunnableRequest[] = [
+      {
+        id: 'login',
+        name: 'Log in',
+        config: config({ testScript: 'jt.environment.token = "t-" + jt.response.json().ok;' }),
+      },
+      {
+        id: 'use',
+        name: 'Use the token',
+        config: config({
+          url: `${baseUrl}/{{token}}`,
+          testScript: 'jt.test("sent the token", () => jt.expect(jt.request.url).toContain("/t-true"));',
+        }),
+      },
+      {
+        id: 'logout',
+        name: 'Log out',
+        config: config({ testScript: 'delete jt.environment.session; jt.variables.scratch = "x";' }),
+      },
+    ];
+    const report = await runCollection(requests, { ...emptyScopes(), environment: { session: 's1' } });
+    expect(report.items[1].result.testResults).toEqual([{ name: 'sent the token', passed: true }]);
+    expect(report.environmentUpdates).toEqual({ token: 't-true', session: null });
+  });
+
+  it('reports no environment updates when nothing changed', async () => {
+    const report = await runCollection([{ id: 'a', name: 'a', config: config() }], emptyScopes());
+    expect(report.environmentUpdates).toBeUndefined();
+  });
+});
+
 describe('performance budget: 500-request collection run', () => {
   it('completes in a reasonable time without blocking on any single step', async () => {
     const requests: RunnableRequest[] = Array.from({ length: 500 }, (_, i) => ({

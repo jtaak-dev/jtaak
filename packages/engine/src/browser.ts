@@ -25,10 +25,12 @@ export type {
   GrpcMethodSummary,
   GrpcServiceSummary,
   GrpcProtoSummary,
+  EnvironmentUpdates,
 } from './types.js';
 export { emptyScopes } from './types.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
+export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
 export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';
 export { parseCurlCommand } from './import/curl.js';
