@@ -146,7 +146,7 @@ describe('exportNative scopes', () => {
     const db = openDatabase(':memory:');
     const { workspaceId } = fixture(db);
     const doc = exportNative(db, workspaceId, { scope: 'workspace' }, noSecrets);
-    expect(doc.collections.map((c) => c.category)).toEqual(['api', 'websocket', 'mcp']);
+    expect(doc.collections.map((c) => c.category)).toEqual(['api', 'websocket', 'mcp', 'messaging']);
     expect(doc.environments.map((e) => e.name).sort()).toEqual(['Prod', 'Staging']);
   });
 

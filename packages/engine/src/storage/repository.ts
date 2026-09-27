@@ -11,6 +11,9 @@ import type {
   KeyValue,
   McpServerConnection,
   McpTransportKind,
+  MessagingConnection,
+  MessagingProtocol,
+  MessagingSubscription,
   Protocol,
   RequestConfig,
   SavedRequest,
@@ -68,9 +71,11 @@ function toRequestSummary(row: RequestRow): SavedRequestSummary {
   };
 }
 
+type ConnectionTable = 'ws_connections' | 'mcp_connections' | 'messaging_connections';
+
 function nextSortOrder(
   db: Database.Database,
-  table: 'collections' | 'requests' | 'ws_connections' | 'mcp_connections',
+  table: 'collections' | 'requests' | ConnectionTable,
   column: string,
   id: string | null,
 ): number {
@@ -97,15 +102,20 @@ export function createWorkspace(db: Database.Database, name: string): Workspace 
   return workspace;
 }
 
+/** Every sidebar category, in the order a UI shows them. */
+export const COLLECTION_CATEGORIES: readonly CollectionCategory[] = ['api', 'websocket', 'mcp', 'messaging'];
+
 export const DEFAULT_COLLECTION_NAMES: Record<CollectionCategory, string> = {
   api: 'My Collection',
   websocket: 'My Connections',
   mcp: 'My MCPs',
+  messaging: 'My Brokers',
 };
 
-const CONNECTION_TABLE_BY_CATEGORY: Partial<Record<CollectionCategory, 'ws_connections' | 'mcp_connections'>> = {
+const CONNECTION_TABLE_BY_CATEGORY: Partial<Record<CollectionCategory, ConnectionTable>> = {
   websocket: 'ws_connections',
   mcp: 'mcp_connections',
+  messaging: 'messaging_connections',
 };
 
 /**
@@ -159,7 +169,7 @@ function seedCategory(db: Database.Database, workspaceId: string, category: Coll
 export function getOrCreateDefaultWorkspace(db: Database.Database): { workspace: Workspace } {
   const existing = listWorkspaces(db)[0];
   const workspace = existing ?? createWorkspace(db, 'My Workspace');
-  for (const category of ['api', 'websocket', 'mcp'] as const) seedCategory(db, workspace.id, category);
+  for (const category of COLLECTION_CATEGORIES) seedCategory(db, workspace.id, category);
   return { workspace };
 }
 
@@ -407,11 +417,7 @@ function assertCollectionCategory(
   return { workspaceId: row.workspace_id };
 }
 
-function reorderConnectionRows(
-  db: Database.Database,
-  table: 'ws_connections' | 'mcp_connections',
-  orderedIds: string[],
-): void {
+function reorderConnectionRows(db: Database.Database, table: ConnectionTable, orderedIds: string[]): void {
   const update = db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`);
   db.transaction((ids: string[]) => {
     ids.forEach((id, index) => update.run(index, id));
@@ -742,6 +748,168 @@ export function getCollectionTree(db: Database.Database, workspaceId: string): C
   );
   for (const row of requestRows) {
     nodesById.get(row.collection_id)?.requests.push(toRequestSummary(row));
+  }
+  return roots;
+}
+
+// ---- Messaging connections -------------------------------------------------
+
+interface MessagingConnectionRow {
+  id: string;
+  workspace_id: string;
+  collection_id: string;
+  sort_order: number;
+  name: string;
+  protocol: string;
+  url: string;
+  headers_json: string;
+  auth_json: string;
+  settings_json: string;
+  subscriptions_json: string;
+  verify_tls: number;
+  created_at: number;
+  updated_at: number;
+}
+
+function toMessagingConnection(row: MessagingConnectionRow): MessagingConnection {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    collectionId: row.collection_id,
+    sortOrder: row.sort_order,
+    name: row.name,
+    protocol: row.protocol as MessagingProtocol,
+    url: row.url,
+    headers: JSON.parse(row.headers_json) as KeyValue[],
+    auth: JSON.parse(row.auth_json) as AuthConfig,
+    settings: JSON.parse(row.settings_json) as Record<string, unknown>,
+    subscriptions: JSON.parse(row.subscriptions_json) as MessagingSubscription[],
+    verifyTls: row.verify_tls !== 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function listMessagingConnections(db: Database.Database, workspaceId: string): MessagingConnection[] {
+  const rows = db
+    .prepare('SELECT * FROM messaging_connections WHERE workspace_id = ? ORDER BY sort_order ASC, name ASC')
+    .all(workspaceId) as MessagingConnectionRow[];
+  return rows.map(toMessagingConnection);
+}
+
+export function getMessagingConnection(db: Database.Database, id: string): MessagingConnection | undefined {
+  const row = db.prepare('SELECT * FROM messaging_connections WHERE id = ?').get(id) as
+    MessagingConnectionRow | undefined;
+  return row ? toMessagingConnection(row) : undefined;
+}
+
+export function createMessagingConnection(
+  db: Database.Database,
+  input: { collectionId: string; name: string; protocol: MessagingProtocol; url: string },
+): MessagingConnection {
+  const { workspaceId } = assertCollectionCategory(db, input.collectionId, 'messaging');
+  const now = Date.now();
+  const connection: MessagingConnection = {
+    id: randomUUID(),
+    workspaceId,
+    collectionId: input.collectionId,
+    sortOrder: nextSortOrder(db, 'messaging_connections', 'collection_id', input.collectionId),
+    name: input.name,
+    protocol: input.protocol,
+    url: input.url,
+    headers: [],
+    auth: { type: 'none' },
+    settings: {},
+    subscriptions: [],
+    verifyTls: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.prepare(
+    'INSERT INTO messaging_connections (id, workspace_id, collection_id, sort_order, name, protocol, url, headers_json, auth_json, settings_json, subscriptions_json, verify_tls, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    connection.id,
+    connection.workspaceId,
+    connection.collectionId,
+    connection.sortOrder,
+    connection.name,
+    connection.protocol,
+    connection.url,
+    JSON.stringify(connection.headers),
+    JSON.stringify(connection.auth),
+    JSON.stringify(connection.settings),
+    JSON.stringify(connection.subscriptions),
+    1,
+    connection.createdAt,
+    connection.updatedAt,
+  );
+  return connection;
+}
+
+export function renameMessagingConnection(db: Database.Database, id: string, name: string): void {
+  db.prepare('UPDATE messaging_connections SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id);
+}
+
+/** Updates everything but the name (see renameMessagingConnection). Leaving `verifyTls` out keeps the saved value. */
+export function updateMessagingConnection(
+  db: Database.Database,
+  id: string,
+  patch: {
+    protocol: MessagingProtocol;
+    url: string;
+    headers: KeyValue[];
+    auth: AuthConfig;
+    settings: Record<string, unknown>;
+    subscriptions: MessagingSubscription[];
+    verifyTls?: boolean;
+  },
+): void {
+  db.prepare(
+    'UPDATE messaging_connections SET protocol = ?, url = ?, headers_json = ?, auth_json = ?, settings_json = ?, subscriptions_json = ?, verify_tls = COALESCE(?, verify_tls), updated_at = ? WHERE id = ?',
+  ).run(
+    patch.protocol,
+    patch.url,
+    JSON.stringify(patch.headers),
+    JSON.stringify(patch.auth),
+    JSON.stringify(patch.settings),
+    JSON.stringify(patch.subscriptions),
+    patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    Date.now(),
+    id,
+  );
+}
+
+export function deleteMessagingConnection(db: Database.Database, id: string): void {
+  db.prepare('DELETE FROM messaging_connections WHERE id = ?').run(id);
+}
+
+/** Moves a connection to a different 'messaging' collection/folder, appending it after its new siblings. */
+export function moveMessagingConnection(db: Database.Database, id: string, newCollectionId: string): void {
+  assertCollectionCategory(db, newCollectionId, 'messaging');
+  const sortOrder = nextSortOrder(db, 'messaging_connections', 'collection_id', newCollectionId);
+  db.prepare('UPDATE messaging_connections SET collection_id = ?, sort_order = ? WHERE id = ?').run(
+    newCollectionId,
+    sortOrder,
+    id,
+  );
+}
+
+/** Rewrites sort_order (0..n-1) for a set of sibling connections, in the given order. */
+export function reorderMessagingConnections(db: Database.Database, orderedIds: string[]): void {
+  reorderConnectionRows(db, 'messaging_connections', orderedIds);
+}
+
+/** The 'messaging' category's collection/folder/connection tree. */
+export function getMessagingTree(
+  db: Database.Database,
+  workspaceId: string,
+): ConnectionTreeNode<MessagingConnection>[] {
+  const { roots, nodesById } = assembleTree<ConnectionTreeNode<MessagingConnection>>(
+    listCategoryCollections(db, workspaceId, 'messaging'),
+    (node) => ({ ...node, children: [], connections: [] }),
+  );
+  for (const connection of listMessagingConnections(db, workspaceId)) {
+    nodesById.get(connection.collectionId)?.connections.push(connection);
   }
   return roots;
 }

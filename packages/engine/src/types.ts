@@ -19,6 +19,10 @@ export type Protocol = 'http' | 'graphql' | 'websocket' | 'sse' | 'grpc' | 'mcp'
  * `MessagingStreamHandle`. */
 export type MessagingProtocol = 'mqtt' | 'kafka' | 'socketio' | 'amqp' | 'nats';
 
+/** Every `MessagingProtocol`. Here rather than in request/messaging/, whose
+ * adapters import Node client libraries, so the browser entry can use it. */
+export const MESSAGING_PROTOCOLS: readonly MessagingProtocol[] = ['mqtt', 'kafka', 'socketio', 'amqp', 'nats'];
+
 /** The subset of `Protocol` that doesn't fit a single awaited request/response
  * and is routed through `openStream` instead of `executeRequest`. */
 export type StreamingProtocol = 'websocket' | 'sse' | 'grpc' | 'mcp' | MessagingProtocol;
@@ -280,6 +284,32 @@ export interface MessagingStreamHandle extends StreamHandle {
   subscribe(subscription: MessagingSubscription): Promise<void>;
   unsubscribe(channel: string): Promise<void>;
   publish(message: MessagingPublish): Promise<MessagingPublishResult>;
+}
+
+/**
+ * A saved connection to a broker or event server (any `MessagingProtocol`),
+ * in the 'messaging' category. Like `WebSocketConnection`, it's its own
+ * entity, not a request. `settings` is the protocol's `protocolConfig`
+ * (`MqttProtocolConfig`, `KafkaProtocolConfig`, …), and `subscriptions` are
+ * the channels a host subscribes to again on each connect.
+ */
+export interface MessagingConnection {
+  id: string;
+  workspaceId: string;
+  /** The 'messaging'-category collection/folder holding this connection. */
+  collectionId: string;
+  sortOrder: number;
+  name: string;
+  protocol: MessagingProtocol;
+  url: string;
+  headers: KeyValue[];
+  auth: AuthConfig;
+  settings: Record<string, unknown>;
+  subscriptions: MessagingSubscription[];
+  /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
+  verifyTls: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /** `protocolConfig` for `protocol: 'mqtt'`. `url` is `mqtt://`, `mqtts://`,
@@ -595,7 +625,7 @@ export type CollectionNodeKind = 'collection' | 'folder';
  * holds `WebSocketConnection`s, 'mcp' holds `McpServerConnection`s. A folder
  * always shares its root collection's category.
  */
-export type CollectionCategory = 'api' | 'websocket' | 'mcp';
+export type CollectionCategory = 'api' | 'websocket' | 'mcp' | 'messaging';
 
 export interface CollectionNode {
   id: string;
@@ -832,6 +862,18 @@ export type NativeExportItem =
       args: string[];
       env: KeyValue[];
       headers: KeyValue[];
+      /** As for websocket items. */
+      verifyTls?: boolean;
+    }
+  | {
+      type: 'messaging';
+      name: string;
+      protocol: MessagingProtocol;
+      url: string;
+      headers: KeyValue[];
+      auth: AuthConfig;
+      settings: Record<string, unknown>;
+      subscriptions: MessagingSubscription[];
       /** As for websocket items. */
       verifyTls?: boolean;
     };

@@ -3,14 +3,17 @@ import type Database from 'better-sqlite3';
 import { openDatabase } from '../storage/db';
 import {
   createCollectionNode,
+  createMessagingConnection,
   createRequest,
   createWorkspace,
   getCollectionTree,
   getMcpTree,
+  getMessagingTree,
   getOrCreateDefaultWorkspace,
   getRequest,
   getWebSocketTree,
   listEnvironments,
+  updateMessagingConnection,
 } from '../storage/repository';
 import { exportNative } from '../export/nativeExport';
 import { DEFAULT_ENGINE_PROFILE, type NativeExportDocument, type RequestConfig } from '../types';
@@ -374,5 +377,110 @@ describe('the TLS certificate check setting', () => {
     const [echo] = d.collections[1].items as Array<Record<string, unknown>>;
     echo.verifyTls = 'no';
     expect(() => validateNativeExport(d)).toThrow(/verifyTls.*expected true or false/);
+  });
+});
+
+describe('messaging connections in export files', () => {
+  function workspaceWithBroker() {
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    const rootId = getMessagingTree(db, workspaceId)[0].id;
+    const created = createMessagingConnection(db, {
+      collectionId: rootId,
+      name: 'Chat server',
+      protocol: 'socketio',
+      url: 'https://chat.example/rooms',
+    });
+    updateMessagingConnection(db, created.id, {
+      protocol: 'socketio',
+      url: 'https://chat.example/rooms',
+      headers: [{ key: 'X-Api-Key', value: 'k-123', enabled: true }],
+      auth: { type: 'bearer', bearer: { token: 'tok' } },
+      settings: { path: '/ws', auth: { room: 'lobby', password: 'p4ss' } },
+      subscriptions: [{ channel: 'message' }, { channel: '*', options: { note: 'all' } }],
+      verifyTls: false,
+    });
+    return { db, workspaceId };
+  }
+
+  it('exports and imports a connection with its settings and subscriptions', () => {
+    const { db, workspaceId } = workspaceWithBroker();
+    const file = exportNative(
+      db,
+      workspaceId,
+      { scope: 'category', category: 'messaging' },
+      { includeSecrets: true, environmentIds: [] },
+    );
+    expect(file.collections[0].items[0]).toEqual({
+      type: 'messaging',
+      name: 'Chat server',
+      protocol: 'socketio',
+      url: 'https://chat.example/rooms',
+      headers: [{ key: 'X-Api-Key', value: 'k-123', enabled: true }],
+      auth: { type: 'bearer', bearer: { token: 'tok' } },
+      settings: { path: '/ws', auth: { room: 'lobby', password: 'p4ss' } },
+      subscriptions: [{ channel: 'message' }, { channel: '*', options: { note: 'all' } }],
+      verifyTls: false,
+    });
+
+    const target = openDatabase(':memory:');
+    const targetWorkspace = workspace(target);
+    importNative(target, targetWorkspace, validateNativeExport(JSON.parse(JSON.stringify(file))), {
+      includeScripts: false,
+      includeEnvironments: false,
+    });
+    // Import adds a collection of its own next to the seeded one.
+    const imported = getMessagingTree(target, targetWorkspace).find((c) => c.connections.length > 0);
+    expect(imported?.connections[0]).toMatchObject({
+      protocol: 'socketio',
+      settings: { path: '/ws', auth: { room: 'lobby', password: 'p4ss' } },
+      subscriptions: [{ channel: 'message' }, { channel: '*', options: { note: 'all' } }],
+      verifyTls: false,
+    });
+  });
+
+  it('blanks secrets, including secret-named settings, unless asked not to', () => {
+    const { db, workspaceId } = workspaceWithBroker();
+    const [item] = exportNative(
+      db,
+      workspaceId,
+      { scope: 'category', category: 'messaging' },
+      { includeSecrets: false, environmentIds: [] },
+    ).collections[0].items;
+    expect(item).toMatchObject({
+      headers: [{ key: 'X-Api-Key', value: '' }],
+      settings: { path: '/ws', auth: { room: 'lobby', password: '' } },
+    });
+    expect(item.type === 'messaging' && item.auth.bearer?.token).toBe('');
+  });
+
+  it('refuses an unknown protocol or a malformed subscription', () => {
+    const base = {
+      format: 'jtaak-export',
+      version: 1,
+      scope: 'category',
+      exportedAt: '2026-09-28T00:00:00.000Z',
+      secretsStripped: false,
+      environments: [],
+    };
+    const withItem = (item: Record<string, unknown>) => ({
+      ...base,
+      collections: [
+        {
+          category: 'messaging',
+          name: 'B',
+          folders: [],
+          items: [{ type: 'messaging', name: 'x', url: 'u', headers: [], auth: { type: 'none' }, ...item }],
+        },
+      ],
+    });
+    expect(() => validateNativeExport(withItem({ protocol: 'smtp' }))).toThrow(/protocol: expected one of mqtt, kafka/);
+    expect(() => validateNativeExport(withItem({ protocol: 'mqtt', subscriptions: [{ nope: 1 }] }))).toThrow(
+      /subscriptions\[0\]\.channel/,
+    );
+    expect(validateNativeExport(withItem({ protocol: 'nats' })).collections[0].items[0]).toMatchObject({
+      settings: {},
+      subscriptions: [],
+    });
   });
 });

@@ -1,5 +1,12 @@
 import type Database from 'better-sqlite3';
-import { getCollectionTree, getMcpTree, getWebSocketTree, listEnvironments } from '../storage/repository.js';
+import {
+  COLLECTION_CATEGORIES,
+  getCollectionTree,
+  getMcpTree,
+  getMessagingTree,
+  getWebSocketTree,
+  listEnvironments,
+} from '../storage/repository.js';
 import {
   DEFAULT_ENGINE_PROFILE,
   NATIVE_EXPORT_VERSION,
@@ -17,6 +24,7 @@ import {
   type ConnectionTreeNode,
   type KeyValue,
   type McpServerConnection,
+  type MessagingConnection,
   type RequestConfig,
   type WebSocketConnection,
 } from '../types.js';
@@ -61,7 +69,10 @@ function stripVariables(variables: Record<string, string>): Record<string, strin
 // ---- Tree → export shape ---------------------------------------------------
 
 type AnyTreeNode =
-  CollectionTreeNode | ConnectionTreeNode<WebSocketConnection> | ConnectionTreeNode<McpServerConnection>;
+  | CollectionTreeNode
+  | ConnectionTreeNode<WebSocketConnection>
+  | ConnectionTreeNode<McpServerConnection>
+  | ConnectionTreeNode<MessagingConnection>;
 
 interface ExportContext {
   includeSecrets: boolean;
@@ -120,12 +131,42 @@ function mcpItem(c: McpServerConnection, includeSecrets: boolean): NativeExportI
   };
 }
 
+function messagingItem(c: MessagingConnection, includeSecrets: boolean): NativeExportItem {
+  return {
+    type: 'messaging',
+    name: c.name,
+    protocol: c.protocol,
+    url: c.url,
+    headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
+    auth: includeSecrets ? c.auth : stripAuth(c.auth),
+    settings: includeSecrets ? c.settings : stripSettings(c.settings),
+    subscriptions: c.subscriptions,
+    ...(!c.verifyTls && { verifyTls: false }),
+  };
+}
+
+/** A protocol's settings, with secret-named fields blanked, including inside
+ * a nested object such as Socket.IO's `auth` payload. */
+function stripSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(settings).map(([key, value]) => {
+      if (typeof value === 'string' && isSecretName(key)) return [key, blank(value)];
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return [key, stripSettings(value as Record<string, unknown>)];
+      }
+      return [key, value];
+    }),
+  );
+}
+
 function toFolder(ctx: ExportContext, node: AnyTreeNode): NativeExportFolder {
   let items: NativeExportItem[];
   if ('requests' in node) {
     items = node.requests.flatMap((r) => requestItem(ctx, r.id, r.name) ?? []);
   } else if (node.category === 'websocket') {
     items = (node.connections as WebSocketConnection[]).map((c) => wsItem(c, ctx.includeSecrets));
+  } else if (node.category === 'messaging') {
+    items = (node.connections as MessagingConnection[]).map((c) => messagingItem(c, ctx.includeSecrets));
   } else {
     items = (node.connections as McpServerConnection[]).map((c) => mcpItem(c, ctx.includeSecrets));
   }
@@ -144,6 +185,7 @@ function toCollection(ctx: ExportContext, node: AnyTreeNode): NativeExportCollec
 function categoryTree(db: Database.Database, workspaceId: string, category: CollectionCategory): AnyTreeNode[] {
   if (category === 'api') return getCollectionTree(db, workspaceId);
   if (category === 'websocket') return getWebSocketTree(db, workspaceId);
+  if (category === 'messaging') return getMessagingTree(db, workspaceId);
   return getMcpTree(db, workspaceId);
 }
 
@@ -183,7 +225,7 @@ export function exportNative(
   } else if (target.scope === 'category') {
     roots = categoryTree(db, workspaceId, target.category);
   } else {
-    roots = (['api', 'websocket', 'mcp'] as const).flatMap((category) => categoryTree(db, workspaceId, category));
+    roots = COLLECTION_CATEGORIES.flatMap((category) => categoryTree(db, workspaceId, category));
   }
 
   const ctx: ExportContext = { includeSecrets, requestConfigs: loadRequestConfigs(db, workspaceId) };

@@ -3,16 +3,20 @@ import {
   createCollectionNode,
   createEnvironment,
   createMcpServerConnection,
+  createMessagingConnection,
   createRequest,
   createWebSocketConnection,
   listEnvironments,
   updateEnvironmentVariables,
   updateMcpServerConnection,
+  updateMessagingConnection,
   updateWebSocketConnection,
 } from '../storage/repository.js';
 import {
   DEFAULT_ENGINE_PROFILE,
+  MESSAGING_PROTOCOLS,
   NATIVE_EXPORT_VERSION,
+  type MessagingSubscription,
   type NativeExportCollection,
   type NativeExportDocument,
   type NativeExportEnvironment,
@@ -46,12 +50,13 @@ const HTTP_METHODS: readonly HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DEL
 const PROTOCOLS: readonly Protocol[] = ['http', 'graphql', 'websocket', 'sse', 'grpc', 'mcp', 'soap'];
 const BODY_MODES: readonly RequestBody['mode'][] = ['none', 'raw', 'json', 'form-data', 'urlencoded', 'binary'];
 const AUTH_TYPES: readonly AuthConfig['type'][] = ['none', 'basic', 'bearer', 'apiKey'];
-const CATEGORIES: readonly CollectionCategory[] = ['api', 'websocket', 'mcp'];
+const CATEGORIES: readonly CollectionCategory[] = ['api', 'websocket', 'mcp', 'messaging'];
 const SCOPES: readonly ExportScope[] = ['collection', 'category', 'workspace'];
 const ITEM_TYPE_BY_CATEGORY: Record<CollectionCategory, NativeExportItem['type']> = {
   api: 'request',
   websocket: 'websocket',
   mcp: 'mcp',
+  messaging: 'messaging',
 };
 
 function fail(path: string, message: string): never {
@@ -181,6 +186,20 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
   const itemName = name(i.name, `${path}.name`);
   if (expected === 'request')
     return { type: 'request', name: itemName, config: requestConfig(i.config, `${path}.config`) };
+  if (expected === 'messaging') {
+    return {
+      type: 'messaging',
+      name: itemName,
+      protocol: oneOf(i.protocol, MESSAGING_PROTOCOLS, `${path}.protocol`),
+      url: str(i.url, `${path}.url`),
+      headers: keyValues(i.headers, `${path}.headers`),
+      auth: auth(i.auth, `${path}.auth`),
+      // Each protocol's settings are its own; only the shape is checked, as for protocolConfig.
+      settings: i.settings === undefined ? {} : JSON.parse(JSON.stringify(obj(i.settings, `${path}.settings`))),
+      subscriptions: subscriptions(i.subscriptions, `${path}.subscriptions`),
+      ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
+    };
+  }
   if (expected === 'websocket') {
     return {
       type: 'websocket',
@@ -202,6 +221,17 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
     headers: keyValues(i.headers, `${path}.headers`),
     ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
   };
+}
+
+function subscriptions(value: unknown, path: string): MessagingSubscription[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) fail(path, 'expected a list');
+  return value.map((entry, index) => {
+    const s = obj(entry, `${path}[${index}]`);
+    const channel = str(s.channel, `${path}[${index}].channel`);
+    if (s.options === undefined) return { channel };
+    return { channel, options: JSON.parse(JSON.stringify(obj(s.options, `${path}[${index}].options`))) };
+  });
 }
 
 function withVerifyTls(value: unknown, path: string): { verifyTls?: boolean } {
@@ -351,6 +381,17 @@ export function importNative(
         ...(options.includeScripts && { preRequestScript, testScript }),
       };
       createRequest(db, { collectionId, name: i.name, config });
+    } else if (i.type === 'messaging') {
+      const created = createMessagingConnection(db, { collectionId, name: i.name, protocol: i.protocol, url: i.url });
+      updateMessagingConnection(db, created.id, {
+        protocol: i.protocol,
+        url: i.url,
+        headers: i.headers,
+        auth: i.auth,
+        settings: i.settings,
+        subscriptions: i.subscriptions,
+        verifyTls: i.verifyTls ?? true,
+      });
     } else if (i.type === 'websocket') {
       const created = createWebSocketConnection(db, { collectionId, name: i.name, url: i.url });
       updateWebSocketConnection(db, created.id, {

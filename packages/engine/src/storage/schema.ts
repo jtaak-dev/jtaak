@@ -3,6 +3,33 @@
 // otherwise breaks depending on whether the consuming package compiles this
 // file as ESM (Vitest, a browser bundle) or CommonJS (a Node host process) —
 // and it sidesteps packaged-archive path issues once a host app is built.
+/** The messaging_connections table and its index: part of SCHEMA_SQL, and
+ * created on its own by migration 4 (migrations.ts) for older databases. */
+export const MESSAGING_CONNECTIONS_SQL = `
+-- Saved broker connections (MQTT, Kafka, Socket.IO, AMQP, NATS), in the
+-- 'messaging' category. See types.ts's MessagingConnection: settings_json is
+-- the protocol's protocolConfig, subscriptions_json what to subscribe to again
+-- on each connect. Created by migration 4, which also let collections have the
+-- 'messaging' category.
+CREATE TABLE IF NOT EXISTS messaging_connections (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  name TEXT NOT NULL,
+  protocol TEXT NOT NULL CHECK (protocol IN ('mqtt', 'kafka', 'socketio', 'amqp', 'nats')),
+  url TEXT NOT NULL,
+  headers_json TEXT NOT NULL DEFAULT '[]',
+  auth_json TEXT NOT NULL DEFAULT '{"type":"none"}',
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  subscriptions_json TEXT NOT NULL DEFAULT '[]',
+  verify_tls INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messaging_connections_collection ON messaging_connections(collection_id);
+`;
+
 export const SCHEMA_SQL = `
 -- MVP local-first schema. Everything the engine stores lives here — no server
 -- round-trip required for any of it.
@@ -22,7 +49,7 @@ CREATE TABLE IF NOT EXISTS collections (
   -- Which sidebar category this hierarchy belongs to (see types.ts's
   -- CollectionCategory); folders copy their root collection's category.
   -- Added later — see db.ts's migration for pre-existing tables.
-  category TEXT NOT NULL DEFAULT 'api' CHECK (category IN ('api', 'websocket', 'mcp')),
+  category TEXT NOT NULL DEFAULT 'api' CHECK (category IN ('api', 'websocket', 'mcp', 'messaging')),
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
@@ -117,6 +144,8 @@ CREATE TABLE IF NOT EXISTS request_history (
 -- collection tree loading in under a second, and the sidebar staying at
 -- 60fps while scrolling. Both depend on the request/collection lookups
 -- below being indexed, not scanned.
+${MESSAGING_CONNECTIONS_SQL}
+
 CREATE INDEX IF NOT EXISTS idx_collections_workspace ON collections(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_collections_parent ON collections(parent_folder_id);
 CREATE INDEX IF NOT EXISTS idx_requests_collection ON requests(collection_id);

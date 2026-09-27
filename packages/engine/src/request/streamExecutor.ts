@@ -1,8 +1,8 @@
 import { openSseStream } from './sse.js';
 import { openWebSocketStream } from './websocket.js';
 import { openMcpStream } from './mcp.js';
-import { MESSAGING_PROTOCOLS, isMessagingProtocol, openMessagingStream } from './messaging/index.js';
-import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
+import { isMessagingProtocol, openMessagingStream } from './messaging/index.js';
+import { DEFAULT_ENGINE_PROFILE, MESSAGING_PROTOCOLS, type EngineProfile } from '../types.js';
 import type { RequestConfig, StreamEvent, StreamHandle, StreamingProtocol } from '../types.js';
 
 const STREAMING_PROTOCOLS: ReadonlySet<StreamingProtocol> = new Set([

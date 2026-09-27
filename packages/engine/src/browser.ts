@@ -27,6 +27,7 @@ export type {
   GrpcProtoSummary,
   EnvironmentUpdates,
   MessagingProtocol,
+  MessagingConnection,
   MessagingSubscription,
   MessagingPublish,
   MessagingMessage,
@@ -36,7 +37,7 @@ export type {
   AmqpProtocolConfig,
   KafkaProtocolConfig,
 } from './types.js';
-export { emptyScopes } from './types.js';
+export { emptyScopes, MESSAGING_PROTOCOLS } from './types.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
