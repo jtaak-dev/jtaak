@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import type { ExecutedResponse, GraphQlProtocolConfig, KeyValue, RequestConfig } from '../types.js';
+import { timingPhases, withTiming } from './timing.js';
 
 function toHeaderRecord(headers: KeyValue[]): Record<string, string> {
   return headers
@@ -118,13 +119,17 @@ export async function executeRequest(config: RequestConfig): Promise<ExecutedRes
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(buildUrl(config), {
-    method,
-    headers,
-    body: hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined,
+  const {
+    result: { response, bodyText },
+    marks,
+  } = await withTiming(async () => {
+    const response = await fetch(buildUrl(config), {
+      method,
+      headers,
+      body: hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined,
+    });
+    return { response, bodyText: await response.text() };
   });
-
-  const bodyText = await response.text();
   const end = performance.now();
 
   const responseHeaders: Record<string, string> = {};
@@ -137,7 +142,7 @@ export async function executeRequest(config: RequestConfig): Promise<ExecutedRes
     statusText: response.statusText,
     headers: responseHeaders,
     body: bodyText,
-    timings: { start, end, durationMs: end - start },
+    timings: { start, end, durationMs: end - start, phases: timingPhases(marks, end) },
     sizeBytes: Buffer.byteLength(bodyText, 'utf-8'),
   };
 }

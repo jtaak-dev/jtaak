@@ -98,15 +98,38 @@ export interface GraphQlSchemaSummary {
   fetchedAt: number;
 }
 
+/**
+ * Where a request's time went, in milliseconds (request/timing.ts). The
+ * phases don't add up to the total: the rest is building the request, queuing
+ * for a connection, sending it, and any redirects.
+ */
+export interface RequestTimingPhases {
+  /** Resolving the host name; 0 for an IP address or a reused connection. */
+  dnsMs: number;
+  /** Opening the TCP connection; 0 for a reused connection. */
+  connectMs: number;
+  /** The TLS handshake; 0 for plain HTTP or a reused connection. */
+  tlsMs: number;
+  /** From the request being sent to the response's first byte (its headers). */
+  waitMs: number;
+  /** Reading the response body. */
+  downloadMs: number;
+  /** Whether the request went over an already-open connection. */
+  reusedConnection: boolean;
+}
+
 export interface ExecutedResponse {
   status: number;
   statusText: string;
   headers: Record<string, string>;
   body: string;
   timings: {
+    /** performance.now() readings: a monotonic clock, not times of day. */
     start: number;
     end: number;
     durationMs: number;
+    /** Absent where the runtime gave no timing events. */
+    phases?: RequestTimingPhases;
   };
   sizeBytes: number;
 }
@@ -491,6 +514,64 @@ export interface AssertionResult {
   name: string;
   passed: boolean;
   error?: string;
+}
+
+// ---- Request history (storage/history.ts) --------------------------------
+
+/** One sent request to record. The engine stores `config` as given; whether
+ * it holds `{{variables}}` or their resolved values is the caller's choice
+ * (resolved values can include secrets from environments). */
+export interface HistoryEntryInput {
+  workspaceId: string;
+  /** The saved request it was sent from, if any. */
+  requestId?: string | null;
+  config: RequestConfig;
+  /** Absent when the request couldn't be sent (see `error`). */
+  response?: ExecutedResponse;
+  /** Why it couldn't be sent. */
+  error?: string;
+  testResults?: AssertionResult[];
+  /** When it was sent (ms since the epoch); now by default. */
+  executedAt?: number;
+}
+
+/** A history entry without its request and response, for lists. */
+export interface HistoryEntrySummary {
+  id: string;
+  workspaceId: string;
+  /** The saved request it came from; null for an unsaved request, or once
+   * that request is deleted. */
+  requestId: string | null;
+  executedAt: number;
+  name: string;
+  protocol: Protocol;
+  method: HttpMethod;
+  url: string;
+  /** Null when it couldn't be sent. */
+  status: number | null;
+  durationMs: number | null;
+  /** The full response size, even when the stored body is truncated. */
+  sizeBytes: number | null;
+  testsPassed: number;
+  testsTotal: number;
+  error: string | null;
+}
+
+export interface HistoryEntry extends HistoryEntrySummary {
+  config: RequestConfig;
+  response: ExecutedResponse | null;
+  /** The stored body was cut to the size limit (the response's sizeBytes is
+   * the full size). */
+  responseTruncated: boolean;
+}
+
+export interface HistoryQuery {
+  /** At most this many entries (default 100, at most 1000). */
+  limit?: number;
+  /** Entries older than this one: pass the last entry of the previous page. */
+  before?: { executedAt: number; id: string };
+  /** Only entries whose name or URL contains this text (case-insensitive). */
+  search?: string;
 }
 
 /** A single `console.log`/`warn`/`error`/`info` call captured while running a

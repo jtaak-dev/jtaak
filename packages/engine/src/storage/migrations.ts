@@ -58,6 +58,31 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // request_history existed from the start, unused. It gains what a history
+    // list needs (storage/history.ts): its workspace (deleting the workspace
+    // deletes its history), what was sent, the test results, whether the
+    // stored body was truncated, and a send error. Newest-first listing per
+    // workspace is indexed.
+    version: 2,
+    name: 'request history',
+    up(db) {
+      ensureColumn(db, 'request_history', 'workspace_id', 'TEXT REFERENCES workspaces(id) ON DELETE CASCADE');
+      ensureColumn(db, 'request_history', 'name', 'TEXT');
+      ensureColumn(db, 'request_history', 'protocol', 'TEXT');
+      ensureColumn(db, 'request_history', 'method', 'TEXT');
+      ensureColumn(db, 'request_history', 'url', 'TEXT');
+      ensureColumn(db, 'request_history', 'request_json', 'TEXT');
+      ensureColumn(db, 'request_history', 'size_bytes', 'INTEGER');
+      ensureColumn(db, 'request_history', 'tests_passed', 'INTEGER NOT NULL DEFAULT 0');
+      ensureColumn(db, 'request_history', 'tests_total', 'INTEGER NOT NULL DEFAULT 0');
+      ensureColumn(db, 'request_history', 'response_truncated', 'INTEGER NOT NULL DEFAULT 0');
+      ensureColumn(db, 'request_history', 'error', 'TEXT');
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_history_workspace ON request_history(workspace_id, executed_at DESC, id DESC)',
+      );
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {
