@@ -1,6 +1,6 @@
 {
   "name": "@jtaak/engine",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local-first API request engine: HTTP, GraphQL, Server-Sent Events, gRPC, WebSocket and MCP, with scripting, collections, import and export, and SQLite storage.",
   "keywords": [
     "api",
