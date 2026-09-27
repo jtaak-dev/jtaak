@@ -27,6 +27,7 @@ export type {
   GrpcProtoSummary,
   GrpcUnaryResult,
   MessagingProtocol,
+  MessagingConnection,
   MessagingSubscription,
   MessagingPublish,
   MessagingPublishResult,
@@ -93,7 +94,7 @@ export type {
   EngineProfile,
   EnvironmentUpdates,
 } from './types.js';
-export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION } from './types.js';
+export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION, MESSAGING_PROTOCOLS } from './types.js';
 
 export { executeRequest, buildRequestHeaders } from './request/executor.js';
 export { openStream } from './request/streamExecutor.js';
@@ -178,4 +179,14 @@ export {
   deleteMcpServerConnection,
   moveMcpServerConnection,
   reorderMcpServerConnections,
+  getMessagingTree,
+  listMessagingConnections,
+  getMessagingConnection,
+  createMessagingConnection,
+  renameMessagingConnection,
+  updateMessagingConnection,
+  deleteMessagingConnection,
+  moveMessagingConnection,
+  reorderMessagingConnections,
+  COLLECTION_CATEGORIES,
 } from './storage/repository.js';

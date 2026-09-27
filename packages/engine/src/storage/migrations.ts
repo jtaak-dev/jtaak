@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { SCHEMA_SQL } from './schema.js';
+import { MESSAGING_CONNECTIONS_SQL, SCHEMA_SQL } from './schema.js';
 
 /**
  * Schema migrations, tracked in SQLite's `PRAGMA user_version`.
@@ -13,6 +13,14 @@ export interface Migration {
   version: number;
   name: string;
   up: (db: Database.Database) => void;
+  /**
+   * Runs with foreign keys off, for rebuilding a table other tables refer to
+   * (SQLite can't change a CHECK in place). With them on, dropping the old
+   * table would cascade-delete every row that refers to it. They go back on
+   * afterwards, and the migration only commits if `foreign_key_check` finds
+   * nothing broken.
+   */
+  foreignKeysOff?: boolean;
 }
 
 function ensureColumn(db: Database.Database, table: string, column: string, definition: string): void {
@@ -94,6 +102,46 @@ export const MIGRATIONS: Migration[] = [
       ensureColumn(db, 'mcp_connections', 'verify_tls', 'INTEGER NOT NULL DEFAULT 1');
     },
   },
+  {
+    // The 'messaging' category and its connections table. Collections gain
+    // the category by rebuilding the table (its CHECK lists the categories),
+    // following SQLite's procedure: foreign keys off, copy, drop, rename,
+    // indexes back. A database created with the current schema already
+    // allows it and keeps its table.
+    version: 4,
+    name: 'messaging connections',
+    foreignKeysOff: true,
+    up(db) {
+      const { sql } = db
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'collections'")
+        .get() as {
+        sql: string;
+      };
+      if (!sql.includes("'messaging'")) {
+        db.exec(`
+          CREATE TABLE collections_new (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            parent_folder_id TEXT REFERENCES collections(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('collection', 'folder')),
+            category TEXT NOT NULL DEFAULT 'api' CHECK (category IN ('api', 'websocket', 'mcp', 'messaging')),
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+          );
+          INSERT INTO collections_new (id, workspace_id, parent_folder_id, name, kind, category, sort_order, created_at)
+            SELECT id, workspace_id, parent_folder_id, name, kind, category, sort_order, created_at FROM collections;
+          DROP TABLE collections;
+          ALTER TABLE collections_new RENAME TO collections;
+          CREATE INDEX IF NOT EXISTS idx_collections_workspace ON collections(workspace_id);
+          CREATE INDEX IF NOT EXISTS idx_collections_parent ON collections(parent_folder_id);
+          CREATE INDEX IF NOT EXISTS idx_collections_category ON collections(workspace_id, category);
+        `);
+      }
+      // The table and its index, as in schema.ts (a no-op where they exist).
+      db.exec(MESSAGING_CONNECTIONS_SQL);
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {
@@ -121,9 +169,21 @@ export function migrate(db: Database.Database, migrations: Migration[] = MIGRATI
 
   for (const migration of migrations) {
     if (migration.version <= current) continue;
-    db.transaction(() => {
-      migration.up(db);
-      db.pragma(`user_version = ${migration.version}`);
-    })();
+    // The pragma has no effect inside a transaction, so it's set around it.
+    const foreignKeysWereOn = migration.foreignKeysOff && db.pragma('foreign_keys', { simple: true }) === 1;
+    if (migration.foreignKeysOff) db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        migration.up(db);
+        if (migration.foreignKeysOff) {
+          const broken = db.pragma('foreign_key_check') as unknown[];
+          if (broken.length > 0)
+            throw new Error(`Migration ${migration.version} would break ${broken.length} reference(s).`);
+        }
+        db.pragma(`user_version = ${migration.version}`);
+      })();
+    } finally {
+      if (foreignKeysWereOn) db.pragma('foreign_keys = ON');
+    }
   }
 }

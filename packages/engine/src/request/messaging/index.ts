@@ -6,6 +6,7 @@ import type {
   RequestConfig,
   StreamEvent,
 } from '../../types.js';
+import { MESSAGING_PROTOCOLS } from '../../types.js';
 import type { ConnectAdapter, MessagingAdapter } from './adapter.js';
 import { headerRecord } from './payload.js';
 
@@ -18,8 +19,6 @@ const ADAPTERS: Partial<Record<MessagingProtocol, () => Promise<ConnectAdapter>>
   amqp: async () => (await import('./amqp.js')).connectAmqp,
   kafka: async () => (await import('./kafka.js')).connectKafka,
 };
-
-export const MESSAGING_PROTOCOLS: readonly MessagingProtocol[] = ['mqtt', 'kafka', 'socketio', 'amqp', 'nats'];
 
 export function isMessagingProtocol(protocol: string): protocol is MessagingProtocol {
   return (MESSAGING_PROTOCOLS as readonly string[]).includes(protocol);

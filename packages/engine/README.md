@@ -205,6 +205,13 @@ The schema is versioned: opening a database migrates it forward, and a database
 written by a newer version of the engine is refused with `DatabaseTooNewError`
 rather than modified.
 
+Collections belong to a sidebar category (`COLLECTION_CATEGORIES`): `api` for
+requests, `websocket` and `mcp` for those connections, and `messaging` for broker
+connections (`createMessagingConnection`, `updateMessagingConnection`,
+`getMessagingTree` and the rest, like the WebSocket ones). A messaging
+connection keeps its protocol, URL, headers, auth, the protocol's `settings`
+(its `protocolConfig`) and the `subscriptions` to make again on each connect.
+
 Request history is stored per workspace:
 
 ```ts
