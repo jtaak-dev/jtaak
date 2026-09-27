@@ -118,7 +118,8 @@ export function addHistoryEntry(
   return toSummary(db.prepare(`SELECT ${SUMMARY_COLUMNS} FROM request_history WHERE id = ?`).get(id) as HistoryRow);
 }
 
-/** A workspace's history, newest first, a page at a time. */
+/** A workspace's history, newest first (entries from the same millisecond in
+ * the order they were added, latest first), a page at a time. */
 export function listHistory(
   db: Database.Database,
   workspaceId: string,
@@ -128,8 +129,11 @@ export function listHistory(
   const conditions = ['workspace_id = ?'];
   const params: (string | number)[] = [workspaceId];
   if (query.before) {
-    // The same millisecond can hold several entries; the id breaks the tie.
-    conditions.push('(executed_at < ? OR (executed_at = ? AND id < ?))');
+    // The same millisecond can hold several entries; insertion order (rowid)
+    // breaks the tie, as in ORDER BY below.
+    conditions.push(
+      '(executed_at < ? OR (executed_at = ? AND rowid < (SELECT rowid FROM request_history WHERE id = ?)))',
+    );
     params.push(query.before.executedAt, query.before.executedAt, query.before.id);
   }
   const search = query.search?.trim();
@@ -141,7 +145,7 @@ export function listHistory(
   const rows = db
     .prepare(
       `SELECT ${SUMMARY_COLUMNS} FROM request_history WHERE ${conditions.join(' AND ')}
-       ORDER BY executed_at DESC, id DESC LIMIT ?`,
+       ORDER BY executed_at DESC, rowid DESC LIMIT ?`,
     )
     .all(...params, limit) as HistoryRow[];
   return rows.map(toSummary);
@@ -174,7 +178,7 @@ export function pruneHistory(db: Database.Database, workspaceId: string, keep: n
   return db
     .prepare(
       `DELETE FROM request_history WHERE workspace_id = ? AND id NOT IN (
-        SELECT id FROM request_history WHERE workspace_id = ? ORDER BY executed_at DESC, id DESC LIMIT ?
+        SELECT id FROM request_history WHERE workspace_id = ? ORDER BY executed_at DESC, rowid DESC LIMIT ?
       )`,
     )
     .run(workspaceId, workspaceId, Math.max(0, Math.floor(keep))).changes;
