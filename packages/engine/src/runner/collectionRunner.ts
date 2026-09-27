@@ -1,4 +1,5 @@
 import { runRequestWithScripts } from '../scripting/runRequest.js';
+import { applyEnvironmentUpdates, diffEnvironment } from '../variables/environmentUpdates.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { CollectionRunItemResult, CollectionRunReport, RequestConfig, VariableScope } from '../types.js';
 
@@ -26,6 +27,10 @@ export interface RunnableRequest {
  * process model already provides. `onProgress` lets a caller (such as a
  * host application) stream live per-request updates instead, which is what actually
  * keeps a long run feeling responsive.
+ *
+ * What a request's scripts set in the environment reaches the requests after
+ * it (a login request's token, say), and the run's net changes come back as
+ * the report's `environmentUpdates`; saving them is the caller's choice.
  */
 export async function runCollection(
   requests: RunnableRequest[],
@@ -38,10 +43,12 @@ export async function runCollection(
   let passedAssertions = 0;
   let failedAssertions = 0;
   let requestsFailedToSend = 0;
+  let environment = scopes.environment;
 
   for (let i = 0; i < requests.length; i++) {
     const request = requests[i];
-    const result = await runRequestWithScripts(request.config, scopes, profile);
+    const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile);
+    if (result.environmentUpdates) environment = applyEnvironmentUpdates(environment, result.environmentUpdates);
 
     if (result.preRequestError || result.sendError) requestsFailedToSend++;
     for (const assertion of result.testResults) {
@@ -54,6 +61,7 @@ export async function runCollection(
     onProgress?.(item, i, requests.length);
   }
 
+  const environmentUpdates = diffEnvironment(scopes.environment, environment);
   return {
     total: requests.length,
     items,
@@ -61,5 +69,6 @@ export async function runCollection(
     failedAssertions,
     requestsFailedToSend,
     durationMs: performance.now() - start,
+    ...(Object.keys(environmentUpdates).length > 0 && { environmentUpdates }),
   };
 }

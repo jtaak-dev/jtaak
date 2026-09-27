@@ -15,6 +15,14 @@ export interface ScriptContext {
   response?: ExecutedResponse;
   /** Variables the script can read and set. Changes are written back to this object after the script runs. */
   variables: Record<string, string>;
+  /**
+   * The environment's values, which the script reads and sets as
+   * `<namespace>.environment`. Changes are written back to this object after
+   * the script runs, so the caller can keep them; a value set here is also
+   * set in `variables`, so the request sees it at once. Without it,
+   * `<namespace>.environment` is another name for `<namespace>.variables`.
+   */
+  environment?: Record<string, string>;
 }
 
 export interface ScriptConsoleEntry {
@@ -131,6 +139,24 @@ const PRELUDE = String.raw`
   }
 
   const variables = input.variables;
+  // With separate environment values, a write to the environment is also a
+  // write to this run's variables, so the request uses the new value at once.
+  const environmentValues = input.environment;
+  const environment = environmentValues
+    ? new Proxy(environmentValues, {
+        set(target, key, value) {
+          const text = String(value);
+          target[key] = text;
+          variables[key] = text;
+          return true;
+        },
+        deleteProperty(target, key) {
+          delete target[key];
+          delete variables[key];
+          return true;
+        },
+      })
+    : variables;
   const response = input.response
     ? Object.assign({}, input.response, {
         json() {
@@ -151,13 +177,13 @@ const PRELUDE = String.raw`
     expect(actual) {
       return makeExpect(actual, false);
     },
-    environment: variables,
+    environment,
     variables,
     request: input.request,
     response,
   };
 
-  globalThis.__output = () => JSON.stringify({ results, logs, variables });
+  globalThis.__output = () => JSON.stringify({ results, logs, variables, environment: environmentValues });
 })();
 `;
 
@@ -180,6 +206,14 @@ export async function preloadScriptEngine(): Promise<void> {
 }
 
 class ScriptError extends Error {}
+
+/** Makes `target` hold exactly `values`, in place. */
+function writeBack(target: Record<string, string>, values: Record<string, string>): void {
+  for (const key of Object.keys(target)) {
+    if (!(key in values)) delete target[key];
+  }
+  Object.assign(target, values);
+}
 
 /** How long past its deadline a script may run before the hard stop. QuickJS's
  * interrupt normally stops it at the deadline; this only catches a single
@@ -267,6 +301,7 @@ export async function runScript(
           request: context.request,
           response: context.response,
           variables: context.variables,
+          environment: context.environment,
         }),
       );
       ctx.setProp(ctx.global, '__input', input);
@@ -302,14 +337,16 @@ export async function runScript(
     quickJs = undefined;
     throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
   }
-  const output = JSON.parse(run.value) as ScriptRunResult & { variables: Record<string, string> };
+  const output = JSON.parse(run.value) as ScriptRunResult & {
+    variables: Record<string, string>;
+    environment?: Record<string, string>;
+  };
 
   // Write variable changes back, so a pre-request script's `jt.variables.x = …`
-  // reaches this request's variable resolution (see runRequest.ts).
-  for (const key of Object.keys(context.variables)) {
-    if (!(key in output.variables)) delete context.variables[key];
-  }
-  Object.assign(context.variables, output.variables);
+  // reaches this request's variable resolution (see runRequest.ts), and
+  // environment changes reach the caller.
+  writeBack(context.variables, output.variables);
+  if (context.environment && output.environment) writeBack(context.environment, output.environment);
 
   return { results: output.results, logs: output.logs };
 }

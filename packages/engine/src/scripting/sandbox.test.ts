@@ -273,6 +273,25 @@ describe('isolation and limits', () => {
     expect(variables).toEqual({ keep: '1', token: 'abc' });
   });
 
+  it('keeps jt.environment as another name for jt.variables when no environment is given', async () => {
+    const variables: Record<string, string> = {};
+    await runScript('jt.environment.token = "abc";', { request: baseRequest, variables });
+    expect(variables).toEqual({ token: 'abc' });
+  });
+
+  it('writes environment changes back separately, and into the variables too', async () => {
+    const variables: Record<string, string> = { base: '1' };
+    const environment: Record<string, string> = { base: '1', old: 'x' };
+    await runScript(
+      'jt.environment.token = "abc"; jt.environment.count = 2; delete jt.environment.old; jt.variables.local = "y";',
+      { request: baseRequest, variables, environment },
+    );
+    // Values become strings, as the environment holds them.
+    expect(environment).toEqual({ base: '1', token: 'abc', count: '2' });
+    // The request sees the environment's new values at once; local ones stay local.
+    expect(variables).toEqual({ base: '1', token: 'abc', count: '2', local: 'y' });
+  });
+
   it('gives scripts a read-only copy of the request', async () => {
     const request = { ...baseRequest };
     await runScript('jt.request.url = "https://evil.example";', { request, variables: {} });

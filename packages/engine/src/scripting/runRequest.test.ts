@@ -62,6 +62,32 @@ describe('runRequestWithScripts', () => {
     expect(JSON.parse(result.response!.body).path).toBe('/users');
   });
 
+  it('returns what scripts set in the environment, and not what they set in variables', async () => {
+    const scopes: VariableScope = { ...emptyScopes(), environment: { keep: 'k', stale: 's' } };
+    const result = await runRequestWithScripts(
+      baseConfig({
+        url: `${baseUrl}/{{segment}}`,
+        preRequestScript: 'jt.environment.segment = "orders"; jt.variables.scratch = "x"; delete jt.environment.stale;',
+        // A test script can keep something from the response, e.g. a token.
+        testScript: 'jt.environment.lastPath = jt.response.json().path;',
+      }),
+      scopes,
+    );
+    // The environment write reached this request's URL.
+    expect(JSON.parse(result.response!.body).path).toBe('/orders');
+    expect(result.environmentUpdates).toEqual({ segment: 'orders', lastPath: '/orders', stale: null });
+    // The caller's scopes aren't changed: saving is its choice.
+    expect(scopes.environment).toEqual({ keep: 'k', stale: 's' });
+  });
+
+  it('returns no environment updates when scripts change nothing there', async () => {
+    const result = await runRequestWithScripts(
+      baseConfig({ preRequestScript: 'jt.variables.scratch = "x";', testScript: 'jt.environment.keep = "k";' }),
+      { ...emptyScopes(), environment: { keep: 'k' } },
+    );
+    expect(result.environmentUpdates).toBeUndefined();
+  });
+
   it('resolves against existing environment variables without needing a pre-request script', async () => {
     const scopes: VariableScope = { ...emptyScopes(), environment: { segment: 'orders' } };
     const result = await runRequestWithScripts(baseConfig({ url: `${baseUrl}/{{segment}}` }), scopes);

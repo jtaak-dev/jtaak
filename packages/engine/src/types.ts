@@ -589,12 +589,23 @@ export interface ScriptLogEntry {
 /** Result of running a request through the full pre-request → send → test
  * pipeline (see `runRequestWithScripts`). `response` is absent if the
  * pre-request script threw or the send itself failed. */
+/** Changes to an environment's values: a new value, or null for one removed. */
+export type EnvironmentUpdates = Record<string, string | null>;
+
 export interface RequestRunResult {
   response?: ExecutedResponse;
   testResults: AssertionResult[];
   scriptLogs: ScriptLogEntry[];
   preRequestError?: string;
   sendError?: string;
+  /**
+   * What the request's scripts changed in the environment
+   * (`<namespace>.environment`), when they changed anything. The engine
+   * doesn't save them; a host can apply them to the environment
+   * (applyEnvironmentUpdates). `<namespace>.variables` changes are never
+   * here: they last only for the request.
+   */
+  environmentUpdates?: EnvironmentUpdates;
 }
 
 export interface CollectionRunItemResult {
@@ -610,6 +621,9 @@ export interface CollectionRunReport {
   failedAssertions: number;
   requestsFailedToSend: number;
   durationMs: number;
+  /** The run's net changes to the environment, when there are any: each
+   * request's scripts see the changes made before them. */
+  environmentUpdates?: EnvironmentUpdates;
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */
