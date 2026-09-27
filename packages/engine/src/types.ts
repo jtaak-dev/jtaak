@@ -75,7 +75,10 @@ export interface RequestConfig {
     | GrpcProtocolConfig
     | McpProtocolConfig
     | MqttProtocolConfig
-    | SocketIoProtocolConfig;
+    | SocketIoProtocolConfig
+    | NatsProtocolConfig
+    | AmqpProtocolConfig
+    | KafkaProtocolConfig;
 }
 
 /** `protocolConfig` shape for `protocol: 'graphql'` — POSTed as
@@ -306,6 +309,39 @@ export interface SocketIoProtocolConfig {
   /** More fields for the handshake's auth payload (what the server reads as `socket.handshake.auth`). */
   auth?: Record<string, unknown>;
   /** Seconds to wait for the connection; defaults to 20. */
+  connectTimeout?: number;
+}
+
+/** `protocolConfig` for `protocol: 'nats'`. `url` is `nats://` or
+ * `tls://` (several servers comma-separated); a username and password
+ * (basic) or a token (bearer) come from `auth`. */
+export interface NatsProtocolConfig {
+  /** The client name the server shows for this connection. */
+  name?: string;
+  /** Seconds to wait for the connection; defaults to 20. */
+  connectTimeout?: number;
+}
+
+/** `protocolConfig` for `protocol: 'amqp'` (AMQP 0-9-1, as RabbitMQ
+ * speaks). `url` is `amqp://` or `amqps://`, with the vhost as its path; a
+ * username and password come from `auth` (basic) or the URL. */
+export interface AmqpProtocolConfig {
+  /** Seconds between heartbeats; defaults to 60. */
+  heartbeat?: number;
+  /** Seconds to wait for the connection; defaults to 20. */
+  connectTimeout?: number;
+}
+
+/** `protocolConfig` for `protocol: 'kafka'`. `url` is `kafka://` (plain) or
+ * `kafkas://` (TLS) with one or more bootstrap brokers,
+ * `kafka://host:9092,host2:9092`. A username and password (basic) sign in
+ * with SASL. */
+export interface KafkaProtocolConfig {
+  /** Generated when absent. */
+  clientId?: string;
+  /** The SASL mechanism for a username and password; defaults to PLAIN. */
+  saslMechanism?: 'PLAIN' | 'SCRAM-SHA-256' | 'SCRAM-SHA-512';
+  /** Seconds to wait for a connection; defaults to 20. */
   connectTimeout?: number;
 }
 

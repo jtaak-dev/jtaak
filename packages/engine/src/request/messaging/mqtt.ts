@@ -2,7 +2,7 @@ import type { IClientOptions, IClientPublishOptions, IPublishPacket, MqttClient 
 import { buildRequestHeaders } from '../executor.js';
 import { verifiesTls } from '../tls.js';
 import type { MqttProtocolConfig, RequestConfig } from '../../types.js';
-import { optionOneOf, type AdapterEvents, type MessagingAdapter } from './adapter.js';
+import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload, headerRecord } from './payload.js';
 
 const QOS_LEVELS = [0, 1, 2] as const;
@@ -82,6 +82,7 @@ export async function connectMqtt(config: RequestConfig, events: AdapterEvents):
       await client.unsubscribeAsync(channel);
     },
     async publish(message) {
+      refuseUnsupported('MQTT', message, ['key']);
       const qos = optionOneOf(message.options, 'qos', QOS_LEVELS, 0);
       const retain = optionOneOf(message.options, 'retain', [true, false], false);
       const userProperties = headerRecord(message.headers);

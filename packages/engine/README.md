@@ -2,10 +2,11 @@
 
 A local-first API request engine for Node.js. It sends and times HTTP, GraphQL,
 Server-Sent Events, unary gRPC, WebSocket and MCP (Model Context Protocol)
-requests; connects to MQTT brokers; runs pre-request and test scripts in a
-sandbox; resolves `{{variables}}`; imports Postman, OpenAPI and cURL; and stores
-workspaces, collections and environments in SQLite. It has no UI, no account and
-no telemetry: it only ever talks to the APIs you send requests to.
+requests; connects to MQTT, Kafka, Socket.IO, AMQP and NATS; runs pre-request
+and test scripts in a sandbox; resolves `{{variables}}`; imports Postman,
+OpenAPI and cURL; and stores workspaces, collections and environments in SQLite.
+It has no UI, no account and no telemetry: it only ever talks to the APIs you
+send requests to.
 
 It's the engine behind the [`jtaak` CLI](https://www.npmjs.com/package/jtaak), and
 is built to be embedded in other tools.
@@ -14,7 +15,7 @@ is built to be embedded in other tools.
 npm install @jtaak/engine
 ```
 
-Requires Node.js 22.12 or later. The package is ESM only. SQLite comes from
+Requires Node.js 22.22 or later. The package is ESM only. SQLite comes from
 `better-sqlite3`, which ships prebuilt binaries, so installing needs no compiler.
 
 ## Send a request
@@ -60,8 +61,8 @@ in the error's `cause`, for example
 
 ## Messaging
 
-`openStream` also connects to message brokers: `protocol: 'mqtt'` today, with
-Kafka, Socket.IO, AMQP and NATS to follow behind the same handle. Subscribe to
+`openStream` also connects to message brokers and event servers: MQTT, Kafka,
+Socket.IO, AMQP (RabbitMQ) and NATS, all behind the same handle. Subscribe to
 channels, publish to them, and every message sent and received arrives as a
 `message` event:
 
@@ -89,13 +90,30 @@ await mqtt.publish({ channel: 'sensors/kitchen/temp', payload: '21.5', options: 
 mqtt.close();
 ```
 
-Calls made before the broker accepts the connection wait for it. A message's
-`payload` is text, or base64 with `isBinary: true` (publish binary data with
-`encoding: 'base64'`), and its `meta` has the protocol's details (for MQTT, `qos`,
-`retain`, `dup`). MQTT supports 3.1.1 (the default) and 5 (`protocolVersion: 5`,
-with `headers` as user properties), over `mqtt://`, `mqtts://`, `ws://` and
-`wss://`. It doesn't reconnect by itself: a lost connection ends with `close`.
-Each protocol's client library loads only when one of its connections opens.
+| Protocol | `url` | A channel is | Subscribe options | Publish options |
+|---|---|---|---|---|
+| `mqtt` (3.1.1, 5) | `mqtt://`, `mqtts://`, `ws://`, `wss://` | a topic (filter) | `qos` | `qos`, `retain`; `headers` as MQTT 5 user properties |
+| `kafka` | `kafka://host:9092[,…]`, `kafkas://` (TLS) | a topic | `groupId`, `fromBeginning` | `key`, `headers`, `partition` |
+| `socketio` (v4) | `http(s)://host/namespace` | an event name (`*` for all) | | `ack`, `timeout`, `spread` |
+| `amqp` (0-9-1) | `amqp://`, `amqps://`, vhost as the path | a queue (`''` for a private one) | `declare`, `durable`, `exchange`, `routingKey` | `exchange`, `persistent`, message properties; `headers` |
+| `nats` | `nats://`, `tls://` | a subject | `queue` | `request`, `timeout`; `headers` |
+
+- Calls made before the connection is accepted wait for it, and fail with the
+  reason if it isn't.
+- A message's `payload` is text, or base64 with `isBinary: true` (publish binary
+  data with `encoding: 'base64'`). Its `meta` has the protocol's details: QoS,
+  partition and offset, exchange and delivery tag, reply subject.
+- Fields a protocol has no place for (a key outside Kafka, headers on Socket.IO)
+  are refused rather than dropped.
+- Credentials come from `auth`: basic for a username and password (SASL for
+  Kafka), bearer for a token (NATS, Socket.IO). `verifyTls` applies to every
+  protocol's TLS.
+- AMQP publishes are confirmed by the broker and mandatory, so a message no queue
+  receives fails with the broker's reason. Kafka creates a topic on first use if
+  the broker allows it. NATS and Socket.IO requests wait for a reply or an
+  acknowledgement.
+- No connection reconnects by itself: a lost connection ends with `close`.
+- Each protocol's client library loads only when one of its connections opens.
 
 ## Variables
 

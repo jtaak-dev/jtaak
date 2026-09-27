@@ -5,6 +5,8 @@
  * `error.cause`, so its own `message` alone tells a user nothing. This
  * follows the chain and adds each cause's message and code:
  * `fetch failed: self-signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT)`.
+ * An error without a cause that gathers others (an `AggregateError`, such
+ * as "failed 3 times") is followed into the last of them, the latest attempt.
  */
 export function describeError(error: unknown): string {
   const parts: string[] = [];
@@ -15,9 +17,14 @@ export function describeError(error: unknown): string {
     const text = describeOne(current);
     // Some wrappers repeat their cause's message; don't print it twice.
     if (text && !parts.some((part) => part.includes(text))) parts.push(text);
-    current = typeof current === 'object' ? (current as { cause?: unknown }).cause : undefined;
+    current = typeof current === 'object' ? next(current as { cause?: unknown; errors?: unknown }) : undefined;
   }
   return parts.join(': ') || String(error);
+}
+
+function next(value: { cause?: unknown; errors?: unknown }): unknown {
+  if (value.cause !== undefined) return value.cause;
+  return Array.isArray(value.errors) ? value.errors.at(-1) : undefined;
 }
 
 function describeOne(value: unknown): string {

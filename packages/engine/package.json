@@ -42,13 +42,13 @@
     "NOTICE"
   ],
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.22.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --project unit && vitest run --project containers",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
@@ -58,6 +58,9 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.5",
     "@jitl/quickjs-singlefile-cjs-release-sync": "^0.32.0",
+    "@nats-io/transport-node": "^3.4.0",
+    "@platformatic/kafka": "^2.12.1",
+    "amqplib": "^2.0.1",
     "better-sqlite3": "^13.0.3",
     "mqtt": "^5.16.0",
     "protobufjs": "^8.8.0",
@@ -76,6 +79,7 @@
     "node-forge": "^1.4.0",
     "publint": "^0.3.24",
     "socket.io": "^4.8.4",
+    "testcontainers": "^12.1.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.2"
   }
