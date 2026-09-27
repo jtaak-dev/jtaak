@@ -559,6 +559,8 @@ export interface HistoryEntrySummary {
 
 export interface HistoryEntry extends HistoryEntrySummary {
   config: RequestConfig;
+  /** Null when it couldn't be sent (`error` says why), or when the response
+   * wasn't kept (addHistoryEntry's `storeResponse: false`; `status` is set). */
   response: ExecutedResponse | null;
   /** The stored body was cut to the size limit (the response's sizeBytes is
    * the full size). */
