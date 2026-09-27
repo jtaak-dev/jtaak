@@ -2,7 +2,7 @@ import type { ManagerOptions, Socket, SocketOptions } from 'socket.io-client';
 import { buildRequestHeaders } from '../executor.js';
 import { verifiesTls } from '../tls.js';
 import type { MessagingPublish, RequestConfig, SocketIoProtocolConfig } from '../../types.js';
-import { optionOneOf, type AdapterEvents, type MessagingAdapter } from './adapter.js';
+import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload } from './payload.js';
 
 /** Subscribing to this channel receives every event. */
@@ -108,6 +108,7 @@ export async function connectSocketIo(config: RequestConfig, events: AdapterEven
       subscribed.delete(channel);
     },
     async publish(message) {
+      refuseUnsupported('Socket.IO', message, ['key', 'headers']);
       const args = emitArguments(message);
       if (!optionOneOf(message.options, 'ack', [true, false], false)) {
         socket.emit(message.channel, ...args);

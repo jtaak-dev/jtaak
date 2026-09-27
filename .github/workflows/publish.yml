@@ -31,7 +31,11 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      # The messaging tests run Kafka, RabbitMQ, NATS and Mosquitto in containers
+      # (Docker is on ubuntu-latest); this makes a missing runtime fail, not skip them.
       - run: pnpm test
+        env:
+          JTAAK_REQUIRE_CONTAINERS: '1'
       - run: pnpm build
       - run: pnpm check:pack
       - run: pnpm check:install

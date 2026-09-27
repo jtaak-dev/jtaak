@@ -193,14 +193,3 @@ describe('MQTT', () => {
     });
   });
 });
-
-describe('messaging protocols not built yet', () => {
-  it('report that clearly and close', async () => {
-    const events: StreamEvent[] = [];
-    const handle = openStream(config({ protocol: 'kafka', url: 'kafka://localhost:9092' }), (e) => events.push(e));
-    await expect((handle as MessagingStreamHandle).subscribe({ channel: 'x' })).rejects.toThrow(
-      "kafka connections aren't supported yet.",
-    );
-    await expect.poll(() => events.map((e) => e.type)).toEqual(['error', 'close']);
-  });
-});

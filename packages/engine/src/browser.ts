@@ -32,6 +32,9 @@ export type {
   MessagingMessage,
   MqttProtocolConfig,
   SocketIoProtocolConfig,
+  NatsProtocolConfig,
+  AmqpProtocolConfig,
+  KafkaProtocolConfig,
 } from './types.js';
 export { emptyScopes } from './types.js';
 

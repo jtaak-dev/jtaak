@@ -14,6 +14,9 @@ import { headerRecord } from './payload.js';
 const ADAPTERS: Partial<Record<MessagingProtocol, () => Promise<ConnectAdapter>>> = {
   mqtt: async () => (await import('./mqtt.js')).connectMqtt,
   socketio: async () => (await import('./socketio.js')).connectSocketIo,
+  nats: async () => (await import('./nats.js')).connectNats,
+  amqp: async () => (await import('./amqp.js')).connectAmqp,
+  kafka: async () => (await import('./kafka.js')).connectKafka,
 };
 
 export const MESSAGING_PROTOCOLS: readonly MessagingProtocol[] = ['mqtt', 'kafka', 'socketio', 'amqp', 'nats'];

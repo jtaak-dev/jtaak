@@ -15,7 +15,7 @@ Or without installing:
 npx jtaak GET https://api.example.com/users
 ```
 
-Requires Node.js 22.12 or later.
+Requires Node.js 22.22 or later.
 
 ## Usage
 

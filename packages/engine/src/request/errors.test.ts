@@ -20,6 +20,16 @@ describe('describeError', () => {
     expect(describeError(error)).toBe('outer: middle: connect ECONNREFUSED');
   });
 
+  it('follows an AggregateError into its last error, the latest attempt', () => {
+    const attempts = [
+      withCode('connect ECONNREFUSED 127.0.0.1:1', 'ECONNREFUSED'),
+      withCode('connect ETIMEDOUT', 'ETIMEDOUT'),
+    ];
+    expect(describeError(new AggregateError(attempts, 'metadata failed 2 times.'))).toBe(
+      'metadata failed 2 times.: connect ETIMEDOUT',
+    );
+  });
+
   it("doesn't repeat a code or message that's already there", () => {
     expect(describeError(withCode('getaddrinfo ENOTFOUND example.invalid', 'ENOTFOUND'))).toBe(
       'getaddrinfo ENOTFOUND example.invalid',

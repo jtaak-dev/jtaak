@@ -41,3 +41,15 @@ export function optionOneOf<T>(
     throw new Error(`${name} must be one of ${allowed.join(', ')}; got ${String(value)}.`);
   return value as T;
 }
+
+/** Refuses message fields the protocol has no place for, rather than dropping them unseen. */
+export function refuseUnsupported(
+  protocolName: string,
+  message: MessagingPublish,
+  unsupported: readonly ('key' | 'headers')[],
+): void {
+  if (unsupported.includes('key') && message.key) throw new Error(`${protocolName} messages have no key.`);
+  if (unsupported.includes('headers') && (message.headers ?? []).some((h) => h.enabled && h.key.trim())) {
+    throw new Error(`${protocolName} messages have no headers.`);
+  }
+}
