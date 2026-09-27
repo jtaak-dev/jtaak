@@ -12,6 +12,7 @@ export type {
   AuthConfig,
   RequestConfig,
   ExecutedResponse,
+  RequestTimingPhases,
   VariableScope,
   CodegenLanguage,
   GrpcProtocolConfig,

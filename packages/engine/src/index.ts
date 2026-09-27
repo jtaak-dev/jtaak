@@ -10,6 +10,7 @@ export type {
   AuthConfig,
   RequestConfig,
   ExecutedResponse,
+  RequestTimingPhases,
   Protocol,
   StreamingProtocol,
   StreamEvent,

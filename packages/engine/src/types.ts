@@ -98,15 +98,38 @@ export interface GraphQlSchemaSummary {
   fetchedAt: number;
 }
 
+/**
+ * Where a request's time went, in milliseconds (request/timing.ts). The
+ * phases don't add up to the total: the rest is building the request, queuing
+ * for a connection, sending it, and any redirects.
+ */
+export interface RequestTimingPhases {
+  /** Resolving the host name; 0 for an IP address or a reused connection. */
+  dnsMs: number;
+  /** Opening the TCP connection; 0 for a reused connection. */
+  connectMs: number;
+  /** The TLS handshake; 0 for plain HTTP or a reused connection. */
+  tlsMs: number;
+  /** From the request being sent to the response's first byte (its headers). */
+  waitMs: number;
+  /** Reading the response body. */
+  downloadMs: number;
+  /** Whether the request went over an already-open connection. */
+  reusedConnection: boolean;
+}
+
 export interface ExecutedResponse {
   status: number;
   statusText: string;
   headers: Record<string, string>;
   body: string;
   timings: {
+    /** performance.now() readings: a monotonic clock, not times of day. */
     start: number;
     end: number;
     durationMs: number;
+    /** Absent where the runtime gave no timing events. */
+    phases?: RequestTimingPhases;
   };
   sizeBytes: number;
 }
