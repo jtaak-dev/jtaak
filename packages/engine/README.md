@@ -37,6 +37,13 @@ console.log(response.status, response.statusText, `${response.timings.durationMs
 console.log(response.body);
 ```
 
+`response.timings.phases` breaks the time down: `dnsMs`, `connectMs`, `tlsMs`,
+`waitMs` (from the request being sent to the first byte of the response),
+`downloadMs`, and `reusedConnection` (a reused connection has no DNS, connect or
+TLS time). The phases come from the diagnostics-channel events Node's `fetch`
+publishes; they don't add up to `durationMs`, which also covers building the
+request and any redirects.
+
 `protocol: 'graphql'` sends GraphQL over HTTP. For long-lived connections
 (`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`, and for unary gRPC
 calls from a pasted `.proto` file, `executeGrpcUnaryCall(config)`.
@@ -106,6 +113,23 @@ const tree = getCollectionTree(db, workspace.id);
 The schema is versioned: opening a database migrates it forward, and a database
 written by a newer version of the engine is refused with `DatabaseTooNewError`
 rather than modified.
+
+Request history is stored per workspace:
+
+```ts
+import { addHistoryEntry, listHistory, getHistoryEntry, pruneHistory } from '@jtaak/engine';
+
+addHistoryEntry(db, { workspaceId: workspace.id, requestId, config, response, testResults });
+const page = listHistory(db, workspace.id, { limit: 50, search: 'users' }); // newest first
+const older = listHistory(db, workspace.id, { before: page.at(-1) }); // the next page
+const entry = getHistoryEntry(db, page[0].id); // with its request and response
+pruneHistory(db, workspace.id, 500); // keep the newest 500
+```
+
+It stores the `config` it's given, so pass the request as written if resolved
+`{{variables}}` could hold secrets. Response bodies over 256 kB are cut
+(`responseTruncated`); `sizeBytes` keeps the full size. `deleteHistoryEntry` and
+`clearHistory` delete entries, and deleting a workspace deletes its history.
 
 ## Import and export
 
