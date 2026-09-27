@@ -102,6 +102,19 @@ describe('history', () => {
     expect(getHistoryEntry(db, summary.id)!.response).toBeNull();
   });
 
+  it('keeps only the status, duration and size when told not to store the response', () => {
+    const { db, workspaceId } = setup();
+    const summary = addHistoryEntry(
+      db,
+      { workspaceId, config: config(), response: response() },
+      { storeResponse: false },
+    );
+    expect(summary).toMatchObject({ status: 200, durationMs: 42, sizeBytes: 11, error: null });
+    const entry = getHistoryEntry(db, summary.id)!;
+    expect(entry.response).toBeNull();
+    expect(entry.config.name).toBe('List users');
+  });
+
   it('cuts long bodies without splitting a character, keeping the full size', () => {
     const { db, workspaceId } = setup();
     // "é" is two bytes in UTF-8, so a 5-byte limit falls in the middle of the third.

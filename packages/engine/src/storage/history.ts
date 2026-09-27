@@ -70,18 +70,21 @@ function truncateBody(body: string, maxBytes: number): { body: string; truncated
 /**
  * Records a sent request, and its response or why it couldn't be sent. Bodies
  * longer than `maxBodyBytes` are cut (the entry says so, and keeps the full
- * size). What goes in `config` is the caller's decision (see HistoryEntryInput).
+ * size). With `storeResponse: false` the response itself isn't kept, only its
+ * status, duration and size (getHistoryEntry then returns `response: null`
+ * with a status). What goes in `config` is the caller's decision (see
+ * HistoryEntryInput).
  */
 export function addHistoryEntry(
   db: Database.Database,
   input: HistoryEntryInput,
-  options: { maxBodyBytes?: number } = {},
+  options: { maxBodyBytes?: number; storeResponse?: boolean } = {},
 ): HistoryEntrySummary {
   const id = randomUUID();
   const executedAt = input.executedAt ?? Date.now();
   const config = input.config;
   const testResults = input.testResults ?? [];
-  let response: ExecutedResponse | undefined = input.response;
+  let response: ExecutedResponse | undefined = options.storeResponse === false ? undefined : input.response;
   let truncated = false;
   if (response) {
     const cut = truncateBody(response.body, options.maxBodyBytes ?? DEFAULT_HISTORY_BODY_LIMIT);
