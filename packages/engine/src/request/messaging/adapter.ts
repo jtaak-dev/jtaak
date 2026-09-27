@@ -10,8 +10,8 @@ import type {
 export interface AdapterEvents {
   message(message: Omit<MessagingMessage, 'direction'>): void;
   error(error: unknown): void;
-  /** The connection ended, whether the broker closed it or it was lost. */
-  close(): void;
+  /** The connection ended, whether the broker closed it or it was lost; `reason` says which when known. */
+  close(reason?: string): void;
 }
 
 /** One protocol's connection, once open. messaging/index.ts wraps it in the

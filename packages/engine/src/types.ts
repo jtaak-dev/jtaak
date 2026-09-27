@@ -74,7 +74,8 @@ export interface RequestConfig {
     | WebSocketProtocolConfig
     | GrpcProtocolConfig
     | McpProtocolConfig
-    | MqttProtocolConfig;
+    | MqttProtocolConfig
+    | SocketIoProtocolConfig;
 }
 
 /** `protocolConfig` shape for `protocol: 'graphql'` — POSTed as
@@ -290,6 +291,21 @@ export interface MqttProtocolConfig {
   /** Seconds; defaults to 60. */
   keepalive?: number;
   /** Seconds to wait for the broker to accept the connection; defaults to 30. */
+  connectTimeout?: number;
+}
+
+/** `protocolConfig` for `protocol: 'socketio'` (Socket.IO v4 servers).
+ * `url` is `http(s)://host[:port]/namespace`. A bearer token from `auth` is
+ * sent in the handshake's auth payload as `token`; headers go with the
+ * handshake (not sent by browsers, but a Node client can). */
+export interface SocketIoProtocolConfig {
+  /** The server's Socket.IO path; defaults to `/socket.io`. */
+  path?: string;
+  /** Defaults to WebSocket, falling back to long-polling. */
+  transports?: ('websocket' | 'polling')[];
+  /** More fields for the handshake's auth payload (what the server reads as `socket.handshake.auth`). */
+  auth?: Record<string, unknown>;
+  /** Seconds to wait for the connection; defaults to 20. */
   connectTimeout?: number;
 }
 

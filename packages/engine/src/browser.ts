@@ -31,6 +31,7 @@ export type {
   MessagingPublish,
   MessagingMessage,
   MqttProtocolConfig,
+  SocketIoProtocolConfig,
 } from './types.js';
 export { emptyScopes } from './types.js';
 

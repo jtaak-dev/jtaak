@@ -33,6 +33,7 @@ export type {
   MessagingMessage,
   MessagingStreamHandle,
   MqttProtocolConfig,
+  SocketIoProtocolConfig,
   McpTransportKind,
   McpProtocolConfig,
   McpServerInfo,
