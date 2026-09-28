@@ -9,7 +9,8 @@ import type { AddressInfo } from 'node:net';
 import * as grpc from '@grpc/grpc-js';
 import { Aedes } from 'aedes';
 import { Root, parse, type Type } from 'protobufjs';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, createWebSocketStream } from 'ws';
+import { Server as SocketIoServer } from 'socket.io';
 import { executeRequest } from './executor';
 import { executeGrpcUnaryCall } from './grpc';
 import { hostMatches, proxyFor, proxyFromEnvironment, tlsOptionsFor } from './network';
@@ -439,5 +440,47 @@ describe('MQTT over TLS', () => {
     handle.close();
     server.close();
     await new Promise<void>((resolve) => broker.close(() => resolve()));
+  });
+});
+
+describe('messaging over WebSocket through the proxy', () => {
+  it('connects MQTT over ws:// through the proxy', async () => {
+    const broker = await Aedes.createBroker();
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+    wss.on('connection', (socket) => broker.handle(createWebSocketStream(socket) as never));
+    await new Promise((resolve) => wss.once('listening', resolve));
+    const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`;
+    const before = proxy.seen.length;
+    const events: StreamEvent[] = [];
+    const handle = openStream(request(url, { proxy: { url: proxy.url } }, { protocol: 'mqtt' }), (event) =>
+      events.push(event),
+    ) as MessagingStreamHandle;
+    await nextEvent(events, 'open');
+    expect(proxy.seen.slice(before)).toEqual([expect.objectContaining({ method: 'CONNECT', target: url.slice(5) })]);
+    handle.close();
+    wss.close();
+    await new Promise<void>((resolve) => broker.close(() => resolve()));
+  });
+
+  it.each([['websocket'], ['polling']])('connects Socket.IO over %s through the proxy', async (transport) => {
+    const server = http.createServer();
+    const io = new SocketIoServer(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const before = proxy.seen.length;
+    const events: StreamEvent[] = [];
+    const handle = openStream(
+      request(
+        url,
+        { proxy: { url: proxy.url } },
+        { protocol: 'socketio', protocolConfig: { transports: [transport] } },
+      ),
+      (event) => events.push(event),
+    ) as MessagingStreamHandle;
+    await nextEvent(events, 'open');
+    expect(proxy.seen.slice(before).map((s) => s.method)).toContain('CONNECT');
+    handle.close();
+    io.close();
+    server.closeAllConnections();
   });
 });

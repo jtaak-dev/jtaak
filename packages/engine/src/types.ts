@@ -144,7 +144,8 @@ export interface ClientCertificate {
 
 /**
  * How connections reach servers. HTTP, GraphQL, SSE, WebSocket, gRPC, MCP
- * over HTTP and OAuth 2.0 token requests go through the proxy; every TLS
+ * over HTTP, OAuth 2.0 token requests, MQTT over WebSocket and Socket.IO go
+ * through the proxy (brokers over plain TCP connect directly); every TLS
  * connection (messaging brokers too) uses the certificates.
  */
 export interface NetworkSettings {

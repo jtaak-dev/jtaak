@@ -123,8 +123,9 @@ await executeRequest({ ...config, network });
 - **Proxy:** HTTP, GraphQL, SSE, MCP over HTTP and OAuth 2.0 token requests
   (through undici's `ProxyAgent`: plain HTTP is sent to the proxy as it is,
   HTTPS through a CONNECT tunnel), WebSocket and gRPC (CONNECT tunnels) go
-  through it, except to the `noProxy` hosts. Messaging brokers are reached
-  directly. `proxyFromEnvironment()` reads `HTTPS_PROXY`, `HTTP_PROXY` and
+  through it, except to the `noProxy` hosts, and so do MQTT over `ws://` or
+  `wss://` and Socket.IO (both its transports). Brokers over plain TCP
+  (Kafka, AMQP, NATS, MQTT over TCP) are reached directly. `proxyFromEnvironment()` reads `HTTPS_PROXY`, `HTTP_PROXY` and
   `NO_PROXY`.
 - **Client certificates (mutual TLS):** a PEM certificate and key, or a PFX,
   per host pattern (`api.example.com` and its subdomains, `*.example.com`,

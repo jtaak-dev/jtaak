@@ -1,6 +1,6 @@
 import type { IClientOptions, IClientPublishOptions, IPublishPacket, MqttClient } from 'mqtt';
 import { buildRequestHeaders } from '../executor.js';
-import { tlsOptionsForUrl } from '../network.js';
+import { proxyAgentFor, tlsOptionsForUrl } from '../network.js';
 import type { MqttProtocolConfig, RequestConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload, headerRecord } from './payload.js';
@@ -40,6 +40,7 @@ export async function connectMqtt(config: RequestConfig, events: AdapterEvents):
 
   const basic = config.auth.type === 'basic' ? config.auth.basic : undefined;
   const headers = buildRequestHeaders({ ...config, auth: { type: 'none' } });
+  const agent = /^wss?:\/\//i.test(config.url) ? proxyAgentFor(config, config.url) : undefined;
   const options: IClientOptions = {
     protocolVersion,
     clean: settings.clean ?? true,
@@ -50,8 +51,11 @@ export async function connectMqtt(config: RequestConfig, events: AdapterEvents):
     ...tlsOptionsForUrl(config, config.url),
     ...(settings.clientId && { clientId: settings.clientId }),
     ...(basic && { username: basic.username, password: basic.password }),
-    // Only used for ws:// and wss://: the headers of the WebSocket handshake.
-    ...(Object.keys(headers).length > 0 && { wsOptions: { headers } }),
+    // Only used for ws:// and wss://: the WebSocket handshake's headers, and the proxy it goes through
+    // (MQTT over TCP connects directly).
+    ...((Object.keys(headers).length > 0 || agent) && {
+      wsOptions: { ...(Object.keys(headers).length > 0 && { headers }), ...(agent && { agent }) },
+    }),
   };
 
   const client = await connectAsync(config.url, options);

@@ -1,6 +1,6 @@
 import type { ManagerOptions, Socket, SocketOptions } from 'socket.io-client';
 import { buildRequestHeaders } from '../executor.js';
-import { tlsOptionsForUrl } from '../network.js';
+import { proxyAgentFor, tlsOptionsForUrl } from '../network.js';
 import type { MessagingPublish, RequestConfig, SocketIoProtocolConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload } from './payload.js';
@@ -65,6 +65,7 @@ export async function connectSocketIo(config: RequestConfig, events: AdapterEven
     ...config,
     auth: config.auth.type === 'bearer' ? { type: 'none' } : config.auth,
   });
+  const agent = proxyAgentFor(config, config.url);
   const options: Partial<ManagerOptions & SocketOptions> = {
     path: settings.path ?? '/socket.io',
     transports: settings.transports ?? ['websocket', 'polling'],
@@ -73,6 +74,8 @@ export async function connectSocketIo(config: RequestConfig, events: AdapterEven
     forceNew: true,
     // Passed to tls.connect, which takes a Buffer for pfx (the types say string).
     ...(tlsOptionsForUrl(config, config.url) as { pfx?: string }),
+    // Both transports (WebSocket and long-polling) connect through the proxy, as a WebSocket does.
+    ...(agent && { agent: agent as unknown as string }),
     auth: { ...settings.auth, ...(token && { token }) },
     ...(Object.keys(headers).length > 0 && { extraHeaders: headers }),
   };
