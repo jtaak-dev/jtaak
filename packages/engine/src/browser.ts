@@ -23,6 +23,8 @@ export type {
   VariableScope,
   CodegenLanguage,
   GrpcProtocolConfig,
+  GrpcStreamMessage,
+  GrpcStreamStatus,
   GrpcFieldSummary,
   GrpcMessageSummary,
   GrpcMethodSummary,
@@ -55,4 +57,4 @@ export { parseCurlCommand } from './import/curl.js';
 // is pure JS — parsing a pasted .proto file can happen locally in
 // browser-side code with no round-trip to a separate process. See grpcProto.ts's own comment for why
 // this is split out of grpc.ts.
-export { parseGrpcProto, clearGrpcProtoCache } from './request/grpcProto.js';
+export { parseGrpcProto, clearGrpcProtoCache, summarizeGrpcSchema } from './request/grpcProto.js';

@@ -29,6 +29,9 @@ export type {
   GrpcServiceSummary,
   GrpcProtoSummary,
   GrpcUnaryResult,
+  GrpcStreamHandle,
+  GrpcStreamMessage,
+  GrpcStreamStatus,
   MessagingProtocol,
   MessagingConnection,
   MessagingSubscription,
@@ -106,8 +109,9 @@ export type { McpStreamHandle } from './request/mcp.js';
 export type { FetchGraphQlSchemaOptions } from './graphql/introspection.js';
 export { fetchGraphQlSchema, clearGraphQlSchemaCache } from './graphql/introspection.js';
 
-export { parseGrpcProto, clearGrpcProtoCache } from './request/grpcProto.js';
+export { parseGrpcProto, clearGrpcProtoCache, summarizeGrpcSchema } from './request/grpcProto.js';
 export { executeGrpcUnaryCall } from './request/grpc.js';
+export { reflectGrpcServer, type GrpcReflectionResult } from './request/grpcReflection.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
