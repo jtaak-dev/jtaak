@@ -787,6 +787,19 @@ export interface McpServerConnection {
  * this precedence must be documented for users, since ambiguity here is
  * one of the most common sources of confusion in existing API clients.
  */
+/**
+ * One pass of a run that repeats its requests, for example once per row of
+ * a data file: which pass it is, of how many, and the row's values. Scripts
+ * read it as `<namespace>.iteration` (and Postman's `pm.iterationData`,
+ * `pm.info.iteration`); the values also resolve as `{{variables}}`.
+ */
+export interface ScriptIteration {
+  /** From 0. */
+  index: number;
+  count: number;
+  data: Record<string, string>;
+}
+
 export interface VariableScope {
   local: Record<string, string>;
   environment: Record<string, string>;
