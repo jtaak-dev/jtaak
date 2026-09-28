@@ -13,18 +13,23 @@ const SAMPLE_PATH = fileURLToPath(new URL('../../samples/jtaak-sample-workspace.
 describe('samples/jtaak-sample-workspace.jt', () => {
   const text = fs.readFileSync(SAMPLE_PATH, 'utf8');
 
-  it('is a valid workspace export covering every category and request protocol', () => {
+  it('is a valid workspace export covering every category, request protocol and messaging protocol', () => {
     const doc = validateNativeExport(JSON.parse(text));
     expect(doc.scope).toBe('workspace');
-    expect(new Set(doc.collections.map((c) => c.category))).toEqual(new Set(['api', 'websocket', 'mcp']));
+    expect(new Set(doc.collections.map((c) => c.category))).toEqual(new Set(['api', 'websocket', 'mcp', 'messaging']));
 
     const protocols = new Set<string>();
+    const messaging = new Set<string>();
     const walk = (f: (typeof doc.collections)[number]['folders'][number]) => {
-      for (const item of f.items) if (item.type === 'request') protocols.add(item.config.protocol ?? 'http');
+      for (const item of f.items) {
+        if (item.type === 'request') protocols.add(item.config.protocol ?? 'http');
+        if (item.type === 'messaging') messaging.add(item.protocol);
+      }
       f.folders.forEach(walk);
     };
     doc.collections.forEach(walk);
     expect(protocols).toEqual(new Set(['http', 'graphql', 'sse', 'grpc']));
+    expect(messaging).toEqual(new Set(['mqtt', 'kafka', 'socketio', 'amqp', 'nats']));
 
     const preview = previewNativeImport(doc);
     expect(preview.environments.length).toBeGreaterThan(0);
