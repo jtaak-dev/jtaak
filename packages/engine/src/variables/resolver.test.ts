@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveVariables, resolveDeep } from './resolver';
+import { findVariables, resolveVariables, resolveDeep } from './resolver';
 import { emptyScopes, type VariableScope } from '../types';
 
 describe('resolveVariables', () => {
@@ -26,6 +26,18 @@ describe('resolveVariables', () => {
 
   it('leaves unresolved variables untouched so authors notice them', () => {
     expect(resolveVariables('{{missing}}', emptyScopes())).toBe('{{missing}}');
+  });
+});
+
+describe('findVariables', () => {
+  it('finds each variable with where it is and what resolves it, narrowest scope first', () => {
+    const scopes = { ...emptyScopes(), environment: { host: 'api.dev' }, global: { host: 'api.prod', token: 't' } };
+    expect(findVariables('https://{{host}}/x?t={{ token }}&u={{user}}', scopes)).toEqual([
+      { name: 'host', start: 8, end: 16, value: 'api.dev', scope: 'environment' },
+      { name: 'token', start: 21, end: 32, value: 't', scope: 'global' },
+      { name: 'user', start: 35, end: 43 },
+    ]);
+    expect(findVariables('no variables', scopes)).toEqual([]);
   });
 });
 

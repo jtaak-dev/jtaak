@@ -45,7 +45,7 @@ export type {
 } from './types.js';
 export { emptyScopes, MESSAGING_PROTOCOLS } from './types.js';
 
-export { resolveVariables, resolveDeep } from './variables/resolver.js';
+export { resolveVariables, resolveDeep, findVariables, type VariableReference } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
 export {
   soapAsHttp,
