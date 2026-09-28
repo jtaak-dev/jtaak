@@ -38,6 +38,11 @@ describe('samples/jtaak-sample-workspace.jt', () => {
     expect(preview.localFileRequestCount).toBe(2);
     expect(fs.existsSync(fileURLToPath(new URL('../../samples/sample-upload.txt', import.meta.url)))).toBe(true);
     expect(text).toContain('"examples": [');
+    // The AI requests' keys are the user's own: empty in every environment.
+    expect(doc.collections.some((c) => c.name === 'Sample — AI APIs')).toBe(true);
+    for (const environment of doc.environments) {
+      expect([environment.variables.openaiApiKey, environment.variables.anthropicApiKey]).toEqual(['', '']);
+    }
   });
 
   it('imports cleanly and re-exports to the same file', () => {

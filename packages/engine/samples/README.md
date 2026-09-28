@@ -24,6 +24,7 @@ for that reason.
 | API | **Sample — Server-Sent Events** (3) | Named events with ids, and the same with tests on what arrives; a busy live stream (Wikimedia recent edits). |
 | API | **Sample — gRPC** (10) | See the breakdown below. |
 | API | **Sample — SOAP** (3) | See the breakdown below. |
+| API | **Sample — AI APIs** (4) | See the breakdown below. |
 | WebSocket | **Sample — WebSocket** (5) | Echo servers, plus connections with custom headers and a bearer token, and one whose URL is a `{{variable}}`, with tests on what comes back. Connect, send a message, and watch it echo back. |
 | MCP | **Sample — MCP** (3) | See the breakdown below. |
 | Messaging | **Sample — Messaging** (9 connections) | MQTT, Kafka, Socket.IO, AMQP and NATS: five public test broker connections that work straight away (one with tests on what arrives), and four local ones. See below. |
@@ -83,6 +84,21 @@ for that reason.
 - a SOAP 1.1 call and a SOAP 1.2 call, each with its action, to a public
   calculator service
 - a fault (dividing by zero), shown with its code and reason
+
+**Sample — AI APIs** covers:
+
+- streaming an answer from OpenAI's chat completions and from Anthropic's
+  Messages API: an SSE request that POSTs a JSON body, with tests that
+  pass once the stream has ended (`aiStreamText` puts the answer together, `aiUsage` reads the tokens)
+- the same OpenAI request, not streamed, as a plain HTTP request (`jt run` sends it; streams are skipped there)
+- a local model through Ollama's OpenAI-compatible API, which needs no key
+  (`ollama run llama3.2` first)
+
+They need your own API keys: set `openaiApiKey` and `anthropicApiKey` in
+the environment (they're empty in the sample, and exports leave keys out).
+`openaiBaseUrl`, `anthropicBaseUrl` and `localModelUrl` point the same
+requests at another compatible service. Without a key, the error shows the
+API's own explanation.
 
 **Sample — MCP** covers:
 
