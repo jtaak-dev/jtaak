@@ -1653,6 +1653,129 @@
       ]
     },
     {
+      "category": "api",
+      "name": "Sample — AI APIs",
+      "folders": [],
+      "items": [
+        {
+          "type": "request",
+          "name": "OpenAI: stream a chat completion (SSE over POST)",
+          "config": {
+            "method": "POST",
+            "url": "{{openaiBaseUrl}}/chat/completions",
+            "params": [],
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"model\": \"gpt-4.1-mini\",\n  \"stream\": true,\n  \"stream_options\": {\n    \"include_usage\": true\n  },\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"In one sentence, what is an API?\"\n    }\n  ]\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": {
+                "token": "{{openaiApiKey}}"
+              }
+            },
+            "protocol": "sse",
+            "testScript": "// Runs again as events arrive: it passes once the stream has ended.\njt.test(\"the stream ends with [DONE]\", () => jt.expect(jt.messages.some((m) => m.data === \"[DONE]\")).toBe(true));\njt.test(\"it reports the tokens used\", () => jt.expect(jt.messages.some((m) => m.data.includes('\"usage\":{'))).toBe(true));"
+          }
+        },
+        {
+          "type": "request",
+          "name": "OpenAI: a chat completion, not streamed",
+          "config": {
+            "method": "POST",
+            "url": "{{openaiBaseUrl}}/chat/completions",
+            "params": [],
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"model\": \"gpt-4.1-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"In one sentence, what is an API?\"\n    }\n  ]\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": {
+                "token": "{{openaiApiKey}}"
+              }
+            },
+            "protocol": "http",
+            "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\n\njt.test(\"it answered, and says how many tokens it used\", () => {\n  const body = jt.response.json();\n  jt.expect(body.choices[0].message.content.length).toBeGreaterThan(0);\n  jt.expect(body.usage.total_tokens).toBeGreaterThan(0);\n});"
+          }
+        },
+        {
+          "type": "request",
+          "name": "Anthropic: stream a message (SSE over POST)",
+          "config": {
+            "method": "POST",
+            "url": "{{anthropicBaseUrl}}/messages",
+            "params": [],
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "enabled": true
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{anthropicApiKey}}",
+                "enabled": true
+              },
+              {
+                "key": "anthropic-version",
+                "value": "2023-06-01",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"model\": \"claude-haiku-4-5\",\n  \"max_tokens\": 256,\n  \"stream\": true,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"In one sentence, what is an API?\"\n    }\n  ]\n}"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "sse",
+            "testScript": "// Runs again as events arrive: it passes once the message is complete.\njt.test(\"the message completes\", () => jt.expect(jt.messages.some((m) => m.channel === \"message_stop\")).toBe(true));"
+          }
+        },
+        {
+          "type": "request",
+          "name": "A local model (Ollama, no key needed): stream a chat completion",
+          "config": {
+            "method": "POST",
+            "url": "{{localModelUrl}}/chat/completions",
+            "params": [],
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "enabled": true
+              }
+            ],
+            "body": {
+              "mode": "json",
+              "raw": "{\n  \"model\": \"llama3.2\",\n  \"stream\": true,\n  \"stream_options\": {\n    \"include_usage\": true\n  },\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"In one sentence, what is an API?\"\n    }\n  ]\n}"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "sse",
+            "testScript": "jt.test(\"the stream ends with [DONE]\", () => jt.expect(jt.messages.some((m) => m.data === \"[DONE]\")).toBe(true));"
+          }
+        }
+      ]
+    },
+    {
       "category": "websocket",
       "name": "Sample — WebSocket",
       "folders": [
@@ -2000,7 +2123,12 @@
         "wsEchoUrl": "wss://echo.websocket.org",
         "oauthTokenUrl": "",
         "oauthClientId": "",
-        "oauthClientSecret": ""
+        "oauthClientSecret": "",
+        "openaiBaseUrl": "https://api.openai.com/v1",
+        "openaiApiKey": "",
+        "anthropicBaseUrl": "https://api.anthropic.com/v1",
+        "anthropicApiKey": "",
+        "localModelUrl": "http://localhost:11434/v1"
       }
     },
     {
@@ -2019,7 +2147,12 @@
         "wsEchoUrl": "wss://echo.websocket.org",
         "oauthTokenUrl": "",
         "oauthClientId": "",
-        "oauthClientSecret": ""
+        "oauthClientSecret": "",
+        "openaiBaseUrl": "https://api.openai.com/v1",
+        "openaiApiKey": "",
+        "anthropicBaseUrl": "https://api.anthropic.com/v1",
+        "anthropicApiKey": "",
+        "localModelUrl": "http://localhost:11434/v1"
       }
     }
   ]
