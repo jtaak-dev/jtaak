@@ -59,6 +59,7 @@ export function parseCurlCommand(command: string): RequestConfig {
   let rawBody: string | undefined;
   let basicAuth: { username: string; password: string } | undefined;
   let insecure = false;
+  let binaryPath: string | undefined;
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -72,10 +73,21 @@ export function parseCurlCommand(command: string): RequestConfig {
       case '--header':
         headers.push(parseHeader(tokens[++i] ?? ''));
         break;
+      case '--data-binary': {
+        // `@file` sends the file's bytes as they are.
+        const data = tokens[++i] ?? '';
+        if (data.startsWith('@')) binaryPath = data.slice(1);
+        else rawBody = data;
+        break;
+      }
+      case '-T':
+      case '--upload-file':
+        binaryPath = tokens[++i];
+        method ??= 'PUT';
+        break;
       case '-d':
       case '--data':
       case '--data-raw':
-      case '--data-binary':
       case '--data-ascii':
         rawBody = tokens[++i];
         break;
@@ -117,11 +129,16 @@ export function parseCurlCommand(command: string): RequestConfig {
   return {
     id: 'imported-curl',
     name: 'Imported from cURL',
-    method: method ?? (rawBody !== undefined ? 'POST' : 'GET'),
+    method: method ?? (rawBody !== undefined || binaryPath !== undefined ? 'POST' : 'GET'),
     url,
     params: [],
     headers,
-    body: rawBody !== undefined ? { mode: 'raw', raw: rawBody } : { mode: 'none' },
+    body:
+      binaryPath !== undefined
+        ? { mode: 'binary', binaryPath }
+        : rawBody !== undefined
+          ? { mode: 'raw', raw: rawBody }
+          : { mode: 'none' },
     auth: basicAuth ? { type: 'basic', basic: basicAuth } : { type: 'none' },
     ...(insecure && { verifyTls: false }),
   };
