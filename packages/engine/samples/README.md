@@ -19,13 +19,14 @@ for that reason.
 
 | Section | Collection | What it shows |
 |---|---|---|
-| API | **Sample — HTTP** (34 requests) | See the breakdown below. |
+| API | **Sample — HTTP** (40 requests) | See the breakdown below. |
 | API | **Sample — GraphQL** (7) | See the breakdown below. |
-| API | **Sample — Server-Sent Events** (2) | Named events with ids; a busy live stream (Wikimedia recent edits). |
-| API | **Sample — gRPC** (6) | See the breakdown below. |
-| WebSocket | **Sample — WebSocket** (4) | Echo servers, plus connections with custom headers and a bearer token. Connect, send a message, and watch it echo back. |
+| API | **Sample — Server-Sent Events** (3) | Named events with ids, and the same with tests on what arrives; a busy live stream (Wikimedia recent edits). |
+| API | **Sample — gRPC** (10) | See the breakdown below. |
+| API | **Sample — SOAP** (3) | See the breakdown below. |
+| WebSocket | **Sample — WebSocket** (5) | Echo servers, plus connections with custom headers and a bearer token, and one whose URL is a `{{variable}}`, with tests on what comes back. Connect, send a message, and watch it echo back. |
 | MCP | **Sample — MCP** (3) | See the breakdown below. |
-| Messaging | **Sample — Messaging** (8 connections) | MQTT, Kafka, Socket.IO, AMQP and NATS: four public test brokers that work straight away, and four local ones. See below. |
+| Messaging | **Sample — Messaging** (9 connections) | MQTT, Kafka, Socket.IO, AMQP and NATS: five public test broker connections that work straight away (one with tests on what arrives), and four local ones. See below. |
 
 **Sample — HTTP** covers:
 
@@ -33,7 +34,14 @@ for that reason.
 - query params and headers, including disabled rows
 - `{{variables}}` in the path, params and headers
 - JSON, raw text, urlencoded and multipart bodies
-- Basic, Bearer and API-key auth, sent as a header or in the query string
+- Basic, Bearer and API-key auth, sent as a header or in the query string;
+  Digest auth; and OAuth 2.0 client credentials (set `oauthTokenUrl`,
+  `oauthClientId` and `oauthClientSecret` in the environment for your
+  provider)
+- **Cookies:** a response that sets a cookie (through a redirect), a
+  request that sends it back, and one with the cookie jar turned off
+- a test script written for Postman (`pm.test`, `pm.expect`,
+  `pm.response`), which runs as written
 - 401, 404, 500 and 418 responses, redirects, a slow response, a large
   (~1 MB) response, and HTML and XML responses
 - pre-request scripts, passing and failing tests, and `console.log`
@@ -58,7 +66,17 @@ for that reason.
   repeated messages, booleans and floats
 - request metadata
 - an error status
+- server streaming, client streaming and bidirectional calls: send, send
+  messages, **End**, and watch the replies
+- a request with no `.proto`: it loads the service from the server itself
+  (server reflection); click **Load services from the server**
 - all against the public grpcb.in server
+
+**Sample — SOAP** covers:
+
+- a SOAP 1.1 call and a SOAP 1.2 call, each with its action, to a public
+  calculator service
+- a fault (dividing by zero), shown with its code and reason
 
 **Sample — MCP** covers:
 

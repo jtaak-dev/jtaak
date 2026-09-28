@@ -28,7 +28,7 @@ describe('samples/jtaak-sample-workspace.jt', () => {
       f.folders.forEach(walk);
     };
     doc.collections.forEach(walk);
-    expect(protocols).toEqual(new Set(['http', 'graphql', 'sse', 'grpc']));
+    expect(protocols).toEqual(new Set(['http', 'graphql', 'sse', 'grpc', 'soap']));
     expect(messaging).toEqual(new Set(['mqtt', 'kafka', 'socketio', 'amqp', 'nats']));
 
     const preview = previewNativeImport(doc);
