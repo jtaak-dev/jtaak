@@ -154,6 +154,27 @@ export interface NetworkSettings {
   caPaths?: string[];
 }
 
+/**
+ * A response saved as a named example of its request (storage/examples.ts):
+ * what it looks like, for reading later and for a mock server to serve.
+ */
+export interface ResponseExample {
+  id: string;
+  requestId: string;
+  name: string;
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+  createdAt: number;
+}
+
+/** A response example without its headers and body, for listing. */
+export type ResponseExampleSummary = Omit<ResponseExample, 'headers' | 'body'>;
+
+/** A response example in an export file (secret-named headers blanked unless secrets are kept). */
+export type NativeExportExample = Pick<ResponseExample, 'name' | 'status' | 'statusText' | 'headers' | 'body'>;
+
 export interface RequestConfig {
   id: string;
   name: string;
@@ -1013,7 +1034,13 @@ export type ExportScope = 'collection' | 'category' | 'workspace';
  * sort orders and timestamps are deliberately left out: order is array order,
  * and every import creates fresh rows, so the file stays stable and diffable. */
 export type NativeExportItem =
-  | { type: 'request'; name: string; config: Omit<RequestConfig, 'id' | 'name'> }
+  | {
+      type: 'request';
+      name: string;
+      config: Omit<RequestConfig, 'id' | 'name'>;
+      /** Only written when the request has some. */
+      examples?: NativeExportExample[];
+    }
   | {
       type: 'websocket';
       name: string;
