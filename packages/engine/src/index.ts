@@ -62,6 +62,7 @@ export type {
   JsonRpcNotification,
   JsonRpcResponse,
   GraphQlProtocolConfig,
+  SoapProtocolConfig,
   GraphQlFieldSummary,
   GraphQlTypeSummary,
   GraphQlSchemaSummary,
@@ -115,6 +116,13 @@ export { reflectGrpcServer, type GrpcReflectionResult } from './request/grpcRefl
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
+export {
+  soapAsHttp,
+  soapEnvelopeTemplate,
+  parseSoapFault,
+  SOAP_ENVELOPE_NAMESPACES,
+  type SoapFault,
+} from './request/soap.js';
 export { CookieJar, type CookieKey, type StoredCookie } from './request/cookieJar.js';
 export { parseDigestChallenge, digestAuthorization, type DigestChallenge, type DigestInput } from './request/digest.js';
 export {

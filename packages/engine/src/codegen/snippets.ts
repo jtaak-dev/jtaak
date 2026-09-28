@@ -1,4 +1,5 @@
 import type { CodegenLanguage, KeyValue, RequestConfig } from '../types.js';
+import { soapAsHttp } from '../request/soap.js';
 
 export const CODEGEN_LANGUAGES: { id: CodegenLanguage; label: string }[] = [
   { id: 'curl', label: 'cURL' },
@@ -184,7 +185,9 @@ function generateGo(config: RequestConfig): string {
   return lines.join('\n');
 }
 
-export function generateSnippet(config: RequestConfig, language: CodegenLanguage): string {
+export function generateSnippet(request: RequestConfig, language: CodegenLanguage): string {
+  // A SOAP request is written as the HTTP POST it's sent as.
+  const config = request.protocol === 'soap' ? soapAsHttp(request) : request;
   switch (language) {
     case 'curl':
       return generateCurl(config);

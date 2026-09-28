@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-jtaak is a local-first API request engine and command-line client, published to npm as two packages: `@jtaak/engine` (the library) and `jtaak` (the CLI, command `jt`). It covers HTTP, GraphQL (with schema introspection), Server-Sent Events, gRPC (unary, streaming, server reflection), WebSocket, MCP (Model Context Protocol) and messaging (MQTT, Kafka, Socket.IO, AMQP and NATS), plus collections, environments, pre-request/test scripts, a collection runner, Postman/OpenAPI/cURL import, a native export format and code snippets. No account, no cloud, no telemetry. Apache-2.0, copyright Jana Software Lab.
+jtaak is a local-first API request engine and command-line client, published to npm as two packages: `@jtaak/engine` (the library) and `jtaak` (the CLI, command `jt`). It covers HTTP, GraphQL (with schema introspection), Server-Sent Events, gRPC (unary, streaming, server reflection), SOAP 1.1 and 1.2 (`request/soap.ts`: `soapAsHttp`, `parseSoapFault`), WebSocket, MCP (Model Context Protocol) and messaging (MQTT, Kafka, Socket.IO, AMQP and NATS), plus collections, environments, pre-request/test scripts, a collection runner, Postman/OpenAPI/cURL import, a native export format and code snippets. No account, no cloud, no telemetry. Apache-2.0, copyright Jana Software Lab.
 
 ## Commands
 

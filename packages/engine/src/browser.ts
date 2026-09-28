@@ -23,6 +23,7 @@ export type {
   VariableScope,
   CodegenLanguage,
   GrpcProtocolConfig,
+  SoapProtocolConfig,
   GrpcStreamMessage,
   GrpcStreamStatus,
   GrpcFieldSummary,
@@ -46,6 +47,13 @@ export { emptyScopes, MESSAGING_PROTOCOLS } from './types.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
+export {
+  soapAsHttp,
+  soapEnvelopeTemplate,
+  parseSoapFault,
+  SOAP_ENVELOPE_NAMESPACES,
+  type SoapFault,
+} from './request/soap.js';
 export { junitReport, type JunitOptions } from './runner/junit.js';
 export { CookieJar, type CookieKey, type StoredCookie } from './request/cookieJar.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';

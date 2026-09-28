@@ -1,7 +1,7 @@
 # @jtaak/engine
 
 A local-first API request engine for Node.js. It sends and times HTTP, GraphQL,
-Server-Sent Events, gRPC (unary and streaming), WebSocket and MCP (Model Context Protocol)
+Server-Sent Events, gRPC (unary and streaming), SOAP, WebSocket and MCP (Model Context Protocol)
 requests; connects to MQTT, Kafka, Socket.IO, AMQP and NATS; runs pre-request
 and test scripts in a sandbox; resolves `{{variables}}`; imports Postman,
 OpenAPI and cURL; and stores workspaces, collections and environments in SQLite.
@@ -45,7 +45,11 @@ TLS time). The phases come from the diagnostics-channel events Node's `fetch`
 publishes; they don't add up to `durationMs`, which also covers building the
 request and any redirects.
 
-`protocol: 'graphql'` sends GraphQL over HTTP. For long-lived connections
+`protocol: 'graphql'` sends GraphQL over HTTP, and `protocol: 'soap'` a SOAP
+1.1 or 1.2 envelope (the raw body) as a POST with the version's content type
+and action (`protocolConfig: { version, action }`); `soapEnvelopeTemplate`
+starts one, and `parseSoapFault(body)` reads a fault's code, reason and
+detail. For long-lived connections
 (`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`.
 
 ## gRPC
