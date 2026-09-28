@@ -12,6 +12,7 @@ import {
   updateMessagingConnection,
   updateWebSocketConnection,
 } from '../storage/repository.js';
+import { createResponseExample } from '../storage/examples.js';
 import {
   DEFAULT_ENGINE_PROFILE,
   MESSAGING_PROTOCOLS,
@@ -32,6 +33,7 @@ import {
   type HttpMethod,
   type FormField,
   type KeyValue,
+  type NativeExportExample,
   type Protocol,
   type RequestBody,
   type RequestConfig,
@@ -103,6 +105,25 @@ function optBool(value: unknown, path: string): boolean | undefined {
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], path: string): T {
   if (typeof value !== 'string' || !allowed.includes(value as T)) fail(path, `expected one of ${allowed.join(', ')}`);
   return value as T;
+}
+
+function stringRecord(value: unknown, path: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(obj(value, path)).map(([k, v]) => [k, str(v, `${path}.${k}`)]));
+}
+
+function example(value: unknown, path: string): NativeExportExample {
+  const e = obj(value, path);
+  const status = e.status;
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 999) {
+    fail(`${path}.status`, 'expected an HTTP status code');
+  }
+  return {
+    name: name(e.name, `${path}.name`),
+    status,
+    statusText: str(e.statusText ?? '', `${path}.statusText`),
+    headers: e.headers === undefined ? {} : stringRecord(e.headers, `${path}.headers`),
+    body: str(e.body ?? '', `${path}.body`),
+  };
 }
 
 function strList(value: unknown, path: string): string[] {
@@ -242,8 +263,18 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
   const expected = ITEM_TYPE_BY_CATEGORY[category];
   if (i.type !== expected) fail(`${path}.type`, `a ${category} collection can only hold "${expected}" items`);
   const itemName = name(i.name, `${path}.name`);
-  if (expected === 'request')
-    return { type: 'request', name: itemName, config: requestConfig(i.config, `${path}.config`) };
+  if (expected === 'request') {
+    const examples =
+      i.examples === undefined
+        ? []
+        : arr(i.examples, `${path}.examples`).map((e, n) => example(e, `${path}.examples[${n}]`));
+    return {
+      type: 'request',
+      name: itemName,
+      config: requestConfig(i.config, `${path}.config`),
+      ...(examples.length > 0 && { examples }),
+    };
+  }
   if (expected === 'messaging') {
     return {
       type: 'messaging',
@@ -452,7 +483,8 @@ export function importNative(
         ...rest,
         ...(options.includeScripts && { preRequestScript, testScript }),
       };
-      createRequest(db, { collectionId, name: i.name, config });
+      const request = createRequest(db, { collectionId, name: i.name, config });
+      for (const e of i.examples ?? []) createResponseExample(db, request.id, e);
     } else if (i.type === 'messaging') {
       const created = createMessagingConnection(db, { collectionId, name: i.name, protocol: i.protocol, url: i.url });
       updateMessagingConnection(db, created.id, {

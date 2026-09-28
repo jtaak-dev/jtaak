@@ -193,6 +193,27 @@ export const MIGRATIONS: Migration[] = [
       ensureColumn(db, 'messaging_connections', 'test_script', 'TEXT');
     },
   },
+  {
+    // Responses saved as named examples of their request (storage/examples.ts).
+    version: 8,
+    name: 'response examples',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS response_examples (
+          id TEXT PRIMARY KEY,
+          request_id TEXT NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          status INTEGER NOT NULL,
+          status_text TEXT NOT NULL,
+          headers_json TEXT NOT NULL,
+          body TEXT NOT NULL,
+          sort_order INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS response_examples_by_request ON response_examples (request_id, sort_order);
+      `);
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

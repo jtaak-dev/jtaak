@@ -416,6 +416,22 @@ false })` keeps only the response's status, duration and size. Response bodies o
 (`responseTruncated`); `sizeBytes` keeps the full size. `deleteHistoryEntry` and
 `clearHistory` delete entries, and deleting a workspace deletes its history.
 
+A request can keep responses as named examples of what it returns (what a
+mock server would serve):
+
+```ts
+import { createResponseExample, listResponseExamples, listWorkspaceResponseExamples } from '@jtaak/engine';
+
+createResponseExample(db, requestId, { name: 'Found', status: 200, statusText: 'OK', headers, body });
+listResponseExamples(db, requestId); // in the order saved
+listWorkspaceResponseExamples(db, workspace.id); // every one, without headers and bodies
+```
+
+`renameResponseExample` and `deleteResponseExample` change them, and they're
+deleted with their request. Native exports carry them (`examples` on a request
+item, secret-named headers such as `Set-Cookie` blanked unless secrets are
+kept), and a Postman collection's saved responses import as examples.
+
 ## Import and export
 
 - `importPostmanCollection`, `importPostmanEnvironment`, `importOpenApi` and

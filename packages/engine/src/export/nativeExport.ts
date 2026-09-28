@@ -11,6 +11,7 @@ import {
   DEFAULT_ENGINE_PROFILE,
   NATIVE_EXPORT_VERSION,
   type NativeExportCollection,
+  type NativeExportExample,
   type NativeExportDocument,
   type NativeExportFolder,
   type NativeExportItem,
@@ -93,6 +94,51 @@ interface ExportContext {
   /** Full request configs for the workspace, loaded in one query — the tree
    * itself only carries summaries (see getCollectionTree). */
   requestConfigs: Map<string, RequestConfig>;
+  /** Each request's response examples, loaded in one query too. */
+  examples: Map<string, NativeExportExample[]>;
+}
+
+function loadExamples(db: Database.Database, workspaceId: string): Map<string, NativeExportExample[]> {
+  const rows = db
+    .prepare(
+      `SELECT e.request_id, e.name, e.status, e.status_text, e.headers_json, e.body
+       FROM response_examples e
+       JOIN requests r ON r.id = e.request_id
+       JOIN collections c ON c.id = r.collection_id
+       WHERE c.workspace_id = ?
+       ORDER BY e.request_id, e.sort_order`,
+    )
+    .all(workspaceId) as {
+    request_id: string;
+    name: string;
+    status: number;
+    status_text: string;
+    headers_json: string;
+    body: string;
+  }[];
+  const byRequest = new Map<string, NativeExportExample[]>();
+  for (const row of rows) {
+    const list = byRequest.get(row.request_id) ?? [];
+    list.push({
+      name: row.name,
+      status: row.status,
+      statusText: row.status_text,
+      headers: JSON.parse(row.headers_json) as Record<string, string>,
+      body: row.body,
+    });
+    byRequest.set(row.request_id, list);
+  }
+  return byRequest;
+}
+
+/** An example's headers with the secret-named ones (Set-Cookie, say) blanked. */
+function stripExample(example: NativeExportExample): NativeExportExample {
+  return {
+    ...example,
+    headers: Object.fromEntries(
+      Object.entries(example.headers).map(([name, value]) => [name, isSecretName(name) ? blank(value) : value]),
+    ),
+  };
 }
 
 function loadRequestConfigs(db: Database.Database, workspaceId: string): Map<string, RequestConfig> {
@@ -116,7 +162,13 @@ function requestItem(ctx: ExportContext, requestId: string, name: string): Nativ
         headers: stripKeyValues(config.headers),
         auth: stripAuth(config.auth),
       };
-  return { type: 'request', name, config: out };
+  const examples = ctx.examples.get(requestId);
+  return {
+    type: 'request',
+    name,
+    config: out,
+    ...(examples && { examples: ctx.includeSecrets ? examples : examples.map(stripExample) }),
+  };
 }
 
 function wsItem(c: WebSocketConnection, includeSecrets: boolean): NativeExportItem {
@@ -244,7 +296,11 @@ export function exportNative(
     roots = COLLECTION_CATEGORIES.flatMap((category) => categoryTree(db, workspaceId, category));
   }
 
-  const ctx: ExportContext = { includeSecrets, requestConfigs: loadRequestConfigs(db, workspaceId) };
+  const ctx: ExportContext = {
+    includeSecrets,
+    requestConfigs: loadRequestConfigs(db, workspaceId),
+    examples: loadExamples(db, workspaceId),
+  };
   const wanted = new Set(options.environmentIds);
   const environments = listEnvironments(db, workspaceId)
     .filter((env) => target.scope === 'workspace' || wanted.has(env.id))

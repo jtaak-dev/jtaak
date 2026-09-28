@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { createCollectionNode, createRequest } from '../storage/repository.js';
+import { createResponseExample } from '../storage/examples.js';
 import { unsupportedPostmanCalls } from '../scripting/postman.js';
 import type {
   AuthConfig,
@@ -54,8 +55,17 @@ interface PostmanRequest {
   body?: PostmanBody;
   auth?: PostmanAuth;
 }
+/** A saved example response. */
+interface PostmanResponse {
+  name?: string;
+  code?: number;
+  status?: string;
+  header?: PostmanKeyValue[] | null;
+  body?: string | null;
+}
 interface PostmanItem {
   name?: string;
+  response?: PostmanResponse[];
   item?: PostmanItem[];
   request?: PostmanRequest;
   event?: PostmanEvent[];
@@ -220,7 +230,17 @@ function importItems(
     } else if (item.request) {
       counts.requests++;
       const config = convertRequest(item);
-      createRequest(db, { collectionId: parentId, name: config.name, config });
+      const request = createRequest(db, { collectionId: parentId, name: config.name, config });
+      for (const example of item.response ?? []) {
+        if (typeof example?.code !== 'number') continue;
+        createResponseExample(db, request.id, {
+          name: example.name?.trim() || `${example.code} ${example.status ?? ''}`.trim(),
+          status: example.code,
+          statusText: example.status ?? '',
+          headers: Object.fromEntries((example.header ?? []).map((h) => [h.key ?? '', h.value ?? ''])),
+          body: example.body ?? '',
+        });
+      }
       const calls = unsupportedPostmanCalls(`${config.preRequestScript ?? ''}\n${config.testScript ?? ''}`);
       if (calls.length > 0) warnings.push({ requestName: config.name, calls });
     }

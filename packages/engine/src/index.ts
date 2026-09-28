@@ -8,6 +8,9 @@ export type {
   FormField,
   KeyValue,
   RequestBody,
+  ResponseExample,
+  ResponseExampleSummary,
+  NativeExportExample,
   AuthConfig,
   OAuth2Config,
   OAuth2GrantType,
@@ -198,6 +201,15 @@ export {
   clearHistory,
   pruneHistory,
 } from './storage/history.js';
+export {
+  createResponseExample,
+  listResponseExamples,
+  listWorkspaceResponseExamples,
+  getResponseExample,
+  renameResponseExample,
+  deleteResponseExample,
+  type ResponseExampleInput,
+} from './storage/examples.js';
 
 export {
   listWorkspaces,
