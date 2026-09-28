@@ -2,7 +2,7 @@
   "format": "jtaak-export",
   "version": 1,
   "scope": "workspace",
-  "exportedAt": "2026-09-24T00:00:00.000Z",
+  "exportedAt": "2026-09-28T12:00:00.000Z",
   "secretsStripped": false,
   "collections": [
     {
@@ -493,6 +493,51 @@
                 "protocol": "http",
                 "testScript": "jt.test(\"status is 401\", () => {\n  jt.expect(jt.response.status).toBe(401);\n});"
               }
+            },
+            {
+              "type": "request",
+              "name": "Digest auth",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/digest-auth/auth/user/passwd",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "digest",
+                  "digest": {
+                    "username": "user",
+                    "password": "passwd"
+                  }
+                },
+                "testScript": "jt.test(\"the Digest challenge was answered\", () => {\n  jt.expect(jt.response.status).toBe(200);\n  jt.expect(jt.response.json().authenticated).toBe(true);\n});"
+              }
+            },
+            {
+              "type": "request",
+              "name": "OAuth 2.0 client credentials (fill in your provider)",
+              "config": {
+                "method": "GET",
+                "url": "{{baseUrl}}/headers",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "oauth2",
+                  "oauth2": {
+                    "grantType": "client_credentials",
+                    "tokenUrl": "{{oauthTokenUrl}}",
+                    "clientId": "{{oauthClientId}}",
+                    "clientSecret": "{{oauthClientSecret}}",
+                    "scope": "read"
+                  }
+                },
+                "testScript": "// Set oauthTokenUrl, oauthClientId and oauthClientSecret in the environment first.\njt.test(\"the token went in the Authorization header\", () => {\n  jt.expect(JSON.stringify(jt.response.json())).toContain(\"Bearer \");\n});"
+              }
             }
           ]
         },
@@ -687,6 +732,23 @@
                 "protocol": "http",
                 "testScript": "jt.test(\"expects 200 — fails, the server replies 418\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});\njt.test(\"is not a 404\", () => jt.expect(jt.response.status).not.toBe(404));"
               }
+            },
+            {
+              "type": "request",
+              "name": "A script written for Postman (pm.*)",
+              "config": {
+                "method": "GET",
+                "url": "{{jsonUrl}}/users/1",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "testScript": "// Postman's common pm calls work as written.\npm.test(\"status is 200\", () => pm.response.to.have.status(200));\npm.test(\"the user has an email\", () => {\n  const user = pm.response.json();\n  pm.expect(user).to.have.property(\"email\");\n  pm.expect(user.email).to.be.a(\"string\").and.to.include(\"@\");\n});\npm.environment.set(\"userEmail\", pm.response.json().email);"
+              }
             }
           ]
         },
@@ -802,6 +864,70 @@
                 },
                 "protocol": "http",
                 "testScript": "jt.test(\"status is 200\", () => {\n  jt.expect(jt.response.status).toBe(200);\n});"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cookies",
+          "folders": [],
+          "items": [
+            {
+              "type": "request",
+              "name": "Set a cookie (the redirect sends it back)",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/cookies/set",
+                "params": [
+                  {
+                    "key": "flavour",
+                    "value": "oatmeal",
+                    "enabled": true
+                  }
+                ],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "testScript": "jt.test(\"the cookie is kept\", () => jt.expect(jt.cookies.get(\"flavour\")).toBe(\"oatmeal\"));\njt.test(\"and sent after the redirect\", () => jt.expect(jt.response.json().cookies.flavour).toBe(\"oatmeal\"));"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Send the kept cookies",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/cookies",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "testScript": "jt.test(\"the kept cookie is sent\", () => jt.expect(jt.response.json().cookies.flavour).toBe(\"oatmeal\"));"
+              }
+            },
+            {
+              "type": "request",
+              "name": "Without the cookie jar",
+              "config": {
+                "method": "GET",
+                "url": "https://httpbin.org/cookies",
+                "params": [],
+                "headers": [],
+                "body": {
+                  "mode": "none"
+                },
+                "auth": {
+                  "type": "none"
+                },
+                "useCookies": false,
+                "testScript": "jt.test(\"no cookies are sent\", () => jt.expect(jt.response.json().cookies).toEqual({}));"
               }
             }
           ]
@@ -1028,6 +1154,24 @@
             },
             "protocol": "sse"
           }
+        },
+        {
+          "type": "request",
+          "name": "Named events, with tests on what arrives",
+          "config": {
+            "method": "GET",
+            "url": "https://postman-echo.com/server-events/5",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "sse",
+            "testScript": "// Runs again as events arrive: it passes once all five are in.\njt.test(\"five events arrive\", () => jt.expect(jt.messages.length).toBe(5));\njt.test(\"the first within 10 s\", () => jt.expect(jt.messages[0].at).toBeLessThan(10000));"
+          }
         }
       ]
     },
@@ -1236,6 +1380,186 @@
               "usePlaintext": true
             }
           }
+        },
+        {
+          "type": "request",
+          "name": "Server streaming: ten replies (LotsOfReplies)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto2\";\n\npackage hello;\n\n// Greeting service on the public grpcb.in test server (github.com/moul/pb), with its streaming methods.\nservice HelloService {\n  rpc SayHello(HelloRequest) returns (HelloResponse);\n  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);\n  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse);\n  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);\n}\n\nmessage HelloRequest {\n  optional string greeting = 1;\n}\n\nmessage HelloResponse {\n  required string reply = 1;\n}\n",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "LotsOfReplies",
+              "requestMessage": {
+                "greeting": "streams"
+              },
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Client streaming: send several, End, one reply (LotsOfGreetings)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto2\";\n\npackage hello;\n\n// Greeting service on the public grpcb.in test server (github.com/moul/pb), with its streaming methods.\nservice HelloService {\n  rpc SayHello(HelloRequest) returns (HelloResponse);\n  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);\n  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse);\n  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);\n}\n\nmessage HelloRequest {\n  optional string greeting = 1;\n}\n\nmessage HelloResponse {\n  required string reply = 1;\n}\n",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "LotsOfGreetings",
+              "requestMessage": {
+                "greeting": "one"
+              },
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "Bidirectional: each message answered (BidiHello)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "syntax = \"proto2\";\n\npackage hello;\n\n// Greeting service on the public grpcb.in test server (github.com/moul/pb), with its streaming methods.\nservice HelloService {\n  rpc SayHello(HelloRequest) returns (HelloResponse);\n  rpc LotsOfReplies(HelloRequest) returns (stream HelloResponse);\n  rpc LotsOfGreetings(stream HelloRequest) returns (HelloResponse);\n  rpc BidiHello(stream HelloRequest) returns (stream HelloResponse);\n}\n\nmessage HelloRequest {\n  optional string greeting = 1;\n}\n\nmessage HelloResponse {\n  required string reply = 1;\n}\n",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "BidiHello",
+              "requestMessage": {
+                "greeting": "hi"
+              },
+              "usePlaintext": true
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "From server reflection, no .proto (click Load services)",
+          "config": {
+            "method": "GET",
+            "url": "grpcb.in:9000",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "none"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "grpc",
+            "protocolConfig": {
+              "protoFile": "",
+              "serviceFullName": "hello.HelloService",
+              "methodName": "SayHello",
+              "requestMessage": {
+                "greeting": "reflection"
+              },
+              "usePlaintext": true,
+              "source": "reflection"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "category": "api",
+      "name": "Sample — SOAP",
+      "folders": [],
+      "items": [
+        {
+          "type": "request",
+          "name": "Add two numbers (SOAP 1.1)",
+          "config": {
+            "method": "POST",
+            "url": "http://www.dneonline.com/calculator.asmx",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soap:Body>\n    <Add xmlns=\"http://tempuri.org/\">\n      <intA>2</intA>\n      <intB>3</intB>\n    </Add>\n  </soap:Body>\n</soap:Envelope>"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "soap",
+            "protocolConfig": {
+              "version": "1.1",
+              "action": "http://tempuri.org/Add"
+            },
+            "testScript": "jt.test(\"2 + 3 = 5\", () => jt.expect(jt.response.body).toContain(\"<AddResult>5</AddResult>\"));"
+          }
+        },
+        {
+          "type": "request",
+          "name": "Multiply (SOAP 1.2)",
+          "config": {
+            "method": "POST",
+            "url": "http://www.dneonline.com/calculator.asmx",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<soap12:Envelope xmlns:soap12=\"http://www.w3.org/2003/05/soap-envelope\">\n  <soap12:Body>\n    <Multiply xmlns=\"http://tempuri.org/\">\n      <intA>{{postId}}</intA>\n      <intB>7</intB>\n    </Multiply>\n  </soap12:Body>\n</soap12:Envelope>"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "soap",
+            "protocolConfig": {
+              "version": "1.2",
+              "action": "http://tempuri.org/Multiply"
+            }
+          }
+        },
+        {
+          "type": "request",
+          "name": "A fault (divide by zero)",
+          "config": {
+            "method": "POST",
+            "url": "http://www.dneonline.com/calculator.asmx",
+            "params": [],
+            "headers": [],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soap:Body>\n    <Divide xmlns=\"http://tempuri.org/\">\n      <intA>1</intA>\n      <intB>0</intB>\n    </Divide>\n  </soap:Body>\n</soap:Envelope>"
+            },
+            "auth": {
+              "type": "none"
+            },
+            "protocol": "soap",
+            "protocolConfig": {
+              "version": "1.1",
+              "action": "http://tempuri.org/Divide"
+            },
+            "testScript": "jt.test(\"the service faults\", () => jt.expect(jt.response.status).toBe(500));"
+          }
         }
       ]
     },
@@ -1299,6 +1623,17 @@
           "auth": {
             "type": "none"
           }
+        },
+        {
+          "type": "websocket",
+          "name": "Echo via {{wsEchoUrl}}, with tests",
+          "url": "{{wsEchoUrl}}",
+          "headers": [],
+          "subprotocols": [],
+          "auth": {
+            "type": "none"
+          },
+          "testScript": "// Connect, send a message: the tests run again as messages arrive.\njt.test(\"something comes back\", () => {\n  jt.expect(jt.messages.some((m) => m.direction === \"received\")).toBe(true);\n});\njt.test(\"what's sent is echoed\", () => {\n  const sent = jt.messages.filter((m) => m.direction === \"sent\").map((m) => m.data);\n  const received = jt.messages.filter((m) => m.direction === \"received\").map((m) => m.data);\n  jt.expect(sent.every((text) => received.includes(text))).toBe(true);\n});"
         }
       ]
     },
@@ -1439,6 +1774,26 @@
                   "channel": "jtaak.sample.>"
                 }
               ]
+            },
+            {
+              "type": "messaging",
+              "name": "Mosquitto, with tests on what arrives",
+              "protocol": "mqtt",
+              "url": "mqtt://test.mosquitto.org:1883",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "jt/sample/orders/#",
+                  "options": {
+                    "qos": 0
+                  }
+                }
+              ],
+              "testScript": "// Publish {\"status\":\"paid\"} to jt/sample/orders/1 on the Publish tab.\njt.test(\"an order is paid within 30 s\", () => {\n  const paid = jt.messages.find((m) => m.direction === \"received\" && m.json().status === \"paid\");\n  jt.expect(paid).toBeDefined();\n  jt.expect(paid.at).toBeLessThan(30000);\n});"
             }
           ]
         },
@@ -1552,7 +1907,11 @@
         "username": "jtaak-user",
         "password": "jtaak-demo-password",
         "token": "sample-token",
-        "apiKey": "sample-api-key"
+        "apiKey": "sample-api-key",
+        "wsEchoUrl": "wss://echo.websocket.org",
+        "oauthTokenUrl": "",
+        "oauthClientId": "",
+        "oauthClientSecret": ""
       }
     },
     {
@@ -1567,7 +1926,11 @@
         "username": "jtaak-user",
         "password": "jtaak-demo-password",
         "token": "sample-token",
-        "apiKey": "sample-api-key"
+        "apiKey": "sample-api-key",
+        "wsEchoUrl": "wss://echo.websocket.org",
+        "oauthTokenUrl": "",
+        "oauthClientId": "",
+        "oauthClientSecret": ""
       }
     }
   ]
