@@ -243,14 +243,18 @@ Scripts written for Postman run too: `pm` has its common calls, over the
 same values (`pm.test`, `pm.expect` with Chai's chains such as
 `.to.equal`, `.to.have.property` and `.to.be.true`, `pm.response` with
 `.to.have.status` and `.to.be.ok`, `pm.environment`, `pm.variables`,
-`pm.request`, `pm.cookies`). What it lacks, such as `pm.sendRequest`,
+`pm.request`, `pm.cookies`, `pm.iterationData`, `pm.info`). What it lacks, such as `pm.sendRequest`,
 throws, naming the call; `importPostmanCollection` lists the requests whose
 scripts use such calls as `scriptWarnings` (`unsupportedPostmanCalls`).
 
 Both `jt.variables` and `jt.environment` start as the environment's values
 (`scopes.environment`), and the request resolves `{{name}}` against what
 scripts set in either. What they set in `jt.variables` lasts only for this
-request. What they set in `jt.environment` (or delete from it) comes back
+request. A host that repeats a run (once per row of a data file, say) passes
+each pass as `options.iteration` (`{ index, count, data }`, to
+`runRequestWithScripts` or `runCollection`): scripts read it as
+`jt.iteration`, and the row's values are variables too, above the
+environment's and below what a script sets, never saved to the environment. What they set in `jt.environment` (or delete from it) comes back
 as `result.environmentUpdates`, a new value per name or `null` for one
 removed, so the caller can save it. The engine never changes the
 environment itself; `applyEnvironmentUpdates(values, updates)` applies them:

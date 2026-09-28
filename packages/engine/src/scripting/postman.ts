@@ -13,7 +13,8 @@ export const SUPPORTED_PM_API: Record<string, readonly string[] | true> = {
   request: ['url', 'method', 'headers', 'name'],
   response: ['code', 'status', 'headers', 'responseTime', 'responseSize', 'json', 'text', 'to'],
   cookies: ['get', 'has', 'toObject'],
-  info: ['requestName'],
+  info: ['requestName', 'iteration', 'iterationCount'],
+  iterationData: ['get', 'has', 'toObject'],
 };
 
 /**

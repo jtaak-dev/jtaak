@@ -10,6 +10,7 @@ export type {
   FormField,
   KeyValue,
   RequestBody,
+  ScriptIteration,
   ResponseExample,
   ResponseExampleSummary,
   NativeExportExample,

@@ -3,7 +3,7 @@ import { resolveDeep } from '../variables/resolver.js';
 import { diffEnvironment } from '../variables/environmentUpdates.js';
 import { runScript, type ScriptConsoleEntry } from './sandbox.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
-import type { RequestConfig, RequestRunResult, ScriptLogEntry, VariableScope } from '../types.js';
+import type { RequestConfig, RequestRunResult, ScriptIteration, ScriptLogEntry, VariableScope } from '../types.js';
 import type { CookieJar } from '../request/cookieJar.js';
 import { getOAuth2Token, MemoryOAuth2TokenStore, type OAuth2TokenStore } from '../request/oauth2.js';
 import type { ScriptCookie } from './sandbox.js';
@@ -15,6 +15,13 @@ export interface RunRequestOptions {
   oauth2Tokens?: OAuth2TokenStore;
   /** Opens the provider's sign-in page, for the authorization code grant when there's no valid token. */
   openBrowser?: (url: string) => void | Promise<void>;
+  /**
+   * The pass of a repeating run this request is in (see `ScriptIteration`).
+   * Its values are the request's variables, above the environment's and
+   * below what a script sets, as Postman's data variables are; they're never
+   * written to the environment.
+   */
+  iteration?: ScriptIteration;
 }
 
 /** The jar's cookies for a request's URL, as scripts see them. */
@@ -59,7 +66,7 @@ export async function runRequestWithScripts(
   // A mutable working copy: a pre-request script can set a variable (e.g. a
   // timestamp or a token) that this same request's URL/headers/body then
   // resolve against, before anything is sent over the network.
-  const variables = { ...scopes.environment };
+  const variables = { ...scopes.environment, ...options.iteration?.data };
   const environment = { ...scopes.environment };
   const scriptLogs: ScriptLogEntry[] = [];
   // Only when something changed, so results without scripts look as before.
@@ -77,6 +84,7 @@ export async function runRequestWithScripts(
           variables,
           environment,
           cookies: scriptCookies(cookieJar, resolveDeep(config.url, { ...scopes, environment: variables })),
+          iteration: options.iteration,
         },
         undefined,
         profile,
@@ -126,6 +134,7 @@ export async function runRequestWithScripts(
           variables,
           environment,
           cookies: scriptCookies(cookieJar, resolvedConfig.url),
+          iteration: options.iteration,
         },
         undefined,
         profile,

@@ -87,7 +87,7 @@ describe('Postman scripts in the sandbox', () => {
       request({
         testScript: `
           pm.test("send", () => pm.sendRequest("https://x", () => {}));
-          pm.test("iteration", () => pm.iterationData.get("x"));
+          pm.test("vault", () => pm.vault.get("x"));
           pm.test("schema", () => pm.response.to.have.jsonSchema({}));
         `,
       }),
@@ -95,7 +95,7 @@ describe('Postman scripts in the sandbox', () => {
     );
     expect(result.testResults.map((t) => t.error)).toEqual([
       "pm.sendRequest (scripts have no network) isn't supported here.",
-      "pm.iterationData isn't supported here.",
+      "pm.vault isn't supported here.",
       "pm.response.to.have.jsonSchema isn't supported here.",
     ]);
   });

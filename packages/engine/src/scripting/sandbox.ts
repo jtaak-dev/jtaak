@@ -8,7 +8,7 @@ import {
 import quickJsVariant from '@jitl/quickjs-singlefile-cjs-release-sync';
 import { createContext, Script, type Context } from 'node:vm';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
-import type { AssertionResult, ExecutedResponse, RequestConfig } from '../types.js';
+import type { AssertionResult, ExecutedResponse, RequestConfig, ScriptIteration } from '../types.js';
 
 export interface ScriptContext {
   request: RequestConfig;
@@ -27,6 +27,8 @@ export interface ScriptContext {
   cookies?: ScriptCookie[];
   /** A connection's messages so far, read as `<namespace>.messages` (see runConnectionTests). */
   messages?: ScriptStreamMessage[];
+  /** The run's pass, read as `<namespace>.iteration`; a single send is pass 0 of 1, with no data. */
+  iteration?: ScriptIteration;
 }
 
 /** A message a connection sent or received, as a connection's test script reads it. */
@@ -239,6 +241,7 @@ const PRELUDE = String.raw`
     response,
     cookies,
     messages,
+    iteration: input.iteration,
   };
 
 
@@ -429,7 +432,22 @@ const PRELUDE = String.raw`
         : undefined,
       response: pmResponse,
       cookies: strict({ get: cookies.get, has: cookies.has, toObject: cookies.toObject }, 'pm.cookies'),
-      info: strict({ requestName: input.request ? input.request.name : undefined }, 'pm.info'),
+      info: strict(
+        {
+          requestName: input.request ? input.request.name : undefined,
+          iteration: input.iteration.index,
+          iterationCount: input.iteration.count,
+        },
+        'pm.info',
+      ),
+      iterationData: strict(
+        {
+          get: (name) => input.iteration.data[name],
+          has: (name) => Object.prototype.hasOwnProperty.call(input.iteration.data, name),
+          toObject: () => Object.assign({}, input.iteration.data),
+        },
+        'pm.iterationData',
+      ),
       sendRequest: unsupported('pm.sendRequest (scripts have no network)'),
     },
     'pm',
@@ -557,6 +575,7 @@ export async function runScript(
           environment: context.environment,
           cookies: context.cookies,
           messages: context.messages,
+          iteration: context.iteration ?? { index: 0, count: 1, data: {} },
         }),
       );
       ctx.setProp(ctx.global, '__input', input);
