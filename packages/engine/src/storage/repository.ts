@@ -168,9 +168,55 @@ function seedCategory(db: Database.Database, workspaceId: string, category: Coll
  */
 export function getOrCreateDefaultWorkspace(db: Database.Database): { workspace: Workspace } {
   const existing = listWorkspaces(db)[0];
-  const workspace = existing ?? createWorkspace(db, 'My Workspace');
+  const workspace = existing ?? createWorkspace(db, DEFAULT_WORKSPACE_NAME);
   for (const category of COLLECTION_CATEGORIES) seedCategory(db, workspace.id, category);
   return { workspace };
+}
+
+/** The name the first workspace gets, and the one an emptied last workspace gets back (`resetWorkspace`). */
+export const DEFAULT_WORKSPACE_NAME = 'My Workspace';
+
+export function getWorkspace(db: Database.Database, id: string): Workspace | undefined {
+  return db.prepare('SELECT id, name, created_at AS createdAt FROM workspaces WHERE id = ?').get(id) as
+    Workspace | undefined;
+}
+
+/**
+ * A workspace, ready to use: with each category's default collection the
+ * first time it's opened (as `getOrCreateDefaultWorkspace` does for the
+ * first one). Undefined when there's no such workspace.
+ */
+export function openWorkspace(db: Database.Database, id: string): Workspace | undefined {
+  const workspace = getWorkspace(db, id);
+  if (!workspace) return undefined;
+  for (const category of COLLECTION_CATEGORIES) seedCategory(db, workspace.id, category);
+  return workspace;
+}
+
+export function renameWorkspace(db: Database.Database, id: string, name: string): void {
+  db.prepare('UPDATE workspaces SET name = ? WHERE id = ?').run(name, id);
+}
+
+/**
+ * Deletes a workspace and everything in it: collections and what they hold,
+ * environments, history, cookies, OAuth tokens and response examples.
+ */
+export function deleteWorkspace(db: Database.Database, id: string): void {
+  db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+}
+
+/**
+ * Empties a workspace, keeping its id: everything in it is deleted, as by
+ * `deleteWorkspace`, and it starts again as a new one would, with `name`
+ * (the default name unless given) and each category's default collection.
+ */
+export function resetWorkspace(db: Database.Database, id: string, name = DEFAULT_WORKSPACE_NAME): Workspace {
+  return db.transaction(() => {
+    const createdAt = getWorkspace(db, id)?.createdAt ?? Date.now();
+    deleteWorkspace(db, id);
+    db.prepare('INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)').run(id, name, createdAt);
+    return openWorkspace(db, id)!;
+  })();
 }
 
 // ---- Collections & folders ------------------------------------------------
