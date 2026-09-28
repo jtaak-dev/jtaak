@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { createCollectionNode, createRequest } from '../storage/repository.js';
+import { unsupportedPostmanCalls } from '../scripting/postman.js';
 import type {
   AuthConfig,
   HttpMethod,
@@ -178,11 +179,12 @@ function convertRequest(item: PostmanItem): RequestConfig {
 }
 
 /**
- * Note on import fidelity: script text is imported verbatim, not translated.
- * Postman's real scripting API (chai's `.to.` BDD chain, `pm.response.to.have.status()`,
- * etc.) is broader than this engine's sandbox (`pm.test`/`pm.expect(...).toX()`),
- * so an imported script may need editing before it runs here. The request
- * shape (method/url/headers/body/auth) imports fully.
+ * Scripts are imported as written: the sandbox has Postman's common `pm`
+ * calls (pm.test, pm.expect's Chai chains, pm.response.to.have.status,
+ * pm.environment…; see scripting/postman.ts), so most run unchanged. Those
+ * that call what it lacks (pm.sendRequest, the old postman.* and tests[…])
+ * are listed in the result's `scriptWarnings`. The request shape
+ * (method/url/headers/body/auth) imports fully.
  */
 function importItems(
   db: Database.Database,
@@ -190,6 +192,7 @@ function importItems(
   parentId: string,
   items: PostmanItem[],
   counts: { folders: number; requests: number },
+  warnings: { requestName: string; calls: string[] }[],
 ): void {
   for (const item of items) {
     if (Array.isArray(item.item)) {
@@ -200,11 +203,13 @@ function importItems(
         name: item.name ?? 'Folder',
         kind: 'folder',
       });
-      importItems(db, workspaceId, folder.id, item.item, counts);
+      importItems(db, workspaceId, folder.id, item.item, counts, warnings);
     } else if (item.request) {
       counts.requests++;
       const config = convertRequest(item);
       createRequest(db, { collectionId: parentId, name: config.name, config });
+      const calls = unsupportedPostmanCalls(`${config.preRequestScript ?? ''}\n${config.testScript ?? ''}`);
+      if (calls.length > 0) warnings.push({ requestName: config.name, calls });
     }
   }
 }
@@ -216,6 +221,7 @@ export function importPostmanCollection(
 ): ImportResult {
   const collection = postmanJson as PostmanCollectionRoot;
   const counts = { folders: 0, requests: 0 };
+  const warnings: { requestName: string; calls: string[] }[] = [];
 
   const collectionId = db.transaction(() => {
     const root = createCollectionNode(db, {
@@ -224,9 +230,14 @@ export function importPostmanCollection(
       name: collection.info?.name ?? 'Imported Collection',
       kind: 'collection',
     });
-    importItems(db, workspaceId, root.id, collection.item ?? [], counts);
+    importItems(db, workspaceId, root.id, collection.item ?? [], counts, warnings);
     return root.id;
   })();
 
-  return { collectionId, folderCount: counts.folders, requestCount: counts.requests };
+  return {
+    collectionId,
+    folderCount: counts.folders,
+    requestCount: counts.requests,
+    ...(warnings.length > 0 && { scriptWarnings: warnings }),
+  };
 }

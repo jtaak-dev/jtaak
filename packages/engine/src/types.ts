@@ -910,6 +910,8 @@ export interface ImportResult {
   collectionId: string;
   folderCount: number;
   requestCount: number;
+  /** Postman imports: each request whose scripts call parts of Postman's API the sandbox doesn't have. */
+  scriptWarnings?: { requestName: string; calls: string[] }[];
 }
 
 export type CodegenLanguage = 'curl' | 'js-fetch' | 'js-axios' | 'python-requests' | 'go';

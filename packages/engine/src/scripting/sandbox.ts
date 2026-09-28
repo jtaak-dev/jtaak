@@ -241,6 +241,201 @@ const PRELUDE = String.raw`
     messages,
   };
 
+
+  // Postman's script API (pm.*), so scripts imported from Postman run as
+  // written: the common calls, over the same values as the namespace above.
+  // Anything else throws, saying it isn't supported. See scripting/postman.ts
+  // for the list, which the Postman importer warns with.
+  function typeName(value) {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+  }
+  function chai(actual, negated) {
+    const self = {};
+    function check(condition, message) {
+      if (condition === Boolean(negated)) {
+        throw new Error('expected ' + describe(actual) + (negated ? ' not to ' : ' to ') + message);
+      }
+      return self;
+    }
+    const chains = ['to', 'be', 'been', 'is', 'that', 'which', 'and', 'has', 'have', 'with', 'at', 'of', 'same', 'does', 'deep', 'all', 'any', 'own'];
+    for (const word of chains) Object.defineProperty(self, word, { get: () => self });
+    Object.defineProperty(self, 'not', { get: () => chai(actual, !negated) });
+    const flag = (name, test, message) => Object.defineProperty(self, name, { get: () => check(test(), message) });
+    flag('true', () => actual === true, 'be true');
+    flag('false', () => actual === false, 'be false');
+    flag('null', () => actual === null, 'be null');
+    flag('undefined', () => actual === undefined, 'be undefined');
+    flag('ok', () => Boolean(actual), 'be truthy');
+    flag('exist', () => actual !== null && actual !== undefined, 'exist');
+    flag('empty', () => (typeof actual === 'string' || Array.isArray(actual) ? actual.length === 0 : actual && typeof actual === 'object' ? Object.keys(actual).length === 0 : false), 'be empty');
+    self.equal = self.equals = self.eq = (expected) => check(actual === expected, 'equal ' + describe(expected));
+    self.eql = self.eqls = (expected) => check(isDeepEqual(actual, expected), 'deeply equal ' + describe(expected));
+    self.above = self.gt = self.greaterThan = (n) => check(actual > n, 'be above ' + n);
+    self.below = self.lt = self.lessThan = (n) => check(actual < n, 'be below ' + n);
+    self.least = self.gte = (n) => check(actual >= n, 'be at least ' + n);
+    self.most = self.lte = (n) => check(actual <= n, 'be at most ' + n);
+    self.within = (low, high) => check(actual >= low && actual <= high, 'be within ' + low + '..' + high);
+    self.a = self.an = (type) => check(typeName(actual) === String(type).toLowerCase(), 'be a ' + type);
+    self.include = self.includes = self.contain = self.contains = (value) =>
+      check(
+        typeof actual === 'string'
+          ? actual.includes(value)
+          : Array.isArray(actual)
+            ? actual.some((item) => isDeepEqual(item, value))
+            : actual && typeof actual === 'object' && value && typeof value === 'object'
+              ? Object.keys(value).every((key) => isDeepEqual(actual[key], value[key]))
+              : false,
+        'include ' + describe(value),
+      );
+    self.property = function (key, value) {
+      const has = actual !== null && actual !== undefined && typeof actual === 'object' && key in actual;
+      return arguments.length < 2
+        ? check(has, 'have property ' + describe(key))
+        : check(has && isDeepEqual(actual[key], value), 'have property ' + describe(key) + ' of ' + describe(value));
+    };
+    self.lengthOf = (n) => check(actual !== null && actual !== undefined && actual.length === n, 'have length ' + n);
+    self.oneOf = (list) => check(list.some((item) => isDeepEqual(item, actual)), 'be one of ' + describe(list));
+    self.match = (pattern) => check(pattern.test(String(actual)), 'match ' + pattern);
+    self.keys = (...keys) => {
+      const wanted = keys.length === 1 && Array.isArray(keys[0]) ? keys[0] : keys;
+      return check(actual !== null && typeof actual === 'object' && wanted.every((key) => key in actual), 'have keys ' + describe(wanted));
+    };
+    self.key = self.keys;
+    return self;
+  }
+
+  function unsupported(path) {
+    return () => {
+      throw new Error(path + " isn't supported here.");
+    };
+  }
+  // An object whose unknown members throw, naming them.
+  function strict(object, path) {
+    return new Proxy(object, {
+      get(target, key) {
+        if (typeof key === 'symbol' || key in target) return target[key];
+        throw new Error(path + '.' + key + " isn't supported here.");
+      },
+    });
+  }
+  function valueStore(values, path, writable) {
+    return strict(
+      {
+        get: (key) => values[key],
+        has: (key) => key in values,
+        set: writable ? (key, value) => { values[key] = value; } : unsupported(path + '.set'),
+        unset: writable ? (key) => { delete values[key]; } : unsupported(path + '.unset'),
+        toObject: () => Object.assign({}, values),
+        replaceIn: (text) => String(text).replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, name) => (name in values ? values[name] : match)),
+      },
+      path,
+    );
+  }
+  function headerList(headers, path) {
+    const find = (name) => {
+      const lower = String(name).toLowerCase();
+      if (Array.isArray(headers)) {
+        const found = headers.find((h) => h.enabled !== false && String(h.key).toLowerCase() === lower);
+        return found ? found.value : undefined;
+      }
+      const key = Object.keys(headers || {}).find((k) => k.toLowerCase() === lower);
+      return key === undefined ? undefined : headers[key];
+    };
+    return strict({ get: find, has: (name) => find(name) !== undefined }, path);
+  }
+
+  const pmResponse = input.response
+    ? (() => {
+        const r = input.response;
+        const status = (expected) =>
+          typeof expected === 'number'
+            ? chai(r.status).to.equal(expected)
+            : chai(r.statusText).to.equal(expected);
+        const range = (name, test, message) => [name, () => { if (!test(r.status)) throw new Error('expected status ' + r.status + ' to be ' + message); }];
+        const be = {};
+        for (const [name, test] of [
+          range('ok', (s) => s === 200, '200 OK'),
+          range('success', (s) => s >= 200 && s < 300, '2xx'),
+          range('created', (s) => s === 201, '201'),
+          range('accepted', (s) => s === 202, '202'),
+          range('badRequest', (s) => s === 400, '400'),
+          range('unauthorized', (s) => s === 401, '401'),
+          range('forbidden', (s) => s === 403, '403'),
+          range('notFound', (s) => s === 404, '404'),
+          range('rateLimited', (s) => s === 429, '429'),
+          range('error', (s) => s >= 400, '4xx or 5xx'),
+          range('clientError', (s) => s >= 400 && s < 500, '4xx'),
+          range('serverError', (s) => s >= 500, '5xx'),
+        ]) Object.defineProperty(be, name, { get: test });
+        const headers = headerList(r.headers, 'pm.response.headers');
+        const have = strict(
+          {
+            status,
+            header(name, value) {
+              const actual = headers.get(name);
+              if (actual === undefined) throw new Error('expected a ' + name + ' header');
+              if (arguments.length > 1 && actual !== value) throw new Error('expected header ' + name + ' to be ' + describe(value) + ', got ' + describe(actual));
+            },
+            body(expected) {
+              if (arguments.length === 0) {
+                if (!r.body) throw new Error('expected a body');
+              } else if (r.body !== expected) throw new Error('expected the body to be ' + describe(expected));
+            },
+            jsonBody(key, value) {
+              const json = JSON.parse(r.body);
+              if (arguments.length === 1) chai(json).to.have.property(key);
+              else if (arguments.length > 1) chai(json).to.have.property(key, value);
+            },
+          },
+          'pm.response.to.have',
+        );
+        return strict(
+          {
+            code: r.status,
+            status: r.statusText,
+            headers,
+            responseTime: r.timings ? r.timings.durationMs : undefined,
+            responseSize: r.sizeBytes,
+            json: () => JSON.parse(r.body),
+            text: () => r.body,
+            to: strict({ have: have, be: strict(be, 'pm.response.to.be') }, 'pm.response.to'),
+          },
+          'pm.response',
+        );
+      })()
+    : undefined;
+
+  const pm = strict(
+    {
+      test: (name, fn) => globalThis[input.namespace].test(name, fn),
+      expect: (actual) => chai(actual, false),
+      environment: valueStore(environment, 'pm.environment', true),
+      variables: valueStore(variables, 'pm.variables', true),
+      // Collection and global variables are this run's variables here.
+      collectionVariables: valueStore(variables, 'pm.collectionVariables', true),
+      globals: valueStore(variables, 'pm.globals', true),
+      request: input.request
+        ? strict(
+            {
+              url: { toString: () => input.request.url },
+              method: input.request.method,
+              headers: headerList(input.request.headers, 'pm.request.headers'),
+              name: input.request.name,
+            },
+            'pm.request',
+          )
+        : undefined,
+      response: pmResponse,
+      cookies: strict({ get: cookies.get, has: cookies.has, toObject: cookies.toObject }, 'pm.cookies'),
+      info: strict({ requestName: input.request ? input.request.name : undefined }, 'pm.info'),
+      sendRequest: unsupported('pm.sendRequest (scripts have no network)'),
+    },
+    'pm',
+  );
+  globalThis.pm = pm;
+
   globalThis.__output = () => JSON.stringify({ results, logs, variables, environment: environmentValues });
 })();
 `;
