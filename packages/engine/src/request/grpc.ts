@@ -1,8 +1,9 @@
 import * as grpc from '@grpc/grpc-js';
 import { performance } from 'node:perf_hooks';
+import tls from 'node:tls';
 import { buildRequestHeaders } from './executor.js';
 import { grpcRoot } from './grpcProto.js';
-import { verifiesTls } from './tls.js';
+import { endpointOf, proxyFor, tlsOptionsFor } from './network.js';
 import type { GrpcProtocolConfig, GrpcUnaryResult, RequestConfig } from '../types.js';
 
 export function metadataToRecord(metadata: grpc.Metadata): Record<string, string> {
@@ -18,6 +19,40 @@ export function metadataToRecord(metadata: grpc.Metadata): Record<string, string
 // anyone who types it out of http:// habit.
 export function normalizeGrpcTarget(url: string): string {
   return url.replace(/^grpc:\/\//i, '').replace(/\/+$/, '');
+}
+
+/**
+ * A client for a gRPC server: over TLS when `usePlaintext` is `false` (with
+ * the extra authorities and the client certificate for its host, see
+ * network.ts), through the proxy for its host (an HTTP CONNECT tunnel).
+ */
+export function grpcClient(
+  config: Pick<RequestConfig, 'url' | 'verifyTls' | 'network' | 'protocolConfig'>,
+): grpc.Client {
+  const target = normalizeGrpcTarget(config.url);
+  const secure = (config.protocolConfig as Partial<GrpcProtocolConfig> | undefined)?.usePlaintext === false;
+  const endpoint = `${secure ? 'https' : 'http'}://${target}`;
+  const { host, port } = endpointOf(endpoint);
+  let credentials = grpc.credentials.createInsecure();
+  if (secure) {
+    const { rejectUnauthorized, ...context } = tlsOptionsFor(config, host, port);
+    credentials =
+      context.ca || context.cert || context.pfx
+        ? grpc.credentials.createFromSecureContext(tls.createSecureContext(context), { rejectUnauthorized })
+        : grpc.credentials.createSsl(null, null, null, { rejectUnauthorized });
+  }
+  const proxy = proxyFor(config.network, endpoint);
+  if (!proxy) return new grpc.Client(target, credentials);
+  // grpc-js reads its proxy from environment variables only; these are the
+  // channel options it sets from them, so the channel connects to the proxy,
+  // tunnels to the server and checks its certificate against the server's name.
+  const proxyUrl = new URL(proxy.url);
+  return new grpc.Client(`${proxyUrl.hostname}:${proxyUrl.port || 80}`, credentials, {
+    'grpc.enable_http_proxy': 0,
+    'grpc.http_connect_target': `dns:///${target}`,
+    'grpc.default_authority': target,
+    ...(proxy.username && { 'grpc.http_connect_creds': `${proxy.username}:${proxy.password ?? ''}` }),
+  });
 }
 
 /** What a call needs, for a unary call or a stream: the method, its (de)serializers, a client and the metadata. */
@@ -46,12 +81,7 @@ export function prepareGrpcCall(config: RequestConfig) {
   const deserialize = (value: Buffer): Record<string, unknown> =>
     responseType.toObject(responseType.decode(value), { longs: String, enums: String, defaults: true });
 
-  const target = normalizeGrpcTarget(config.url);
-  const credentials =
-    protocolConfig.usePlaintext === false
-      ? grpc.credentials.createSsl(null, null, null, { rejectUnauthorized: verifiesTls(config) })
-      : grpc.credentials.createInsecure();
-  const client = new grpc.Client(target, credentials);
+  const client = grpcClient(config);
 
   const metadata = new grpc.Metadata();
   for (const [key, value] of Object.entries(buildRequestHeaders(config))) {

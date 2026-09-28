@@ -1,5 +1,5 @@
 import type { Channel, ChannelModel, ConfirmChannel, ConsumeMessage, Options } from 'amqplib';
-import { verifiesTls } from '../tls.js';
+import { tlsOptionsForUrl } from '../network.js';
 import type { AmqpProtocolConfig, MessagingPublish, RequestConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload, headerRecord } from './payload.js';
@@ -77,7 +77,8 @@ export async function connectAmqp(config: RequestConfig, events: AdapterEvents):
 
   const connection: ChannelModel = await connect(connectionUrl(config, settings), {
     timeout: (settings.connectTimeout ?? 20) * 1000,
-    rejectUnauthorized: verifiesTls(config),
+    // amqps:// (tls.connect's options).
+    ...tlsOptionsForUrl(config, config.url),
   });
   connection.on('error', (error: Error) => events.error(error));
   connection.on('close', (error?: Error) => events.close(error?.message));

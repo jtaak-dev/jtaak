@@ -1,6 +1,6 @@
 import type { ManagerOptions, Socket, SocketOptions } from 'socket.io-client';
 import { buildRequestHeaders } from '../executor.js';
-import { verifiesTls } from '../tls.js';
+import { tlsOptionsForUrl } from '../network.js';
 import type { MessagingPublish, RequestConfig, SocketIoProtocolConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload } from './payload.js';
@@ -71,7 +71,8 @@ export async function connectSocketIo(config: RequestConfig, events: AdapterEven
     timeout: (settings.connectTimeout ?? 20) * 1000,
     reconnection: false,
     forceNew: true,
-    rejectUnauthorized: verifiesTls(config),
+    // Passed to tls.connect, which takes a Buffer for pfx (the types say string).
+    ...(tlsOptionsForUrl(config, config.url) as { pfx?: string }),
     auth: { ...settings.auth, ...(token && { token }) },
     ...(Object.keys(headers).length > 0 && { extraHeaders: headers }),
   };

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { OAuth2Config, OAuth2Token } from '../types.js';
+import type { NetworkSettings, OAuth2Config, OAuth2Token } from '../types.js';
 import { describeError } from './errors.js';
 import { fetchFor } from './tls.js';
 
@@ -80,8 +80,9 @@ export function buildAuthorizationUrl(
 }
 
 export interface OAuth2RequestOptions {
-  /** See `RequestConfig.verifyTls`; applies to the token endpoint. */
+  /** See `RequestConfig.verifyTls` and `RequestConfig.network`; they apply to the token endpoint. */
   verifyTls?: boolean;
+  network?: NetworkSettings;
   now?: number;
 }
 
@@ -111,7 +112,7 @@ async function requestToken(
 
   let response: Response;
   try {
-    response = await fetchFor({ verifyTls: options.verifyTls })(config.tokenUrl, {
+    response = await fetchFor(options)(config.tokenUrl, {
       method: 'POST',
       headers,
       body: body.toString(),

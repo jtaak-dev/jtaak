@@ -2,10 +2,9 @@ import * as grpc from '@grpc/grpc-js';
 import protobuf from 'protobufjs';
 import descriptor from 'protobufjs/ext/descriptor.js';
 import { buildRequestHeaders } from './executor.js';
-import { normalizeGrpcTarget } from './grpc.js';
+import { grpcClient } from './grpc.js';
 import { describeError } from './errors.js';
-import { verifiesTls } from './tls.js';
-import type { GrpcProtocolConfig, RequestConfig } from '../types.js';
+import type { RequestConfig } from '../types.js';
 
 // protobufjs is CommonJS (see grpcProto.ts): take the exports object and destructure it.
 const { parse, Root } = protobuf;
@@ -148,15 +147,10 @@ function neededFiles(files: Map<string, Uint8Array>): string[] {
  * with `source: 'reflection'`.
  */
 export async function reflectGrpcServer(
-  config: Pick<RequestConfig, 'url' | 'headers' | 'auth' | 'verifyTls' | 'protocolConfig'>,
+  config: Pick<RequestConfig, 'url' | 'headers' | 'auth' | 'verifyTls' | 'network' | 'protocolConfig'>,
   options: { timeoutMs?: number } = {},
 ): Promise<GrpcReflectionResult> {
-  const usePlaintext = (config.protocolConfig as Partial<GrpcProtocolConfig> | undefined)?.usePlaintext;
-  const credentials =
-    usePlaintext === false
-      ? grpc.credentials.createSsl(null, null, null, { rejectUnauthorized: verifiesTls(config) })
-      : grpc.credentials.createInsecure();
-  const client = new grpc.Client(normalizeGrpcTarget(config.url), credentials);
+  const client = grpcClient(config);
   const metadata = new grpc.Metadata();
   for (const [key, value] of Object.entries(
     buildRequestHeaders({ ...config, id: '', name: '', method: 'POST', params: [], body: { mode: 'none' } }),

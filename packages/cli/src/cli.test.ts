@@ -25,15 +25,50 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
+// No proxy from the machine running the tests, unless a test sets one.
+const HERMETIC_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !/^(https?|no)_proxy$/i.test(name)),
+);
+
 function runCli(...args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return runCliWith({}, ...args);
+}
+
+function runCliWith(
+  env: Record<string, string>,
+  ...args: string[]
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [TSX_CLI, ENTRY, ...args], (error, stdout, stderr) => {
-      resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout, stderr });
-    });
+    execFile(
+      process.execPath,
+      [TSX_CLI, ENTRY, ...args],
+      { env: { ...HERMETIC_ENV, ...env } },
+      (error, stdout, stderr) => {
+        resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout, stderr });
+      },
+    );
   });
 }
 
 describe('jt CLI', () => {
+  it('sends through the proxy in HTTPS_PROXY', async () => {
+    const seen: string[] = [];
+    const proxy = http.createServer((req, res) => {
+      seen.push(req.url ?? '');
+      res.writeHead(200, { 'content-type': 'text/plain' }).end('from the proxy');
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    const { code, stdout } = await runCliWith(
+      { HTTPS_PROXY: `http://127.0.0.1:${(proxy.address() as AddressInfo).port}` },
+      'GET',
+      `${baseUrl}/via`,
+    );
+    proxy.close();
+    expect(code).toBe(0);
+    expect(stdout).toContain('from the proxy');
+    expect(seen).toEqual([`${baseUrl}/via`]);
+  });
+
   it('sends a GET and prints the status line and body', async () => {
     const { code, stdout } = await runCli('GET', `${baseUrl}/users`);
     expect(code).toBe(0);

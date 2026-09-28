@@ -259,7 +259,7 @@ export function createRequest(
   const now = Date.now();
   const id = randomUUID();
   const sortOrder = nextSortOrder(db, 'requests', 'collection_id', input.collectionId);
-  const config: RequestConfig = { ...input.config, id, name: input.name };
+  const config: RequestConfig = storableConfig({ ...input.config, id, name: input.name });
   const protocol: Protocol = config.protocol ?? 'http';
   db.prepare(
     'INSERT INTO requests (id, collection_id, name, protocol, method, url, config_json, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -287,10 +287,25 @@ export function createRequest(
   };
 }
 
+/** A config as it's saved: without `network`, which holds the host's settings (and secrets), not the request's. */
+export function storableConfig(config: RequestConfig): RequestConfig {
+  if (!('network' in config)) return config;
+  const { network: _network, ...stored } = config;
+  return stored;
+}
+
 export function updateRequest(db: Database.Database, id: string, config: RequestConfig): void {
   db.prepare(
     'UPDATE requests SET name = ?, protocol = ?, method = ?, url = ?, config_json = ?, updated_at = ? WHERE id = ?',
-  ).run(config.name, config.protocol ?? 'http', config.method, config.url, JSON.stringify(config), Date.now(), id);
+  ).run(
+    config.name,
+    config.protocol ?? 'http',
+    config.method,
+    config.url,
+    JSON.stringify(storableConfig(config)),
+    Date.now(),
+    id,
+  );
 }
 
 export function deleteRequest(db: Database.Database, id: string): void {

@@ -42,7 +42,7 @@ export function connectMcpClient(
   const transport =
     protocolConfig.transport === 'stdio'
       ? connectStdioTransport(config.url, protocolConfig.args ?? [], protocolConfig.env ?? {})
-      : connectHttpTransport(config.url, buildRequestHeaders(config), { verifyTls: config.verifyTls });
+      : connectHttpTransport(config.url, buildRequestHeaders(config), config);
 
   transport.onMessage((message) => {
     if (isResponse(message)) {

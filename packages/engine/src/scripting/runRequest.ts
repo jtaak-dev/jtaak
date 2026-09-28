@@ -100,6 +100,7 @@ export async function runRequestWithScripts(
         openBrowser: options.openBrowser,
         productName: profile.productName,
         verifyTls: resolvedConfig.verifyTls,
+        network: resolvedConfig.network,
       });
       resolvedConfig = { ...resolvedConfig, auth: { ...resolvedConfig.auth, oauth2: { ...oauth2, token } } };
     } catch (error) {

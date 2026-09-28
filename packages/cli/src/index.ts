@@ -2,12 +2,13 @@
 // A thin wrapper around the same core engine any host application uses, so
 // a request or a run from the terminal (or CI) does exactly what a GUI built
 // on the engine does: one engine, one source of truth.
-import { executeRequest, type RequestConfig } from '@jtaak/engine';
+import { executeRequest, proxyFromEnvironment, type RequestConfig } from '@jtaak/engine';
 import { run } from './run.js';
 
 const USAGE =
   'Usage: jt [-k|--insecure] <METHOD> <URL>\n  e.g. jt GET https://api.example.com/users\n' +
-  "  -k, --insecure  don't check the server's TLS certificate (for testing only)\n\n" +
+  "  -k, --insecure  don't check the server's TLS certificate (for testing only)\n" +
+  '  Sent through the proxy in $HTTPS_PROXY or $HTTP_PROXY, if set (not to $NO_PROXY hosts).\n\n' +
   '       jt run <export file> [options]   run a collection with its tests (jt run --help)';
 
 function parseArgs(argv: string[]): { method: RequestConfig['method']; url: string; insecure: boolean } {
@@ -39,6 +40,8 @@ async function send(argv: string[]): Promise<void> {
     auth: { type: 'none' },
     ...(insecure && { verifyTls: false }),
   };
+  const proxy = proxyFromEnvironment();
+  if (proxy) config.network = { proxy };
 
   const result = await executeRequest(config);
   console.log(

@@ -28,6 +28,9 @@ Add `-k` (or `--insecure`), as in curl, to skip checking the server's TLS
 certificate: for testing a server with a self-signed or expired certificate.
 The connection is still encrypted, but not authenticated.
 
+Requests go through the proxy in `HTTPS_PROXY` (or `HTTP_PROXY`) when it's
+set, except to the hosts in `NO_PROXY`, as with curl.
+
 It prints the status line, the time taken and the response size, then the
 response body:
 
@@ -80,6 +83,10 @@ another way (a `{{variable}}` in a Bearer token, say).
 | `--junit <file>`      | Also write the results as JUnit XML, which CI systems show as test results  |
 | `--bail`              | Stop after the first request that fails                                     |
 | `-k, --insecure`      | Don't check servers' TLS certificates (for testing only)                    |
+| `--proxy <url>`       | Send through this HTTP(S) proxy (`user:password@` in it is its login); default `$HTTPS_PROXY` or `$HTTP_PROXY` |
+| `--noproxy <hosts>`   | Comma-separated hosts reached directly; default `$NO_PROXY`                 |
+| `--cacert <file>`     | Also trust this certificate authority (PEM); repeatable                     |
+| `--cert <file>`, `--key <file>`, `--pass <phrase>` | A client certificate for servers that ask for one: PEM with its key, or a `.pfx`/`.p12`, and its passphrase |
 | `--format <id>`, `--namespace <name>` | For an export from another app built on jtaak: its format id and its scripts' namespace |
 
 gRPC, SSE, WebSocket and other streaming requests are listed as skipped.

@@ -9,11 +9,13 @@ import {
   DEFAULT_ENGINE_PROFILE,
   emptyScopes,
   junitReport,
+  proxyFromEnvironment,
   runCollection,
   runnableRequestsFromExport,
   validateNativeExport,
   type EngineProfile,
   type NativeExportDocument,
+  type NetworkSettings,
 } from '@jtaak/engine';
 import { createReporter } from './report.js';
 
@@ -30,6 +32,14 @@ Options:
       --junit <file>       also write the results as JUnit XML, for CI
       --bail               stop after the first request that fails
   -k, --insecure           don't check servers' TLS certificates (for testing only)
+      --proxy <url>        send through this HTTP(S) proxy (default: $HTTPS_PROXY or
+                           $HTTP_PROXY); user:password@ in it is the proxy's login
+      --noproxy <hosts>    comma-separated hosts reached directly (default: $NO_PROXY)
+      --cacert <file>      also trust this certificate authority (PEM; repeatable)
+      --cert <file>        client certificate for servers that ask for one: PEM, or
+                           a .pfx/.p12 file holding the key too
+      --key <file>         the client certificate's PEM key
+      --pass <phrase>      the key's or PFX's passphrase
       --format <id>        the file's format id, for an export from another app
                            built on jtaak (default ${DEFAULT_ENGINE_PROFILE.exportFormat})
       --namespace <name>   the scripts' namespace, for such a file (default ${DEFAULT_ENGINE_PROFILE.scriptNamespace})
@@ -74,6 +84,39 @@ export function variablesFromJson(json: unknown, file: string): Record<string, s
   return Object.fromEntries(entries.map(([key, value]) => [key, String(value ?? '')]));
 }
 
+/** The proxy (from --proxy, else the environment) and certificates for every request, if any. */
+export function networkSettings(
+  values: { proxy?: string; noproxy?: string; cacert?: string[]; cert?: string; key?: string; pass?: string },
+  env: Record<string, string | undefined> = process.env,
+): NetworkSettings | undefined {
+  const fromEnv = proxyFromEnvironment(env);
+  const proxy = values.proxy
+    ? proxyFromEnvironment({ HTTPS_PROXY: values.proxy, NO_PROXY: values.noproxy ?? env.NO_PROXY ?? env.no_proxy })
+    : fromEnv && values.noproxy !== undefined
+      ? {
+          ...fromEnv,
+          noProxy: values.noproxy
+            .split(',')
+            .map((host) => host.trim())
+            .filter(Boolean),
+        }
+      : fromEnv;
+  if (values.key && !values.cert) throw new UsageError('--key needs --cert.');
+  const certificate = values.cert && {
+    host: '*',
+    ...(/\.(pfx|p12)$/i.test(values.cert)
+      ? { pfxPath: path.resolve(values.cert) }
+      : { certPath: path.resolve(values.cert), ...(values.key && { keyPath: path.resolve(values.key) }) }),
+    ...(values.pass && { passphrase: values.pass }),
+  };
+  const network: NetworkSettings = {
+    ...(proxy && { proxy }),
+    ...(certificate && { clientCertificates: [certificate] }),
+    ...(values.cacert?.length && { caPaths: values.cacert.map((file) => path.resolve(file)) }),
+  };
+  return Object.keys(network).length > 0 ? network : undefined;
+}
+
 export async function run(argv: string[]): Promise<number> {
   let parsed;
   try {
@@ -88,6 +131,12 @@ export async function run(argv: string[]): Promise<number> {
         junit: { type: 'string' },
         bail: { type: 'boolean' },
         insecure: { type: 'boolean', short: 'k' },
+        proxy: { type: 'string' },
+        noproxy: { type: 'string' },
+        cacert: { type: 'string', multiple: true },
+        cert: { type: 'string' },
+        key: { type: 'string' },
+        pass: { type: 'string' },
         format: { type: 'string' },
         namespace: { type: 'string' },
         help: { type: 'boolean', short: 'h' },
@@ -156,7 +205,11 @@ export async function run(argv: string[]): Promise<number> {
       throw new UsageError((error as Error).message);
     }
     const { requests, skipped } = selection;
-    if (values.insecure) for (const request of requests) request.config.verifyTls = false;
+    const network = networkSettings(values);
+    for (const request of requests) {
+      if (values.insecure) request.config.verifyTls = false;
+      if (network) request.config.network = network;
+    }
 
     const reporter = createReporter(process.stdout);
     reporter.start({ file, folder: values.folder, environment: environmentName, count: requests.length, skipped });

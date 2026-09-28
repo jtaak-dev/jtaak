@@ -3,6 +3,7 @@ import { SseFrameParser } from '../request/sse.js';
 import { fetchFor } from '../request/tls.js';
 import type { JsonRpcMessage } from './jsonRpc.js';
 import type { McpTransport } from './transport.js';
+import type { RequestConfig } from '../types.js';
 
 /**
  * MCP's "Streamable HTTP" transport: every outgoing message is its own
@@ -24,7 +25,7 @@ import type { McpTransport } from './transport.js';
 export function connectHttpTransport(
   url: string,
   headers: Record<string, string>,
-  options: { verifyTls?: boolean } = {},
+  options: Pick<RequestConfig, 'verifyTls' | 'network'> = {},
 ): McpTransport {
   const send = fetchFor(options);
   const messageListeners: Array<(message: JsonRpcMessage) => void> = [];

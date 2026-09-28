@@ -1,4 +1,5 @@
 import type { ConnectionOptions, Msg, MsgHdrs, NatsConnection, Subscription } from '@nats-io/transport-node';
+import { endpointOf, tlsOptionsFor } from '../network.js';
 import { verifiesTls } from '../tls.js';
 import type { NatsProtocolConfig, RequestConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
@@ -31,6 +32,7 @@ export async function connectNats(config: RequestConfig, events: AdapterEvents):
   const { connect, headers: newHeaders } = await import('@nats-io/transport-node');
 
   const target = servers(config.url);
+  const first = endpointOf(target.servers[0].includes('://') ? target.servers[0] : `nats://${target.servers[0]}`);
   const options: ConnectionOptions = {
     servers: target.servers,
     timeout: (settings.connectTimeout ?? 20) * 1000,
@@ -39,9 +41,9 @@ export async function connectNats(config: RequestConfig, events: AdapterEvents):
     ...(config.auth.type === 'basic' &&
       config.auth.basic && { user: config.auth.basic.username, pass: config.auth.basic.password }),
     ...(config.auth.type === 'bearer' && config.auth.bearer?.token && { token: config.auth.bearer.token }),
-    // rejectUnauthorized isn't in the TlsOptions type, but the Node transport passes it to tls.connect.
+    // rejectUnauthorized and pfx aren't in the TlsOptions type, but the Node transport passes them to tls.connect.
     ...((target.tls || !verifiesTls(config)) && {
-      tls: { ...(!verifiesTls(config) && { rejectUnauthorized: false }) } as ConnectionOptions['tls'],
+      tls: tlsOptionsFor(config, first.host, first.port) as ConnectionOptions['tls'],
     }),
   };
 
