@@ -299,7 +299,10 @@ WebSocket and messaging connections keep a script as `testScript`.
 with their scripts and returns a pass/fail report. What one request's scripts
 set in `jt.environment` reaches the requests after it (a login request's
 token, say), and the report's `environmentUpdates` has the run's net
-changes.
+changes. Its options can stop at the first failure (`stopOnFailure`), wait
+between requests (`delayMs`), and stop the run from outside with an
+`AbortSignal` (`signal`; the report then has `cancelled`). Run it once per
+row of test data by passing `iteration: { index, count, data }` each time.
 
 ## Cookies
 
