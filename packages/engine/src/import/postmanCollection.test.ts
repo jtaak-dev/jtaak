@@ -107,6 +107,42 @@ describe('importPostmanCollection', () => {
     expect(getRequest(db, none.id)!.config.body).toEqual({ mode: 'binary' });
   });
 
+  it('keeps form-data file rows with their paths, one row per file', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+
+    const result = importPostmanCollection(db, workspace.id, {
+      info: { name: 'API' },
+      item: [
+        {
+          name: 'Form',
+          request: {
+            method: 'POST',
+            url: 'https://api.example.com/f',
+            body: {
+              mode: 'formdata',
+              formdata: [
+                { key: 'note', value: 'hi', type: 'text' },
+                { key: 'photo', type: 'file', src: '/data/a.png' },
+                { key: 'docs', type: 'file', src: ['/data/b.pdf', '/data/c.pdf'], disabled: true },
+                { key: 'empty', type: 'file', src: null },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    const [form] = getCollectionTree(db, workspace.id).find((n) => n.id === result.collectionId)!.requests;
+    expect(getRequest(db, form.id)!.config.body.formData).toEqual([
+      { key: 'note', value: 'hi', enabled: true },
+      { key: 'photo', value: '', enabled: true, type: 'file', src: '/data/a.png' },
+      { key: 'docs', value: '', enabled: false, type: 'file', src: '/data/b.pdf' },
+      { key: 'docs', value: '', enabled: false, type: 'file', src: '/data/c.pdf' },
+      { key: 'empty', value: '', enabled: true, type: 'file' },
+    ]);
+  });
+
   it("turns off the TLS certificate check where Postman's strictSSL is false", () => {
     const db = freshDb();
     const { workspace } = getOrCreateDefaultWorkspace(db);

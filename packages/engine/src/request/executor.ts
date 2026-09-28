@@ -4,7 +4,7 @@ import type { CookieJar } from './cookieJar.js';
 import { digestAuthorization, parseDigestChallenge } from './digest.js';
 import { soapAsHttp } from './soap.js';
 import { withErrorDetail } from './errors.js';
-import { fileBody } from './files.js';
+import { fileBody, fileNameOf } from './files.js';
 import { timingPhases, withTiming } from './timing.js';
 import { fetchFor } from './tls.js';
 
@@ -43,15 +43,17 @@ async function buildBody(config: RequestConfig): Promise<BodyInit | undefined> {
       return config.body.raw ?? '';
     case 'urlencoded': {
       const params = new URLSearchParams();
-      for (const kv of config.body.formData ?? []) {
-        if (kv.enabled) params.append(kv.key, kv.value);
+      for (const field of config.body.formData ?? []) {
+        if (field.enabled && field.type !== 'file') params.append(field.key, field.value);
       }
       return params.toString();
     }
     case 'form-data': {
       const form = new FormData();
-      for (const kv of config.body.formData ?? []) {
-        if (kv.enabled) form.append(kv.key, kv.value);
+      for (const field of config.body.formData ?? []) {
+        if (!field.enabled) continue;
+        if (field.type !== 'file') form.append(field.key, field.value);
+        else if (field.src) form.append(field.key, await fileBody(field.src), fileNameOf(field.src));
       }
       return form;
     }

@@ -33,10 +33,21 @@ export interface KeyValue {
   enabled: boolean;
 }
 
+/** A form-data or urlencoded row. In form-data it can be a file. */
+export interface FormField extends KeyValue {
+  /** `file` sends the file at `src` as a file part, named after the file,
+   * with a Content-Type from its extension (form-data only; a urlencoded
+   * body leaves file rows out). Text by default. */
+  type?: 'text' | 'file';
+  /** A file row's path, read when the request is sent (a relative path is
+   * from the working directory). */
+  src?: string;
+}
+
 export interface RequestBody {
   mode: 'none' | 'raw' | 'json' | 'form-data' | 'urlencoded' | 'binary';
   raw?: string;
-  formData?: KeyValue[];
+  formData?: FormField[];
   /** A `binary` body's file, read and streamed when the request is sent (a
    * relative path is from the working directory). Its Content-Type comes from
    * the file's extension unless a header sets one. */
@@ -1058,7 +1069,7 @@ export interface NativeImportPreview {
   scriptRequestCount: number;
   /** Every stdio MCP server's command line — connecting one runs it locally. */
   mcpStdioCommands: string[];
-  /** Requests whose binary body points at a file on the exporter's machine. */
+  /** Requests that send a file from the exporter's machine (a binary body or a form-data file). */
   localFileRequestCount: number;
 }
 

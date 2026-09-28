@@ -40,6 +40,27 @@ describe('generateSnippet', () => {
     expect(snippet).toContain(`--data-binary '@/tmp/it'\\''s.bin'`);
   });
 
+  it('sends form-data as -F parts in curl, with files as @path', () => {
+    const snippet = generateSnippet(
+      config({
+        method: 'POST',
+        body: {
+          mode: 'form-data',
+          formData: [
+            { key: 'note', value: 'hi', enabled: true },
+            { key: 'photo', value: '', enabled: true, type: 'file', src: '/data/a.png' },
+            { key: 'off', value: 'x', enabled: false },
+          ],
+        },
+      }),
+      'curl',
+    );
+    expect(snippet).toContain(`-F 'note=hi'`);
+    expect(snippet).toContain(`-F 'photo=@/data/a.png'`);
+    expect(snippet).not.toContain('off=');
+    expect(snippet).not.toContain(' -d ');
+  });
+
   it('includes bearer auth as an Authorization header in curl', () => {
     const snippet = generateSnippet(config({ auth: { type: 'bearer', bearer: { token: 'abc123' } } }), 'curl');
     expect(snippet).toContain("-H 'Authorization: Bearer abc123'");
