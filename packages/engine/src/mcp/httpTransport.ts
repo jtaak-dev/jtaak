@@ -5,6 +5,33 @@ import type { JsonRpcMessage } from './jsonRpc.js';
 import type { McpTransport } from './transport.js';
 import type { RequestConfig } from '../types.js';
 
+/** The start of a failed answer's body, when it's text worth showing (a reason, not a web page). */
+async function excerpt(response: Response): Promise<string> {
+  const type = response.headers.get('content-type') ?? '';
+  if (/html/i.test(type)) return '';
+  const text = (await response.text().catch(() => '')).trim().replace(/\s+/g, ' ');
+  return text ? `: ${text.slice(0, 200)}${text.length > 200 ? '…' : ''}` : '';
+}
+
+/** Why an MCP server's HTTP answer failed, in words that say what to check. */
+async function failure(response: Response, url: string, hadSession: boolean): Promise<string> {
+  const answered = `${response.status} ${response.statusText}`.trim();
+  const detail = await excerpt(response);
+  if (response.status === 404 && hadSession) {
+    return `The MCP session ended (the server answered ${answered}): connect again.`;
+  }
+  if (response.status === 404 || response.status === 405 || response.status === 410) {
+    return (
+      `${url} isn't an MCP endpoint: the server answered ${answered}${detail}. Check the URL: an MCP server usually ` +
+      "answers at a path such as /mcp. A server that only speaks the older HTTP+SSE transport (an /sse URL) isn't supported."
+    );
+  }
+  if (response.status === 401 || response.status === 403) {
+    return `The MCP server refused the request (${answered})${detail}. It needs credentials: set them on the Auth or Headers tab.`;
+  }
+  return `MCP HTTP request failed: ${answered}${detail}`;
+}
+
 /**
  * MCP's "Streamable HTTP" transport: every outgoing message is its own
  * POST, and the server's response is either a single JSON body or a
@@ -51,9 +78,7 @@ export function connectHttpTransport(
     const returnedSessionId = response.headers.get('mcp-session-id');
     if (returnedSessionId) sessionId = returnedSessionId;
 
-    if (!response.ok) {
-      throw new Error(`MCP HTTP request failed: ${response.status} ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(await failure(response, url, Boolean(requestHeaders['Mcp-Session-Id'])));
     // A notification (no id) gets a bare 202 Accepted with no body.
     if (response.status === 202 || !response.body) return;
 
@@ -86,7 +111,10 @@ export function connectHttpTransport(
       return;
     }
 
-    throw new Error(`Unexpected MCP response content-type: "${contentType}"`);
+    throw new Error(
+      `${url} isn't an MCP endpoint: it answered with ${contentType ? `"${contentType.split(';')[0]}"` : 'no content type'} ` +
+        'instead of JSON-RPC (application/json or text/event-stream). Check the URL: an MCP server usually answers at a path such as /mcp.',
+    );
   }
 
   return {
