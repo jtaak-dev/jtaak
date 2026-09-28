@@ -1,6 +1,6 @@
 {
   "name": "jtaak",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Command-line API client on the jtaak engine: send HTTP requests from the terminal with `jt`.",
   "keywords": [
     "api",
