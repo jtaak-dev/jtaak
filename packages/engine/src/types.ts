@@ -995,6 +995,8 @@ export interface CollectionRunReport {
   environmentUpdates?: EnvironmentUpdates;
   /** Set when `stopOnFailure` ended the run before its last request (`items` has those that ran). */
   stoppedEarly?: boolean;
+  /** Set when the run's `signal` stopped it before its last request (`items` has those that ran). */
+  cancelled?: boolean;
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */

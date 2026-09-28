@@ -101,6 +101,33 @@ describe('runCollection', () => {
     expect(full.items).toHaveLength(3);
     expect(full.stoppedEarly).toBeUndefined();
   });
+
+  it('waits between requests with delayMs, and stops when its signal aborts', async () => {
+    const requests: RunnableRequest[] = ['a', 'b', 'c'].map((name) => ({ id: name, name, config: config() }));
+    const start = performance.now();
+    const paced = await runCollection(requests, emptyScopes(), undefined, undefined, { delayMs: 60 });
+    expect(paced.items).toHaveLength(3);
+    // Two waits: none before the first request.
+    expect(performance.now() - start).toBeGreaterThanOrEqual(110);
+    expect(paced.cancelled).toBeUndefined();
+
+    const controller = new AbortController();
+    const stopped = await runCollection(
+      requests,
+      emptyScopes(),
+      (_item, index) => {
+        // Stopped during the wait after the first request.
+        if (index === 0) setTimeout(() => controller.abort(), 20);
+      },
+      undefined,
+      { delayMs: 5_000, signal: controller.signal },
+    );
+    expect(stopped.items.map((i) => i.requestName)).toEqual(['a']);
+    expect(stopped.cancelled).toBe(true);
+
+    const before = await runCollection(requests, emptyScopes(), undefined, undefined, { signal: AbortSignal.abort() });
+    expect(before).toMatchObject({ items: [], cancelled: true });
+  });
 });
 
 describe('cookies and tokens in a run', () => {

@@ -8,6 +8,28 @@ import { MemoryOAuth2TokenStore } from '../request/oauth2.js';
 export interface RunCollectionOptions extends RunRequestOptions {
   /** Stop after the first request that fails to send or fails a test. */
   stopOnFailure?: boolean;
+  /** Waits this long between one request and the next (not before the first). */
+  delayMs?: number;
+  /**
+   * Stops the run when aborted: before the next request, or during a delay.
+   * A request already being sent finishes first. The report then has
+   * `cancelled` and the requests that ran.
+   */
+  signal?: AbortSignal;
+}
+
+/** Waits `ms`, or until the signal aborts. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
 }
 
 export interface RunnableRequest {
@@ -55,14 +77,20 @@ export async function runCollection(
   let requestsFailedToSend = 0;
   let environment = scopes.environment;
   // Without a token store, the run keeps one of its own, so its requests share a token.
-  const { stopOnFailure, ...requestOptions } = options;
+  const { stopOnFailure, delayMs = 0, signal, ...requestOptions } = options;
   const runOptions: RunRequestOptions = {
     ...requestOptions,
     oauth2Tokens: requestOptions.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
   };
   let stoppedEarly = false;
+  let cancelled = false;
 
   for (let i = 0; i < requests.length; i++) {
+    if (i > 0 && delayMs > 0) await pause(delayMs, signal);
+    if (signal?.aborted) {
+      cancelled = true;
+      break;
+    }
     const request = requests[i];
     const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile, runOptions);
     if (result.environmentUpdates) environment = applyEnvironmentUpdates(environment, result.environmentUpdates);
@@ -94,5 +122,6 @@ export async function runCollection(
     durationMs: performance.now() - start,
     ...(Object.keys(environmentUpdates).length > 0 && { environmentUpdates }),
     ...(stoppedEarly && { stoppedEarly }),
+    ...(cancelled && { cancelled }),
   };
 }
