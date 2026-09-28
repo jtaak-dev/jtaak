@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { describeError } from './errors.js';
 import { buildRequestHeaders, buildUrl } from './executor.js';
-import { verifiesTls } from './tls.js';
+import { proxyAgentFor, tlsOptionsForUrl } from './network.js';
 import type { RequestConfig, StreamEvent, StreamHandle, WebSocketProtocolConfig } from '../types.js';
 
 /**
@@ -16,7 +16,9 @@ export function openWebSocketStream(config: RequestConfig, onEvent: (event: Stre
   const headers = buildRequestHeaders(config);
   const subprotocols = (config.protocolConfig as WebSocketProtocolConfig | undefined)?.subprotocols ?? [];
 
-  const ws = new WebSocket(buildUrl(config), subprotocols, { headers, rejectUnauthorized: verifiesTls(config) });
+  const url = buildUrl(config);
+  const agent = proxyAgentFor(config, url);
+  const ws = new WebSocket(url, subprotocols, { headers, ...tlsOptionsForUrl(config, url), ...(agent && { agent }) });
 
   ws.on('open', () => onEvent({ type: 'open', timestamp: Date.now() }));
 

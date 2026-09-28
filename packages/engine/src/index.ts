@@ -12,6 +12,9 @@ export type {
   OAuth2Config,
   OAuth2GrantType,
   OAuth2Token,
+  ClientCertificate,
+  NetworkSettings,
+  ProxyConfig,
   RequestConfig,
   ExecutedResponse,
   RequestTimingPhases,
@@ -105,6 +108,7 @@ export type {
 export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION, MESSAGING_PROTOCOLS } from './types.js';
 
 export { executeRequest, buildRequestHeaders, type ExecuteOptions } from './request/executor.js';
+export { proxyFromEnvironment, proxyFor, hostMatches } from './request/network.js';
 export { openStream } from './request/streamExecutor.js';
 export type { McpStreamHandle } from './request/mcp.js';
 

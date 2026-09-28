@@ -1,6 +1,6 @@
 import type { IClientOptions, IClientPublishOptions, IPublishPacket, MqttClient } from 'mqtt';
 import { buildRequestHeaders } from '../executor.js';
-import { verifiesTls } from '../tls.js';
+import { tlsOptionsForUrl } from '../network.js';
 import type { MqttProtocolConfig, RequestConfig } from '../../types.js';
 import { optionOneOf, refuseUnsupported, type AdapterEvents, type MessagingAdapter } from './adapter.js';
 import { decodePayload, encodePayload, headerRecord } from './payload.js';
@@ -46,7 +46,8 @@ export async function connectMqtt(config: RequestConfig, events: AdapterEvents):
     keepalive: settings.keepalive ?? 60,
     connectTimeout: (settings.connectTimeout ?? 30) * 1000,
     reconnectPeriod: 0,
-    rejectUnauthorized: verifiesTls(config),
+    // mqtts:// and wss:// (tls.connect's options).
+    ...tlsOptionsForUrl(config, config.url),
     ...(settings.clientId && { clientId: settings.clientId }),
     ...(basic && { username: basic.username, password: basic.password }),
     // Only used for ws:// and wss://: the headers of the WebSocket handshake.

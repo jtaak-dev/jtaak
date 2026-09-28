@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { NativeExportDocument, RequestConfig } from '@jtaak/engine';
+import { networkSettings } from './run.js';
 
 const require = createRequire(import.meta.url);
 const TSX_CLI = require.resolve('tsx/cli');
@@ -79,9 +80,14 @@ function exportFile(overrides: Partial<NativeExportDocument> = {}, name = 'api.j
   return file;
 }
 
+// No proxy from the machine running the tests: jt would send through it.
+const HERMETIC_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !/^(https?|no)_proxy$/i.test(name)),
+);
+
 function jt(...args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [TSX_CLI, ENTRY, ...args], (error, stdout, stderr) => {
+    execFile(process.execPath, [TSX_CLI, ENTRY, ...args], { env: HERMETIC_ENV }, (error, stdout, stderr) => {
       resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout, stderr });
     });
   });
@@ -211,9 +217,50 @@ describe('jt run', () => {
     expect(withFormat.stdout).toContain('Missing');
   });
 
+  it('sends through the proxy given with --proxy', async () => {
+    const seen: string[] = [];
+    const proxy = http.createServer((req, res) => {
+      seen.push(req.url ?? '');
+      const target = new URL(req.url ?? '');
+      http.get({ host: target.hostname, port: target.port, path: target.pathname, headers: req.headers }, (answer) => {
+        res.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(res);
+      });
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    const proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
+    const { code } = await jt('run', exportFile(), '-e', 'Local', '--folder', 'Shop', '--proxy', proxyUrl);
+    proxy.close();
+    expect(code).toBe(1); // the Admin folder's request is a 404
+    expect(seen).toEqual([`${baseUrl}/login`, `${baseUrl}/me`, `${baseUrl}/missing`]);
+  });
+
   it('prints its usage with --help', async () => {
     const { code, stdout } = await jt('run', '--help');
     expect(code).toBe(0);
     expect(stdout).toContain('Usage: jt run <export file> [options]');
+  });
+});
+
+describe('networkSettings', () => {
+  it('takes the proxy from --proxy, else the environment, and the certificates from their options', () => {
+    const env = { HTTPS_PROXY: 'http://u:p@env-proxy:8080', NO_PROXY: 'localhost' };
+    expect(networkSettings({}, env)).toEqual({
+      proxy: { url: 'http://env-proxy:8080', username: 'u', password: 'p', noProxy: ['localhost'] },
+    });
+    expect(networkSettings({ noproxy: 'a.test, b.test' }, env)?.proxy?.noProxy).toEqual(['a.test', 'b.test']);
+    expect(networkSettings({ proxy: 'http://cli-proxy:3128' }, env)?.proxy).toEqual({
+      url: 'http://cli-proxy:3128',
+      noProxy: ['localhost'],
+    });
+    expect(networkSettings({}, {})).toBeUndefined();
+    expect(networkSettings({ cert: 'me.p12', pass: 'x', cacert: ['ca.pem'] }, {})).toEqual({
+      clientCertificates: [{ host: '*', pfxPath: path.resolve('me.p12'), passphrase: 'x' }],
+      caPaths: [path.resolve('ca.pem')],
+    });
+    expect(networkSettings({ cert: 'me.pem', key: 'me.key' }, {})?.clientCertificates).toEqual([
+      { host: '*', certPath: path.resolve('me.pem'), keyPath: path.resolve('me.key') },
+    ]);
+    expect(() => networkSettings({ key: 'me.key' }, {})).toThrow('--key needs --cert.');
   });
 });

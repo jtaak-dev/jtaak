@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { storableConfig } from './repository.js';
 import type {
   ExecutedResponse,
   HistoryEntry,
@@ -82,7 +83,7 @@ export function addHistoryEntry(
 ): HistoryEntrySummary {
   const id = randomUUID();
   const executedAt = input.executedAt ?? Date.now();
-  const config = input.config;
+  const config = storableConfig(input.config);
   const testResults = input.testResults ?? [];
   let response: ExecutedResponse | undefined = options.storeResponse === false ? undefined : input.response;
   let truncated = false;

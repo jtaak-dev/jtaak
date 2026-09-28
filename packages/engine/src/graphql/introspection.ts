@@ -1,4 +1,5 @@
-import type { GraphQlFieldSummary, GraphQlSchemaSummary, GraphQlTypeSummary } from '../types.js';
+import type { GraphQlFieldSummary, GraphQlSchemaSummary, GraphQlTypeSummary, NetworkSettings } from '../types.js';
+import { fetchFor } from '../request/tls.js';
 
 // Standard GraphQL introspection query (per the GraphQL spec), trimmed to
 // just what a schema browser/autocomplete UI needs: type names/kinds/
@@ -94,6 +95,9 @@ const schemaCache = new Map<string, GraphQlSchemaSummary>();
 export interface FetchGraphQlSchemaOptions {
   headers?: Record<string, string>;
   forceRefresh?: boolean;
+  /** As the request's own (`RequestConfig.verifyTls`, `RequestConfig.network`). */
+  verifyTls?: boolean;
+  network?: NetworkSettings;
 }
 
 /**
@@ -112,7 +116,7 @@ export async function fetchGraphQlSchema(
     if (cached) return cached;
   }
 
-  const response = await fetch(url, {
+  const response = await fetchFor(options)(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
     body: JSON.stringify({ query: INTROSPECTION_QUERY, operationName: 'IntrospectionSchema' }),

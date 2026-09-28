@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BaseOptions, Consumer, Message, MessagesStream, Producer } from '@platformatic/kafka';
+import { endpointOf, tlsOptionsFor } from '../network.js';
 import { verifiesTls } from '../tls.js';
 import type { KafkaProtocolConfig, RequestConfig } from '../../types.js';
 import { optionOneOf, type AdapterEvents, type MessagingAdapter } from './adapter.js';
@@ -49,6 +50,7 @@ export async function connectKafka(config: RequestConfig, events: AdapterEvents)
   const { Producer, Consumer, MessagesStreamModes, MessagesStreamFallbackModes } = await import('@platformatic/kafka');
 
   const target = brokers(config.url);
+  const first = endpointOf(`kafka://${target.bootstrapBrokers[0]}`);
   const saslMechanism = optionOneOf(settings as Record<string, unknown>, 'saslMechanism', SASL_MECHANISMS, 'PLAIN');
   const basic = config.auth.type === 'basic' ? config.auth.basic : undefined;
   const base: BaseOptions = {
@@ -59,7 +61,7 @@ export async function connectKafka(config: RequestConfig, events: AdapterEvents)
     retryDelay: 250,
     // Like Kafka's own console producer: a new topic is created on first use, if the broker allows it.
     autocreateTopics: true,
-    ...((target.tls || !verifiesTls(config)) && { tls: { rejectUnauthorized: verifiesTls(config) } }),
+    ...((target.tls || !verifiesTls(config)) && { tls: tlsOptionsFor(config, first.host, first.port) }),
     ...(basic && { sasl: { mechanism: saslMechanism, username: basic.username, password: basic.password } }),
   };
 

@@ -116,6 +116,44 @@ export interface OAuth2Token {
   obtainedAt: number;
 }
 
+/** An HTTP(S) proxy (request/network.ts). */
+export interface ProxyConfig {
+  /** `http://host:port`, or `https://host:port` for a proxy spoken to over TLS. */
+  url: string;
+  /** Basic auth for the proxy (`Proxy-Authorization`). */
+  username?: string;
+  password?: string;
+  /** Hosts reached directly: `example.com` (and its subdomains),
+   * `*.example.com` or `.example.com` (its subdomains), `*` (every host),
+   * each optionally with `:port`. */
+  noProxy?: string[];
+}
+
+/** A client certificate (mTLS), offered to the hosts `host` matches when they ask for one. */
+export interface ClientCertificate {
+  /** `api.example.com` (and its subdomains) or `*.example.com`, optionally with `:port`. */
+  host: string;
+  /** A PEM certificate and its PEM key... */
+  certPath?: string;
+  keyPath?: string;
+  /** ...or a PKCS #12 (.pfx/.p12) file holding both. */
+  pfxPath?: string;
+  /** For an encrypted key or PFX. */
+  passphrase?: string;
+}
+
+/**
+ * How connections reach servers. HTTP, GraphQL, SSE, WebSocket, gRPC, MCP
+ * over HTTP and OAuth 2.0 token requests go through the proxy; every TLS
+ * connection (messaging brokers too) uses the certificates.
+ */
+export interface NetworkSettings {
+  proxy?: ProxyConfig;
+  clientCertificates?: ClientCertificate[];
+  /** PEM files of certificate authorities to trust as well as the system's. */
+  caPaths?: string[];
+}
+
 export interface RequestConfig {
   id: string;
   name: string;
@@ -136,6 +174,11 @@ export interface RequestConfig {
    * authenticated). Applies to HTTP, GraphQL, SSE, WebSocket, gRPC over TLS
    * and MCP over HTTP (see request/tls.ts). */
   verifyTls?: boolean;
+  /** How to reach the server: a proxy, client certificates and extra
+   * certificate authorities (request/network.ts). Settings of the host
+   * application, not of the request: the host adds them when it sends, and
+   * storage, history and exports never keep them. */
+  network?: NetworkSettings;
   /** Use the cookie jar, when the caller gives one (see `ExecuteOptions`):
    * send its cookies and keep what the response sets. On unless set to
    * `false`. */
