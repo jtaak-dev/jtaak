@@ -7,6 +7,8 @@ export interface JunitOptions {
   paths?: Record<string, string[]>;
   /** When the run started; default now. */
   timestamp?: Date;
+  /** Name-value pairs about the run (the machine, the build, who ran it), as each suite's `<properties>`. */
+  properties?: Record<string, string>;
 }
 
 const escapeXml = (text: string) =>
@@ -33,6 +35,13 @@ export function junitReport(report: CollectionRunReport, options: JunitOptions):
   let tests = 0;
   let failures = 0;
   let errors = 0;
+  const properties = Object.entries(options.properties ?? {});
+  const propertiesXml =
+    properties.length > 0
+      ? `    <properties>\n${properties
+          .map(([name, value]) => `      <property name="${escapeXml(name)}" value="${escapeXml(value)}"/>`)
+          .join('\n')}\n    </properties>\n`
+      : '';
   const suites = report.items.map(({ requestId, requestName, result }) => {
     const path = options.paths?.[requestId] ?? [];
     const suite = [...path, requestName].join(' / ');
@@ -68,6 +77,7 @@ export function junitReport(report: CollectionRunReport, options: JunitOptions):
     errors += suiteErrors;
     return (
       `  <testsuite name="${escapeXml(suite)}" tests="${cases.length}" failures="${suiteFailures}" errors="${suiteErrors}" time="${time}" timestamp="${timestamp}">\n` +
+      propertiesXml +
       `${cases.join('\n')}\n` +
       `  </testsuite>`
     );

@@ -134,6 +134,22 @@ describe('junitReport', () => {
     );
   });
 
+  it("adds the run's properties to every suite", () => {
+    const xml = junitReport(
+      { ...report, items: report.items.slice(2) },
+      { name: 'Run', properties: { machine: 'build-01', note: 'a "quoted" <value>' } },
+    );
+    expect(xml).toContain(
+      [
+        '    <properties>',
+        '      <property name="machine" value="build-01"/>',
+        '      <property name="note" value="a &quot;quoted&quot; &lt;value&gt;"/>',
+        '    </properties>',
+        '    <testcase',
+      ].join('\n'),
+    );
+  });
+
   it('writes an empty run, and drops characters XML cannot hold', () => {
     const empty = junitReport({ ...report, items: [], durationMs: 0 }, { name: 'bad\u0001name' });
     expect(empty).toBe(
