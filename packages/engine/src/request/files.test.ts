@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { executeRequest } from './executor';
 import { CookieJar } from './cookieJar';
 import { fileNameOf, mediaTypeFor } from './files';
-import type { RequestConfig } from '../types';
+import type { FormField, RequestConfig } from '../types';
 
 let server: http.Server;
 let baseUrl: string;
@@ -94,6 +94,60 @@ describe('binary bodies', () => {
     await expect(executeRequest(binaryRequest(join(dir, 'missing.bin')))).rejects.toThrow(
       /Couldn't read the body file ".*missing\.bin": no such file/,
     );
+  });
+});
+
+describe('form-data file rows', () => {
+  function formRequest(formData: FormField[], mode: 'form-data' | 'urlencoded' = 'form-data'): RequestConfig {
+    return { ...binaryRequest(undefined), body: { mode, formData } };
+  }
+
+  it('send a file as a file part, named after it, next to text parts', async () => {
+    const echo = JSON.parse(
+      (
+        await executeRequest(
+          formRequest([
+            { key: 'note', value: 'hi', enabled: true },
+            { key: 'photo', value: '', enabled: true, type: 'file', src: join(dir, 'photo.PNG') },
+            { key: 'none', value: '', enabled: true, type: 'file' },
+            { key: 'off', value: '', enabled: false, type: 'file', src: join(dir, 'missing.bin') },
+          ]),
+        )
+      ).body,
+    );
+    expect(echo.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
+    const sent = Buffer.from(echo.body, 'base64');
+    const text = sent.toString('latin1');
+    expect(text).toContain('Content-Disposition: form-data; name="note"\r\n\r\nhi\r\n');
+    expect(text).toContain(
+      'Content-Disposition: form-data; name="photo"; filename="photo.PNG"\r\nContent-Type: image/png',
+    );
+    expect(sent.includes(bytes)).toBe(true);
+    expect(text).not.toContain('name="none"');
+    expect(text).not.toContain('name="off"');
+  });
+
+  it('are left out of a urlencoded body', async () => {
+    const echo = JSON.parse(
+      (
+        await executeRequest(
+          formRequest(
+            [
+              { key: 'a', value: '1', enabled: true },
+              { key: 'f', value: '', enabled: true, type: 'file', src: join(dir, 'data.bin') },
+            ],
+            'urlencoded',
+          ),
+        )
+      ).body,
+    );
+    expect(Buffer.from(echo.body, 'base64').toString()).toBe('a=1');
+  });
+
+  it("name the file when it can't be read", async () => {
+    await expect(
+      executeRequest(formRequest([{ key: 'f', value: '', enabled: true, type: 'file', src: join(dir, 'gone.txt') }])),
+    ).rejects.toThrow(/gone\.txt": no such file/);
   });
 });
 

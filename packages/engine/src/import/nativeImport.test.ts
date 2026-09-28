@@ -368,6 +368,59 @@ describe('request auth and settings', () => {
   });
 });
 
+describe('form-data file rows', () => {
+  function withFileRow(): NativeExportDocument {
+    const d = doc();
+    const upload = d.collections[0].folders[0].items[0];
+    if (upload.type === 'request') {
+      upload.config.body = {
+        mode: 'form-data',
+        formData: [
+          { key: 'note', value: 'hi', enabled: true },
+          { key: 'photo', value: '', enabled: true, type: 'file', src: 'C:/tmp/photo.png' },
+        ],
+      };
+    }
+    return d;
+  }
+
+  it('keeps their type and path through an import and a re-export', () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    importNative(db, workspaceId, validateNativeExport(withFileRow()), {
+      includeScripts: false,
+      includeEnvironments: false,
+    });
+    const api = getCollectionTree(db, workspaceId).find((c) => c.name === 'Users API')!;
+    expect(getRequest(db, api.children[0].requests[0].id)?.config.body.formData).toEqual([
+      { key: 'note', value: 'hi', enabled: true },
+      { key: 'photo', value: '', enabled: true, type: 'file', src: 'C:/tmp/photo.png' },
+    ]);
+    const exported = exportNative(
+      db,
+      workspaceId,
+      { scope: 'workspace' },
+      { includeSecrets: false, environmentIds: [] },
+    );
+    const nested = exported.collections.find((c) => c.name === 'Users API')!.folders[0].items[0];
+    expect(nested.type === 'request' && nested.config.body.formData?.[1]).toEqual({
+      key: 'photo',
+      value: '',
+      enabled: true,
+      type: 'file',
+      src: 'C:/tmp/photo.png',
+    });
+  });
+
+  it('count as sending a local file, and reject an unknown row type', () => {
+    expect(previewNativeImport(validateNativeExport(withFileRow())).localFileRequestCount).toBe(1);
+    const bad = withFileRow();
+    const upload = bad.collections[0].folders[0].items[0];
+    if (upload.type === 'request') (upload.config.body.formData![1] as { type: string }).type = 'blob';
+    expect(() => validateNativeExport(bad)).toThrow(/formData\[1\]\.type: expected one of/);
+  });
+});
+
 describe('the TLS certificate check setting', () => {
   // The fixture's request, WebSocket and MCP items with the check turned off.
   function insecureDoc(): NativeExportDocument {

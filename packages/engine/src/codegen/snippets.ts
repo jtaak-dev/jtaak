@@ -9,7 +9,7 @@ export const CODEGEN_LANGUAGES: { id: CodegenLanguage; label: string }[] = [
   { id: 'go', label: 'Go (net/http)' },
 ];
 
-function enabled(items: KeyValue[]): KeyValue[] {
+function enabled<T extends KeyValue>(items: T[]): T[] {
   return items.filter((item) => item.enabled && item.key.trim().length > 0);
 }
 
@@ -28,6 +28,7 @@ function bodyString(config: RequestConfig): string | undefined {
   if (config.body.mode === 'raw' || config.body.mode === 'json') return config.body.raw ?? '';
   if (config.body.mode === 'urlencoded' || config.body.mode === 'form-data') {
     return enabled(config.body.formData ?? [])
+      .filter((field) => field.type !== 'file')
       .map((kv) => `${kv.key}=${kv.value}`)
       .join('&');
   }
@@ -65,7 +66,13 @@ function generateCurl(config: RequestConfig): string {
   }
   const oauth2 = oauth2Header(config);
   if (oauth2) lines.push(`  -H '${escapeSingleQuotes(`Authorization: ${oauth2}`)}'`);
-  const body = bodyString(config);
+  if (config.body.mode === 'form-data') {
+    for (const field of enabled(config.body.formData ?? [])) {
+      const part = field.type === 'file' ? `${field.key}=@${field.src ?? ''}` : `${field.key}=${field.value}`;
+      lines.push(`  -F '${escapeSingleQuotes(part)}'`);
+    }
+  }
+  const body = config.body.mode === 'form-data' ? undefined : bodyString(config);
   if (body !== undefined) lines.push(`  -d '${escapeSingleQuotes(body)}'`);
   if (config.body.mode === 'binary' && config.body.binaryPath) {
     lines.push(`  --data-binary '@${escapeSingleQuotes(config.body.binaryPath)}'`);

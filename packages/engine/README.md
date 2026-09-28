@@ -48,7 +48,8 @@ request and any redirects.
 `body.mode` is `none`, `raw`, `json`, `urlencoded`, `form-data` or `binary`. A
 `binary` body sends the file at `body.binaryPath`, read and streamed when the
 request is sent, with a `Content-Type` from its extension unless a header sets
-one.
+one. A `form-data` row with `type: 'file'` sends the file at its `src` as a file
+part, named after the file.
 
 `protocol: 'graphql'` sends GraphQL over HTTP, and `protocol: 'soap'` a SOAP
 1.1 or 1.2 envelope (the raw body) as a POST with the version's content type

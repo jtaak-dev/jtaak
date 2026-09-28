@@ -7,6 +7,7 @@
 // Node builtins into browser code that can't actually run there.
 export type {
   HttpMethod,
+  FormField,
   KeyValue,
   RequestBody,
   AuthConfig,

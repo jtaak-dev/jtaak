@@ -5,6 +5,7 @@
 // compiles to a directly analyzable per-property getter instead.
 export type {
   HttpMethod,
+  FormField,
   KeyValue,
   RequestBody,
   AuthConfig,

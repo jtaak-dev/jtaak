@@ -31,6 +31,21 @@ describe('parseCurlCommand', () => {
     expect(parseCurlCommand(`curl https://x.test --data-binary 'a=1'`).body).toEqual({ mode: 'raw', raw: 'a=1' });
   });
 
+  it('reads -F parts as form-data, with @path parts as files', () => {
+    const config = parseCurlCommand(
+      `curl https://x.test/f -F 'note=hi' -F 'photo=@/data/a.png;type=image/png' --form-string 'raw=@not-a-file'`,
+    );
+    expect(config.method).toBe('POST');
+    expect(config.body).toEqual({
+      mode: 'form-data',
+      formData: [
+        { key: 'note', value: 'hi', enabled: true },
+        { key: 'photo', value: '', enabled: true, type: 'file', src: '/data/a.png' },
+        { key: 'raw', value: '@not-a-file', enabled: true },
+      ],
+    });
+  });
+
   it('parses headers, including quoted values with spaces', () => {
     const config = parseCurlCommand(
       `curl https://api.example.com/users -H 'Content-Type: application/json' -H "X-Custom: some value"`,

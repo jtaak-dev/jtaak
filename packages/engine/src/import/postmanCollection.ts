@@ -4,6 +4,7 @@ import { createCollectionNode, createRequest } from '../storage/repository.js';
 import { unsupportedPostmanCalls } from '../scripting/postman.js';
 import type {
   AuthConfig,
+  FormField,
   HttpMethod,
   ImportResult,
   KeyValue,
@@ -29,7 +30,8 @@ interface PostmanBody {
   raw?: string;
   options?: { raw?: { language?: string } };
   urlencoded?: PostmanKeyValue[];
-  formdata?: (PostmanKeyValue & { type?: string })[];
+  /** A file row's `src` is its path, or several paths (one part each). */
+  formdata?: (PostmanKeyValue & { type?: string; src?: string | string[] | null })[];
   /** A `file` body: the path of the file to send. */
   file?: { src?: string };
 }
@@ -80,9 +82,17 @@ function convertBody(body: PostmanBody | undefined): RequestBody {
     return { mode: 'urlencoded', formData: toKeyValues(body.urlencoded) };
   }
   if (body.mode === 'formdata') {
-    return { mode: 'form-data', formData: toKeyValues((body.formdata ?? []).filter((entry) => entry.type !== 'file')) };
+    return { mode: 'form-data', formData: (body.formdata ?? []).flatMap(toFormFields) };
   }
   return { mode: 'none' };
+}
+
+function toFormFields(entry: PostmanKeyValue & { type?: string; src?: string | string[] | null }): FormField[] {
+  const [row] = toKeyValues([entry]);
+  if (entry.type !== 'file') return [row];
+  const paths = Array.isArray(entry.src) ? entry.src : entry.src ? [entry.src] : [];
+  const file = { ...row, value: '', type: 'file' as const };
+  return paths.length === 0 ? [file] : paths.map((src) => ({ ...file, src }));
 }
 
 function toKeyValues(list: PostmanKeyValue[] | undefined): KeyValue[] {

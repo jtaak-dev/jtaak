@@ -30,6 +30,7 @@ import {
   type EngineProfile,
   type ExportScope,
   type HttpMethod,
+  type FormField,
   type KeyValue,
   type Protocol,
   type RequestBody,
@@ -108,12 +109,30 @@ function strList(value: unknown, path: string): string[] {
   return value === undefined ? [] : arr(value, path).map((v, i) => str(v, `${path}[${i}]`));
 }
 
+function keyValue(entry: unknown, path: string): KeyValue {
+  const kv = obj(entry, path);
+  return {
+    key: str(kv.key, `${path}.key`),
+    value: str(kv.value ?? '', `${path}.value`),
+    enabled: kv.enabled !== false,
+  };
+}
+
 function keyValues(value: unknown, path: string): KeyValue[] {
+  if (value === undefined) return [];
+  return arr(value, path).map((entry, i) => keyValue(entry, `${path}[${i}]`));
+}
+
+function formFields(value: unknown, path: string): FormField[] {
   if (value === undefined) return [];
   return arr(value, path).map((entry, i) => {
     const p = `${path}[${i}]`;
-    const kv = obj(entry, p);
-    return { key: str(kv.key, `${p}.key`), value: str(kv.value ?? '', `${p}.value`), enabled: kv.enabled !== false };
+    const out: FormField = keyValue(entry, p);
+    const field = obj(entry, p);
+    if (field.type !== undefined) out.type = oneOf(field.type, ['text', 'file'] as const, `${p}.type`);
+    const src = optStr(field.src, `${p}.src`);
+    if (src !== undefined) out.src = src;
+    return out;
   });
 }
 
@@ -184,7 +203,7 @@ function body(value: unknown, path: string): RequestBody {
   const out: RequestBody = { mode: oneOf(b.mode, BODY_MODES, `${path}.mode`) };
   const raw = optStr(b.raw, `${path}.raw`);
   if (raw !== undefined) out.raw = raw;
-  if (b.formData !== undefined) out.formData = keyValues(b.formData, `${path}.formData`);
+  if (b.formData !== undefined) out.formData = formFields(b.formData, `${path}.formData`);
   const binaryPath = optStr(b.binaryPath, `${path}.binaryPath`);
   if (binaryPath !== undefined) out.binaryPath = binaryPath;
   return out;
@@ -367,6 +386,11 @@ function walk(
   return { folderCount, itemCount };
 }
 
+function sendsLocalFile(body: RequestBody): boolean {
+  if (body.mode === 'binary') return Boolean(body.binaryPath);
+  return body.mode === 'form-data' && (body.formData ?? []).some((field) => field.type === 'file' && field.src);
+}
+
 /** What an import would create, plus the things worth warning about — shown
  * to the user before they confirm. */
 export function previewNativeImport(doc: NativeExportDocument): NativeImportPreview {
@@ -376,7 +400,7 @@ export function previewNativeImport(doc: NativeExportDocument): NativeImportPrev
   const visit = (i: NativeExportItem) => {
     if (i.type === 'request') {
       if (i.config.preRequestScript?.trim() || i.config.testScript?.trim()) scriptRequestCount++;
-      if (i.config.body.mode === 'binary' && i.config.body.binaryPath) localFileRequestCount++;
+      if (sendsLocalFile(i.config.body)) localFileRequestCount++;
     } else if ((i.type === 'websocket' || i.type === 'messaging') && i.testScript?.trim()) {
       scriptRequestCount++;
     } else if (i.type === 'mcp' && i.transport === 'stdio') {

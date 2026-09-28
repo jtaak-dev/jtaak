@@ -1,4 +1,4 @@
-import type { HttpMethod, KeyValue, RequestConfig } from '../types.js';
+import type { FormField, HttpMethod, KeyValue, RequestConfig } from '../types.js';
 
 /** Splits a curl command into tokens, respecting single- and double-quoted
  * strings (including escaped quotes) so header values containing spaces
@@ -39,6 +39,16 @@ function tokenize(command: string): string[] {
   return tokens;
 }
 
+/** A `-F name=value` or `-F name=@path;type=...` part. */
+function parseFormField(value: string, literal: boolean): FormField {
+  const separatorIndex = value.indexOf('=');
+  const key = separatorIndex === -1 ? value : value.slice(0, separatorIndex);
+  const content = separatorIndex === -1 ? '' : value.slice(separatorIndex + 1);
+  if (literal || !content.startsWith('@')) return { key, value: content, enabled: true };
+  // `;type=` and `;filename=` after the path aren't kept: the type comes from the file's extension.
+  return { key, value: '', enabled: true, type: 'file', src: content.slice(1).split(';')[0] };
+}
+
 function parseHeader(value: string): KeyValue {
   const separatorIndex = value.indexOf(':');
   if (separatorIndex === -1) return { key: value.trim(), value: '', enabled: true };
@@ -60,6 +70,7 @@ export function parseCurlCommand(command: string): RequestConfig {
   let basicAuth: { username: string; password: string } | undefined;
   let insecure = false;
   let binaryPath: string | undefined;
+  const formData: FormField[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -80,6 +91,11 @@ export function parseCurlCommand(command: string): RequestConfig {
         else rawBody = data;
         break;
       }
+      case '-F':
+      case '--form':
+      case '--form-string':
+        formData.push(parseFormField(tokens[++i] ?? '', token === '--form-string'));
+        break;
       case '-T':
       case '--upload-file':
         binaryPath = tokens[++i];
@@ -129,16 +145,18 @@ export function parseCurlCommand(command: string): RequestConfig {
   return {
     id: 'imported-curl',
     name: 'Imported from cURL',
-    method: method ?? (rawBody !== undefined || binaryPath !== undefined ? 'POST' : 'GET'),
+    method: method ?? (rawBody !== undefined || binaryPath !== undefined || formData.length > 0 ? 'POST' : 'GET'),
     url,
     params: [],
     headers,
     body:
-      binaryPath !== undefined
-        ? { mode: 'binary', binaryPath }
-        : rawBody !== undefined
-          ? { mode: 'raw', raw: rawBody }
-          : { mode: 'none' },
+      formData.length > 0
+        ? { mode: 'form-data', formData }
+        : binaryPath !== undefined
+          ? { mode: 'binary', binaryPath }
+          : rawBody !== undefined
+            ? { mode: 'raw', raw: rawBody }
+            : { mode: 'none' },
     auth: basicAuth ? { type: 'basic', basic: basicAuth } : { type: 'none' },
     ...(insecure && { verifyTls: false }),
   };
