@@ -142,6 +142,30 @@ export const MIGRATIONS: Migration[] = [
       db.exec(MESSAGING_CONNECTIONS_SQL);
     },
   },
+  {
+    // A cookie jar per workspace (storage/cookies.ts): what responses set,
+    // one row per domain, path and name, deleted with the workspace.
+    version: 5,
+    name: 'cookies',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS cookies (
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          domain TEXT NOT NULL,
+          path TEXT NOT NULL,
+          name TEXT NOT NULL,
+          value TEXT NOT NULL,
+          host_only INTEGER NOT NULL,
+          expires_at INTEGER,
+          secure INTEGER NOT NULL,
+          http_only INTEGER NOT NULL,
+          same_site TEXT,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (workspace_id, domain, path, name)
+        );
+      `);
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {
