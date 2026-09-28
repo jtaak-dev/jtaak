@@ -44,6 +44,8 @@ jobs:
         env:
           JTAAK_REQUIRE_CONTAINERS: '1'
       - run: pnpm build
+      # The engine's benchmarks, against the built package; the table goes to the job summary.
+      - run: pnpm --filter @jtaak/engine bench
       # Both packages as they will be published: layout and type resolution.
       - run: pnpm check:pack
       # Installs the packed engine and CLI with npm into an empty folder and
