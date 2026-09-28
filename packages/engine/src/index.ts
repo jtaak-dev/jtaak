@@ -131,6 +131,7 @@ export {
   SOAP_ENVELOPE_NAMESPACES,
   type SoapFault,
 } from './request/soap.js';
+export { aiStreamText, type AiStreamFormat, type AiStreamText } from './request/aiStream.js';
 export { CookieJar, type CookieKey, type StoredCookie } from './request/cookieJar.js';
 export { parseDigestChallenge, digestAuthorization, type DigestChallenge, type DigestInput } from './request/digest.js';
 export {

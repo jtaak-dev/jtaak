@@ -34,7 +34,8 @@ export function buildUrl(config: RequestConfig): string {
   return url.toString();
 }
 
-async function buildBody(config: RequestConfig): Promise<BodyInit | undefined> {
+/** A request's body as `fetch` sends it (files are read now). */
+export async function buildBody(config: RequestConfig): Promise<BodyInit | undefined> {
   switch (config.body.mode) {
     case 'none':
       return undefined;

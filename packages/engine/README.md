@@ -58,6 +58,13 @@ starts one, and `parseSoapFault(body)` reads a fault's code, reason and
 detail. For long-lived connections
 (`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`.
 
+An `sse` request is sent with its own method and body, so a POST with a JSON
+body streams an AI API's answer (OpenAI, Anthropic and the APIs compatible
+with them, Gemini). `aiStreamText(messages)` puts together the text those
+events carry, and knows which API's format they're in; it reads a whole,
+not-streamed answer too. A failed response's error includes the start of its
+body, where such APIs say why.
+
 ## gRPC
 
 A gRPC request's `protocolConfig` names the service and method, and where

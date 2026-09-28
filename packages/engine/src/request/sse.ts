@@ -1,5 +1,5 @@
 import { describeError } from './errors.js';
-import { buildRequestHeaders, buildUrl, hasHeader } from './executor.js';
+import { buildBody, buildRequestHeaders, buildUrl, hasHeader } from './executor.js';
 import { fetchFor } from './tls.js';
 import type { RequestConfig, SseMessage, StreamEvent, StreamHandle } from '../types.js';
 
@@ -62,12 +62,19 @@ export class SseFrameParser {
   }
 }
 
+/** How much of a failed response's body goes in the error (an API's reason for a 401 or 400, say). */
+const ERROR_BODY_LIMIT = 2000;
+
 /**
- * Opens an SSE connection: GETs `config.url` with `Accept: text/event-stream`
- * and feeds the response body's stream through `SseFrameParser`, emitting one
- * `StreamEvent` per dispatched message. `close()` aborts the underlying
- * fetch — the read loop's own catch treats that as a clean close, not an
- * error, since it was requested.
+ * Opens an SSE connection: sends the request (`config.method`, GET for a
+ * plain event stream, or POST with its body, as AI APIs stream their
+ * answers) with `Accept: text/event-stream`, and feeds the response body's
+ * stream through `SseFrameParser`, emitting one `StreamEvent` per
+ * dispatched message. A failed response's error includes the start of its
+ * body; a response that isn't an event stream (a request that didn't ask to
+ * stream) arrives as one message holding its whole body. `close()` aborts
+ * the underlying fetch — the read loop's own catch treats that as a clean
+ * close, not an error, since it was requested.
  */
 export function openSseStream(config: RequestConfig, onEvent: (event: StreamEvent) => void): StreamHandle {
   const controller = new AbortController();
@@ -78,16 +85,34 @@ export function openSseStream(config: RequestConfig, onEvent: (event: StreamEven
       const headers = buildRequestHeaders(config);
       if (!hasHeader(headers, 'accept')) headers.Accept = 'text/event-stream';
 
-      const response = await fetchFor(config)(buildUrl(config), { method: 'GET', headers, signal: controller.signal });
+      const method = config.method === 'HEAD' ? 'GET' : config.method;
+      const body = method === 'GET' ? undefined : await buildBody(config);
+      const response = await fetchFor(config)(buildUrl(config), {
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      });
       if (!response.ok || !response.body) {
+        const detail = (await response.text().catch(() => '')).trim().slice(0, ERROR_BODY_LIMIT);
         onEvent({
           type: 'error',
-          data: { message: `SSE connection failed: ${response.status} ${response.statusText}` },
+          data: {
+            message: `SSE connection failed: ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`,
+            status: response.status,
+          },
           timestamp: Date.now(),
         });
         return;
       }
       onEvent({ type: 'open', timestamp: Date.now() });
+
+      if (!/text\/event-stream/i.test(response.headers.get('content-type') ?? '')) {
+        const message: SseMessage = { event: 'message', data: await response.text() };
+        onEvent({ type: 'message', data: message, timestamp: Date.now() });
+        onEvent({ type: 'close', timestamp: Date.now() });
+        return;
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
