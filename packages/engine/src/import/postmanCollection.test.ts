@@ -80,6 +80,33 @@ describe('importPostmanCollection', () => {
     expect(full.config.body).toEqual({ mode: 'json', raw: '{"item":"widget"}' });
   });
 
+  it('imports a file body as a binary body with its path', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+
+    const result = importPostmanCollection(db, workspace.id, {
+      info: { name: 'API' },
+      item: [
+        {
+          name: 'Upload',
+          request: {
+            method: 'PUT',
+            url: 'https://api.example.com/f',
+            body: { mode: 'file', file: { src: '/data/photo.png' } },
+          },
+        },
+        {
+          name: 'No file',
+          request: { method: 'PUT', url: 'https://api.example.com/f', body: { mode: 'file', file: {} } },
+        },
+      ],
+    });
+
+    const [upload, none] = getCollectionTree(db, workspace.id).find((n) => n.id === result.collectionId)!.requests;
+    expect(getRequest(db, upload.id)!.config.body).toEqual({ mode: 'binary', binaryPath: '/data/photo.png' });
+    expect(getRequest(db, none.id)!.config.body).toEqual({ mode: 'binary' });
+  });
+
   it("turns off the TLS certificate check where Postman's strictSSL is false", () => {
     const db = freshDb();
     const { workspace } = getOrCreateDefaultWorkspace(db);

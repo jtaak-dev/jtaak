@@ -30,6 +30,8 @@ interface PostmanBody {
   options?: { raw?: { language?: string } };
   urlencoded?: PostmanKeyValue[];
   formdata?: (PostmanKeyValue & { type?: string })[];
+  /** A `file` body: the path of the file to send. */
+  file?: { src?: string };
 }
 interface PostmanAuth {
   type?: string;
@@ -68,7 +70,8 @@ function findValue(list: PostmanKeyValue[] | undefined, key: string): string {
 }
 
 function convertBody(body: PostmanBody | undefined): RequestBody {
-  if (!body?.mode || body.mode === 'file' || body.mode === 'graphql') return { mode: 'none' };
+  if (!body?.mode || body.mode === 'graphql') return { mode: 'none' };
+  if (body.mode === 'file') return { mode: 'binary', ...(body.file?.src && { binaryPath: body.file.src }) };
   if (body.mode === 'raw') {
     const isJson = body.options?.raw?.language === 'json';
     return { mode: isJson ? 'json' : 'raw', raw: body.raw ?? '' };

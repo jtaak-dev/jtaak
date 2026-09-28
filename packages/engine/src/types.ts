@@ -37,6 +37,9 @@ export interface RequestBody {
   mode: 'none' | 'raw' | 'json' | 'form-data' | 'urlencoded' | 'binary';
   raw?: string;
   formData?: KeyValue[];
+  /** A `binary` body's file, read and streamed when the request is sent (a
+   * relative path is from the working directory). Its Content-Type comes from
+   * the file's extension unless a header sets one. */
   binaryPath?: string;
 }
 

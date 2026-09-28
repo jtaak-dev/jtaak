@@ -32,6 +32,14 @@ describe('generateSnippet', () => {
     expect(snippet).toContain(`-d '{"name":"jtaak"}'`);
   });
 
+  it("sends a binary body's file with --data-binary in curl", () => {
+    const snippet = generateSnippet(
+      config({ method: 'PUT', body: { mode: 'binary', binaryPath: "/tmp/it's.bin" } }),
+      'curl',
+    );
+    expect(snippet).toContain(`--data-binary '@/tmp/it'\\''s.bin'`);
+  });
+
   it('includes bearer auth as an Authorization header in curl', () => {
     const snippet = generateSnippet(config({ auth: { type: 'bearer', bearer: { token: 'abc123' } } }), 'curl');
     expect(snippet).toContain("-H 'Authorization: Bearer abc123'");

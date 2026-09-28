@@ -67,6 +67,9 @@ function generateCurl(config: RequestConfig): string {
   if (oauth2) lines.push(`  -H '${escapeSingleQuotes(`Authorization: ${oauth2}`)}'`);
   const body = bodyString(config);
   if (body !== undefined) lines.push(`  -d '${escapeSingleQuotes(body)}'`);
+  if (config.body.mode === 'binary' && config.body.binaryPath) {
+    lines.push(`  --data-binary '@${escapeSingleQuotes(config.body.binaryPath)}'`);
+  }
   return lines.join(' \\\n');
 }
 

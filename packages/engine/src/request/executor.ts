@@ -4,6 +4,7 @@ import type { CookieJar } from './cookieJar.js';
 import { digestAuthorization, parseDigestChallenge } from './digest.js';
 import { soapAsHttp } from './soap.js';
 import { withErrorDetail } from './errors.js';
+import { fileBody } from './files.js';
 import { timingPhases, withTiming } from './timing.js';
 import { fetchFor } from './tls.js';
 
@@ -33,7 +34,7 @@ export function buildUrl(config: RequestConfig): string {
   return url.toString();
 }
 
-function buildBody(config: RequestConfig): BodyInit | undefined {
+async function buildBody(config: RequestConfig): Promise<BodyInit | undefined> {
   switch (config.body.mode) {
     case 'none':
       return undefined;
@@ -54,6 +55,9 @@ function buildBody(config: RequestConfig): BodyInit | undefined {
       }
       return form;
     }
+    case 'binary':
+      // Its Content-Type comes from the file's extension unless a header sets one.
+      return config.body.binaryPath ? fileBody(config.body.binaryPath) : undefined;
     default:
       return undefined;
   }
@@ -215,7 +219,7 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
   } = await withTiming(async () => {
     try {
       const url = buildUrl(config);
-      const body = hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined;
+      const body = hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : await buildBody(config)) : undefined;
       const send = async (sent: Record<string, string>): Promise<{ response: Response; setCookies: string[] }> => {
         if (jar) return fetchWithJar(config, jar, { url, method, headers: sent, body });
         const response = await fetchFor(config)(url, { method, headers: sent, body });

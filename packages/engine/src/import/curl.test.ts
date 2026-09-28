@@ -19,6 +19,18 @@ describe('parseCurlCommand', () => {
     expect(config.body).toEqual({ mode: 'raw', raw: '{"name":"x"}' });
   });
 
+  it('reads --data-binary @file and --upload-file as a binary body', () => {
+    const posted = parseCurlCommand(`curl https://api.example.com/f --data-binary '@C:/data/photo.png'`);
+    expect(posted.method).toBe('POST');
+    expect(posted.body).toEqual({ mode: 'binary', binaryPath: 'C:/data/photo.png' });
+
+    const uploaded = parseCurlCommand('curl -T ./report.pdf https://api.example.com/f');
+    expect(uploaded.method).toBe('PUT');
+    expect(uploaded.body).toEqual({ mode: 'binary', binaryPath: './report.pdf' });
+
+    expect(parseCurlCommand(`curl https://x.test --data-binary 'a=1'`).body).toEqual({ mode: 'raw', raw: 'a=1' });
+  });
+
   it('parses headers, including quoted values with spaces', () => {
     const config = parseCurlCommand(
       `curl https://api.example.com/users -H 'Content-Type: application/json' -H "X-Custom: some value"`,

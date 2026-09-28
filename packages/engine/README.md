@@ -45,6 +45,11 @@ TLS time). The phases come from the diagnostics-channel events Node's `fetch`
 publishes; they don't add up to `durationMs`, which also covers building the
 request and any redirects.
 
+`body.mode` is `none`, `raw`, `json`, `urlencoded`, `form-data` or `binary`. A
+`binary` body sends the file at `body.binaryPath`, read and streamed when the
+request is sent, with a `Content-Type` from its extension unless a header sets
+one.
+
 `protocol: 'graphql'` sends GraphQL over HTTP, and `protocol: 'soap'` a SOAP
 1.1 or 1.2 envelope (the raw body) as a POST with the version's content type
 and action (`protocolConfig: { version, action }`); `soapEnvelopeTemplate`
