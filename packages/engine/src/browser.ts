@@ -40,6 +40,7 @@ export type {
 export { emptyScopes, MESSAGING_PROTOCOLS } from './types.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
+export { parseSetCookie, type SetCookie } from './request/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
 export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';

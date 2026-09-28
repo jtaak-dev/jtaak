@@ -107,6 +107,7 @@ export { parseGrpcProto, clearGrpcProtoCache } from './request/grpcProto.js';
 export { executeGrpcUnaryCall } from './request/grpc.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
+export { parseSetCookie, type SetCookie } from './request/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
 export type { ScriptContext } from './scripting/sandbox.js';
