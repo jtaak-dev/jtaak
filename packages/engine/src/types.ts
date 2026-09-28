@@ -990,6 +990,8 @@ export interface ImportResult {
   requestCount: number;
   /** Postman imports: each request whose scripts call parts of Postman's API the sandbox doesn't have. */
   scriptWarnings?: { requestName: string; calls: string[] }[];
+  /** What was left out (WSDL imports: an import that couldn't be read, a port that isn't SOAP). */
+  warnings?: string[];
 }
 
 export type CodegenLanguage = 'curl' | 'js-fetch' | 'js-axios' | 'python-requests' | 'go';
