@@ -93,3 +93,118 @@ export function aiStreamText(messages: Pick<SseMessage, 'data'>[]): AiStreamText
   }
   return format ? { format, text } : undefined;
 }
+
+/** The tokens an AI API says a request used, and the model it named. */
+export interface AiUsage {
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+const num = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/** What one message's JSON says about usage and the model (each API puts them somewhere else). */
+function usageIn(json: Record<string, unknown>): AiUsage {
+  const found: AiUsage = {};
+  const model =
+    str(json.model) ??
+    str(get(json, 'message', 'model')) ??
+    str(get(json, 'response', 'model')) ??
+    str(json.modelVersion);
+  if (model) found.model = model.replace(/^models\//, '');
+  // OpenAI chat completions: usage.prompt_tokens / completion_tokens (the last chunk, with stream_options.include_usage).
+  // OpenAI Responses and Anthropic: usage.input_tokens / output_tokens (Responses: in response.usage; Anthropic:
+  // message.usage at the start, usage.output_tokens in message_delta).
+  const usage = (get(json, 'usage') ?? get(json, 'response', 'usage') ?? get(json, 'message', 'usage')) as unknown;
+  if (usage && typeof usage === 'object') {
+    const input =
+      num(get(usage, 'prompt_tokens')) ??
+      (num(get(usage, 'input_tokens')) !== undefined
+        ? (num(get(usage, 'input_tokens')) ?? 0) +
+          (num(get(usage, 'cache_read_input_tokens')) ?? 0) +
+          (num(get(usage, 'cache_creation_input_tokens')) ?? 0)
+        : undefined);
+    const output = num(get(usage, 'completion_tokens')) ?? num(get(usage, 'output_tokens'));
+    const total = num(get(usage, 'total_tokens'));
+    if (input !== undefined) found.inputTokens = input;
+    if (output !== undefined) found.outputTokens = output;
+    if (total !== undefined) found.totalTokens = total;
+  }
+  // Gemini: usageMetadata.
+  const metadata = get(json, 'usageMetadata');
+  if (metadata && typeof metadata === 'object') {
+    const input = num(get(metadata, 'promptTokenCount'));
+    const output = num(get(metadata, 'candidatesTokenCount'));
+    const total = num(get(metadata, 'totalTokenCount'));
+    if (input !== undefined) found.inputTokens = input;
+    if (output !== undefined) found.outputTokens = output;
+    if (total !== undefined) found.totalTokens = total;
+  }
+  return found;
+}
+
+/**
+ * The token usage an AI API reports in its messages (or a whole JSON
+ * answer), with the model: the latest value of each, as later messages
+ * update them (Anthropic's output tokens grow with each message_delta).
+ * The total is input plus output when the API doesn't give one. Undefined
+ * when no message reports usage.
+ */
+export function aiUsage(messages: Pick<SseMessage, 'data'>[]): AiUsage | undefined {
+  const usage: AiUsage = {};
+  let reported = false;
+  for (const message of messages) {
+    const json = parse(message.data);
+    if (!json) continue;
+    const found = usageIn(json);
+    if (found.model && !usage.model) usage.model = found.model;
+    for (const key of ['inputTokens', 'outputTokens', 'totalTokens'] as const) {
+      if (found[key] !== undefined) {
+        usage[key] = found[key];
+        reported = true;
+      }
+    }
+  }
+  if (!reported) return undefined;
+  if (usage.totalTokens === undefined && (usage.inputTokens !== undefined || usage.outputTokens !== undefined)) {
+    usage.totalTokens = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  }
+  return usage;
+}
+
+/** A model's price, in US dollars per million tokens. */
+export interface AiModelPrice {
+  /** The model id as the API names it; also matches its dated snapshots (`<model>-2025-04-14`, `<model>-20251001`). */
+  model: string;
+  inputPerMillion: number;
+  outputPerMillion: number;
+}
+
+const SNAPSHOT_SUFFIX = /^(?:-\d{4}-\d{2}-\d{2}|-\d{8}|@\d{8})$/;
+
+/** The price for a model: its own entry, or the entry its dated snapshot belongs to. Never a longer model's. */
+export function aiModelPrice(model: string, prices: readonly AiModelPrice[]): AiModelPrice | undefined {
+  const id = model.trim().toLowerCase();
+  return (
+    prices.find((price) => price.model.trim().toLowerCase() === id) ??
+    prices.find((price) => {
+      const base = price.model.trim().toLowerCase();
+      return id.startsWith(base) && SNAPSHOT_SUFFIX.test(id.slice(base.length));
+    })
+  );
+}
+
+/** What a request's tokens cost at its model's price, in US dollars; undefined when the model isn't priced. */
+export function aiCost(
+  usage: AiUsage,
+  prices: readonly AiModelPrice[],
+): { cost: number; price: AiModelPrice } | undefined {
+  if (!usage.model) return undefined;
+  const price = aiModelPrice(usage.model, prices);
+  if (!price) return undefined;
+  const cost =
+    ((usage.inputTokens ?? 0) * price.inputPerMillion + (usage.outputTokens ?? 0) * price.outputPerMillion) / 1_000_000;
+  return { cost, price };
+}

@@ -65,6 +65,13 @@ events carry, and knows which API's format they're in; it reads a whole,
 not-streamed answer too. A failed response's error includes the start of its
 body, where such APIs say why.
 
+`aiUsage(messages)` reads the tokens such an API reports (input, cached input
+included; output; total) and the model, from a stream or a whole answer.
+`aiCost(usage, prices)` prices them with a table you give it, per million
+tokens; a price applies to its model id and that model's dated snapshots
+(`claude-haiku-4-5-20251001`), never to another model whose id starts the
+same way. Prompt caching and batch discounts aren't counted.
+
 ## gRPC
 
 A gRPC request's `protocolConfig` names the service and method, and where
