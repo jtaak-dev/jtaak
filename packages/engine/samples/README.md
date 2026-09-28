@@ -19,7 +19,7 @@ for that reason.
 
 | Section | Collection | What it shows |
 |---|---|---|
-| API | **Sample — HTTP** (40 requests) | See the breakdown below. |
+| API | **Sample — HTTP** (43 requests) | See the breakdown below. |
 | API | **Sample — GraphQL** (7) | See the breakdown below. |
 | API | **Sample — Server-Sent Events** (3) | Named events with ids, and the same with tests on what arrives; a busy live stream (Wikimedia recent edits). |
 | API | **Sample — gRPC** (10) | See the breakdown below. |
@@ -34,10 +34,16 @@ for that reason.
 - query params and headers, including disabled rows
 - `{{variables}}` in the path, params and headers
 - JSON, raw text, urlencoded and multipart bodies
+- **Files:** a binary body, and a multipart form with a file field, both
+  sending [`sample-upload.txt`](./sample-upload.txt). The path is relative,
+  so run the sample from this folder (`jt run jtaak-sample-workspace.jt`
+  from `samples/`)
+- **Response examples:** **REST CRUD → Get one post** keeps two, *Found*
+  and *Not found*, as examples of what it returns
 - Basic, Bearer and API-key auth, sent as a header or in the query string;
-  Digest auth; and OAuth 2.0 client credentials (set `oauthTokenUrl`,
+  Digest auth; OAuth 2.0 client credentials (set `oauthTokenUrl`,
   `oauthClientId` and `oauthClientSecret` in the environment for your
-  provider)
+  provider); and a client certificate (mutual TLS, see below)
 - **Cookies:** a response that sets a cookie (through a redirect), a
   request that sends it back, and one with the cookie jar turned off
 - a test script written for Postman (`pm.test`, `pm.expect`,
@@ -112,6 +118,28 @@ to a different server.
   which a port published on localhost counts as.) For Socket.IO, point the
   connection at your own server.
 
+### Things to try
+
+- **A client certificate (mutual TLS):** **Authentication → Client
+  certificate** calls badssl.com's test server, which answers 400 until you
+  send it a certificate. Download
+  [`badssl.com-client.pem`](https://badssl.com/certs/badssl.com-client.pem)
+  (the certificate and its key in one file, passphrase `badssl.com`), then
+  run it with the certificate:
+
+  ```
+  jt run jtaak-sample-workspace.jt -e "Sample — httpbin" --folder "Sample — HTTP/Authentication" \
+    --cert badssl.com-client.pem --key badssl.com-client.pem --pass badssl.com
+  ```
+
+  (In code, that's `network.clientCertificates` on the request.) Save it, and send it again: 200.
+- **A SOAP service from its WSDL:** `importWsdl(db, workspaceId, await
+  loadWsdl('http://www.dneonline.com/calculator.asmx?WSDL'))` makes the
+  **Sample — SOAP** calculator's requests (and Subtract and Divide) from
+  the service's own description, with an envelope for each operation.
+- **A proxy:** set `HTTPS_PROXY` (and `NO_PROXY`), or pass `--proxy`, and
+  `jt run` sends everything through it.
+
 ### Good to know
 
 - The local MCP servers need [Node.js](https://nodejs.org). The first time
@@ -120,6 +148,7 @@ to a different server.
   and so on) are placeholders that the public test services accept. They
   aren't real accounts.
 - **Scripts & tests → "A failing test (on purpose)"** is meant to fail, so
-  you can see what a failed test looks like.
+  you can see what a failed test looks like. **Authentication → Client
+  certificate** fails too until you give it the certificate.
 - These are free public services run by others. If one is slow or briefly
   unavailable, try again later, or switch to the other environment.

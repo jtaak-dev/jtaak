@@ -1,0 +1,2 @@
+Hello from a file.
+This is sample-upload.txt, which the sample workspace's file requests send.

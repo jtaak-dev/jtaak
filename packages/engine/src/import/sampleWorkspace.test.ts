@@ -34,6 +34,10 @@ describe('samples/jtaak-sample-workspace.jt', () => {
     const preview = previewNativeImport(doc);
     expect(preview.environments.length).toBeGreaterThan(0);
     expect(preview.scriptRequestCount).toBeGreaterThan(0);
+    // A binary body and a form-data file, both sending sample-upload.txt, which is next to it.
+    expect(preview.localFileRequestCount).toBe(2);
+    expect(fs.existsSync(fileURLToPath(new URL('../../samples/sample-upload.txt', import.meta.url)))).toBe(true);
+    expect(text).toContain('"examples": [');
   });
 
   it('imports cleanly and re-exports to the same file', () => {
