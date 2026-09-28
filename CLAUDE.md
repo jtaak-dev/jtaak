@@ -20,6 +20,7 @@ pnpm build:engine
 pnpm format                # Prettier; CI runs pnpm format:check
 pnpm check:pack            # publint (+ arethetypeswrong for the engine) on the packed packages
 pnpm check:install         # packs both, installs them with npm into an empty folder, runs `jt` (needs network)
+pnpm bench                 # builds the engine, then packages/engine/bench/bench.mjs against dist/ (--quick: a tenth)
 ```
 
 Single tests use Vitest directly:
@@ -32,7 +33,7 @@ pnpm --filter jtaak start GET https://httpbin.org/get   # run the CLI from sourc
 
 The CLI imports the engine through its built `dist/`; `pnpm test` and `pnpm typecheck` build it first, otherwise run `pnpm build:engine` after changing the engine.
 
-CI (`.github/workflows/ci.yml`) runs a DCO sign-off check on pull requests, then install, format:check, lint, typecheck, test, build, check:pack and check:install. `.github/workflows/publish.yml` publishes both packages on a `v*` tag, using npm trusted publishing (no token); the tag must match both package versions.
+CI (`.github/workflows/ci.yml`) runs a DCO sign-off check on pull requests, then install, format:check, lint, typecheck, test, build, the benchmarks (their table goes to the job summary; they report, they don't fail the build), check:pack and check:install. The engine README's Performance table is one run of `pnpm bench`; update it when the numbers move. `.github/workflows/publish.yml` publishes both packages on a `v*` tag, using npm trusted publishing (no token); the tag must match both package versions.
 
 ## Architecture
 

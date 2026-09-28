@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:pack": "pnpm -r check:pack",
-    "check:install": "pnpm --filter jtaak check:install"
+    "check:install": "pnpm --filter jtaak check:install",
+    "bench": "pnpm build:engine && pnpm --filter @jtaak/engine bench"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

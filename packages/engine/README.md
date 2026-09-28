@@ -306,6 +306,31 @@ await runRequestWithScripts(request, scopes, undefined, {
 `fetchClientCredentialsToken`, `fetchPasswordToken` and `refreshOAuth2Token`
 do each step on their own.
 
+## Performance
+
+`pnpm bench` measures what the engine costs on top of the network, and how
+it scales to a large workspace, against a server on the same machine (so the
+network is as fast as it gets). CI runs it on every change and shows the
+table in the job summary. One run, on a laptop (Node v24.21.0, Windows_NT 10.0.26200 (x64), 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz, 8 threads):
+
+| Benchmark | Result | Budget |
+| --- | ---: | --- |
+| A request, bare fetch (p50) | 0.15 ms |  |
+| A request through executeRequest (p50) | 0.16 ms |  |
+| Engine overhead per request (p50) | 0.01 ms | ≤ 5 ms |
+| Engine overhead per request (p95) | 0.06 ms | ≤ 5 ms |
+| A request with a pre-request and a test script (p50) | 2.40 ms |  |
+| One script in the sandbox (p50) | 0.92 ms | ≤ 10 ms |
+| Resolving 70 {{variables}} in a request (p50) | 0.04 ms | ≤ 1 ms |
+| Collection run, 10,000 requests, no scripts | 3153 ms |  |
+| Collection run, 1,000 requests with tests | 2197 ms |  |
+| Saving 10,000 requests in 100 folders | 880 ms |  |
+| Loading a 10,000-request tree (p50 of 5) | 36.8 ms | ≤ 1000 ms |
+| Exporting the 10,000-request workspace | 84.9 ms |  |
+
+The engine adds a few hundredths of a millisecond to a request; what a
+script costs is starting a fresh sandbox for it (about a millisecond).
+
 ## Storage
 
 ```ts

@@ -48,6 +48,7 @@
     "access": "public"
   },
   "scripts": {
+    "bench": "node bench/bench.mjs",
     "test": "vitest run --project unit && vitest run --project containers",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
