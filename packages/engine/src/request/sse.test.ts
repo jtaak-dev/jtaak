@@ -165,6 +165,58 @@ describe('openSseStream', () => {
 
     expect(events[0]).toMatchObject({ type: 'error' });
   });
+
+  it('POSTs a JSON body, as AI APIs stream their answers', async () => {
+    let received = { method: '', body: '', contentType: '' };
+    const url = await startServer((res, req) => {
+      let body = '';
+      req.on('data', (chunk) => (body += chunk));
+      req.on('end', () => {
+        received = { method: req.method ?? '', body, contentType: req.headers['content-type'] ?? '' };
+        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
+        res.end('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n');
+      });
+    });
+    const events: StreamEvent[] = [];
+    openSseStream(
+      baseConfig({
+        url,
+        method: 'POST',
+        headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+        body: { mode: 'json', raw: '{"stream":true}' },
+      }),
+      (e) => events.push(e),
+    );
+    await waitForEvents(4, events);
+    expect(received).toEqual({ method: 'POST', body: '{"stream":true}', contentType: 'application/json' });
+    expect(events.map((e) => e.type)).toEqual(['open', 'message', 'message', 'close']);
+  });
+
+  it("puts the start of a failed response's body in the error, where APIs say why", async () => {
+    const url = await startServer((res) => {
+      res.writeHead(401, 'Unauthorized', { 'content-type': 'application/json' });
+      res.end('{"error":{"message":"Incorrect API key provided"}}');
+    });
+    const events: StreamEvent[] = [];
+    openSseStream(baseConfig({ url, method: 'POST' }), (e) => events.push(e));
+    await waitForEvents(1, events);
+    expect(events[0].data).toEqual({
+      message: 'SSE connection failed: 401 Unauthorized: {"error":{"message":"Incorrect API key provided"}}',
+      status: 401,
+    });
+  });
+
+  it("gives a response that isn't an event stream as one message", async () => {
+    const url = await startServer((res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"choices":[{"message":{"content":"Whole answer"}}]}');
+    });
+    const events: StreamEvent[] = [];
+    openSseStream(baseConfig({ url, method: 'POST' }), (e) => events.push(e));
+    await waitForEvents(3, events);
+    expect(events.map((e) => e.type)).toEqual(['open', 'message', 'close']);
+    expect(events[1].data).toEqual({ event: 'message', data: '{"choices":[{"message":{"content":"Whole answer"}}]}' });
+  });
 });
 
 describe('performance budget: event dispatch latency', () => {
