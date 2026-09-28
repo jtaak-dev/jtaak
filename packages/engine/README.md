@@ -218,6 +218,49 @@ saveCookieJar(db, workspace.id, jar); // writes only what changed
 `listCookies`, `saveCookie`, `deleteCookie` and `clearCookies` read and edit
 a workspace's stored cookies.
 
+## Digest and OAuth 2.0
+
+`auth: { type: 'digest', digest: { username, password } }` answers a
+server's Digest challenge (RFC 7616: MD5 or SHA-256, and their `-sess`
+forms): `executeRequest` sends the request, and on a 401 with a challenge
+sends it again with the answer.
+
+`auth: { type: 'oauth2', oauth2 }` gets a token before `runRequestWithScripts`
+sends the request, and sends it as `Authorization: Bearer …` (or
+`headerPrefix`, or the `access_token` query parameter with
+`addTo: 'query'`). The client credentials and password grants get one from
+`tokenUrl`; the authorization code grant (with PKCE) opens the provider's
+page through `openBrowser` and catches the redirect on a loopback address
+(`redirectUri`, default `http://127.0.0.1:<a free port>/callback`). Tokens
+are kept in an `OAuth2TokenStore` and refreshed with their refresh token
+when they expire; requests with the same client and provider share one.
+
+```ts
+import { runRequestWithScripts, sqliteOAuth2TokenStore } from '@jtaak/engine';
+
+const request = {
+  ...base,
+  auth: {
+    type: 'oauth2',
+    oauth2: {
+      grantType: 'authorization_code',
+      authUrl: 'https://id.example.com/authorize',
+      tokenUrl: 'https://id.example.com/token',
+      clientId: 'my-app',
+      scope: 'openid profile',
+    },
+  },
+};
+await runRequestWithScripts(request, scopes, undefined, {
+  oauth2Tokens: sqliteOAuth2TokenStore(db, workspace.id), // or new MemoryOAuth2TokenStore()
+  openBrowser: (url) => open(url), // any way of showing the user the page
+});
+```
+
+`getOAuth2Token` (with `forceNew` for "get a new token"), `authorizeInBrowser`,
+`fetchClientCredentialsToken`, `fetchPasswordToken` and `refreshOAuth2Token`
+do each step on their own.
+
 ## Storage
 
 ```ts

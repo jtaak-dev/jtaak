@@ -49,7 +49,8 @@ const MAX_DEPTH = 64;
 const HTTP_METHODS: readonly HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const PROTOCOLS: readonly Protocol[] = ['http', 'graphql', 'websocket', 'sse', 'grpc', 'mcp', 'soap'];
 const BODY_MODES: readonly RequestBody['mode'][] = ['none', 'raw', 'json', 'form-data', 'urlencoded', 'binary'];
-const AUTH_TYPES: readonly AuthConfig['type'][] = ['none', 'basic', 'bearer', 'apiKey'];
+const AUTH_TYPES: readonly AuthConfig['type'][] = ['none', 'basic', 'bearer', 'apiKey', 'digest', 'oauth2'];
+const GRANT_TYPES = ['authorization_code', 'client_credentials', 'password'] as const;
 const CATEGORIES: readonly CollectionCategory[] = ['api', 'websocket', 'mcp', 'messaging'];
 const SCOPES: readonly ExportScope[] = ['collection', 'category', 'workspace'];
 const ITEM_TYPE_BY_CATEGORY: Record<CollectionCategory, NativeExportItem['type']> = {
@@ -138,6 +139,42 @@ function auth(value: unknown, path: string): AuthConfig {
       addTo: oneOf(k.addTo ?? 'header', ['header', 'query'] as const, `${path}.apiKey.addTo`),
     };
   }
+  if (a.digest !== undefined) {
+    const d = obj(a.digest, `${path}.digest`);
+    out.digest = {
+      username: str(d.username ?? '', `${path}.digest.username`),
+      password: str(d.password ?? '', `${path}.digest.password`),
+    };
+  }
+  if (a.oauth2 !== undefined) {
+    const o = obj(a.oauth2, `${path}.oauth2`);
+    const p = `${path}.oauth2`;
+    const optional = <K extends string>(key: K, value: string | boolean | undefined) =>
+      value === undefined ? {} : ({ [key]: value } as Record<K, never>);
+    out.oauth2 = {
+      grantType: oneOf(o.grantType, GRANT_TYPES, `${p}.grantType`),
+      tokenUrl: str(o.tokenUrl ?? '', `${p}.tokenUrl`),
+      clientId: str(o.clientId ?? '', `${p}.clientId`),
+      ...optional('authUrl', optStr(o.authUrl, `${p}.authUrl`)),
+      ...optional('clientSecret', optStr(o.clientSecret, `${p}.clientSecret`)),
+      ...optional('scope', optStr(o.scope, `${p}.scope`)),
+      ...optional('audience', optStr(o.audience, `${p}.audience`)),
+      ...optional('username', optStr(o.username, `${p}.username`)),
+      ...optional('password', optStr(o.password, `${p}.password`)),
+      ...optional('redirectUri', optStr(o.redirectUri, `${p}.redirectUri`)),
+      ...optional('usePkce', optBool(o.usePkce, `${p}.usePkce`)),
+      ...optional(
+        'clientAuth',
+        o.clientAuth === undefined ? undefined : oneOf(o.clientAuth, ['basic', 'body'] as const, `${p}.clientAuth`),
+      ),
+      ...optional(
+        'addTo',
+        o.addTo === undefined ? undefined : oneOf(o.addTo, ['header', 'query'] as const, `${p}.addTo`),
+      ),
+      ...optional('headerPrefix', optStr(o.headerPrefix, `${p}.headerPrefix`)),
+      // A token isn't imported: tokens live in the importing workspace's store.
+    };
+  }
   return out;
 }
 
@@ -170,6 +207,8 @@ function requestConfig(value: unknown, path: string): Omit<RequestConfig, 'id' |
   if (test !== undefined) out.testScript = test;
   const verifyTls = optBool(c.verifyTls, `${path}.verifyTls`);
   if (verifyTls !== undefined) out.verifyTls = verifyTls;
+  const useCookies = optBool(c.useCookies, `${path}.useCookies`);
+  if (useCookies !== undefined) out.useCookies = useCookies;
   // Protocol-specific payloads (GraphQL query, gRPC proto source, …) are
   // owned by each protocol's editor, which already tolerates missing fields;
   // only its overall shape is checked here. A JSON round-trip guarantees a

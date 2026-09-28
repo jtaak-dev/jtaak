@@ -215,6 +215,51 @@ describe('exportNative secrets', () => {
     });
   });
 
+  it('blanks Digest and OAuth 2.0 secrets, and leaves out a token a request carries', () => {
+    const db = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const apiId = getCollectionTree(db, workspace.id)[0].id;
+    createRequest(db, {
+      collectionId: apiId,
+      name: 'Digest',
+      config: baseConfig({ auth: { type: 'digest', digest: { username: 'd', password: 'digest-pw' } } }),
+    });
+    createRequest(db, {
+      collectionId: apiId,
+      name: 'OAuth',
+      config: baseConfig({
+        auth: {
+          type: 'oauth2',
+          oauth2: {
+            grantType: 'password',
+            tokenUrl: 'https://id/token',
+            clientId: 'app',
+            clientSecret: 'client-secret',
+            username: 'u',
+            password: 'user-pw',
+            token: { accessToken: 'live-token', obtainedAt: 1 },
+          },
+        },
+      }),
+    });
+    const doc = exportNative(db, workspace.id, { scope: 'workspace' }, noSecrets);
+    const text = JSON.stringify(doc);
+    for (const secret of ['digest-pw', 'client-secret', 'user-pw', 'live-token']) expect(text).not.toContain(secret);
+    const auths = doc.collections[0].items.flatMap((item) => (item.type === 'request' ? [item.config.auth] : []));
+    expect(auths).toContainEqual({ type: 'digest', digest: { username: 'd', password: '' } });
+    expect(auths).toContainEqual({
+      type: 'oauth2',
+      oauth2: {
+        grantType: 'password',
+        tokenUrl: 'https://id/token',
+        clientId: 'app',
+        clientSecret: '',
+        username: 'u',
+        password: '',
+      },
+    });
+  });
+
   it('keeps everything when secrets are included', () => {
     const db = openDatabase(':memory:');
     const { workspaceId } = fixture(db);

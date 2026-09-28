@@ -3,6 +3,7 @@ import { applyEnvironmentUpdates, diffEnvironment } from '../variables/environme
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { CollectionRunItemResult, CollectionRunReport, RequestConfig, VariableScope } from '../types.js';
 import type { RunRequestOptions } from '../scripting/runRequest.js';
+import { MemoryOAuth2TokenStore } from '../request/oauth2.js';
 
 export interface RunnableRequest {
   id: string;
@@ -48,10 +49,15 @@ export async function runCollection(
   let failedAssertions = 0;
   let requestsFailedToSend = 0;
   let environment = scopes.environment;
+  // Without a token store, the run keeps one of its own, so its requests share a token.
+  const runOptions: RunRequestOptions = {
+    ...options,
+    oauth2Tokens: options.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
+  };
 
   for (let i = 0; i < requests.length; i++) {
     const request = requests[i];
-    const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile, options);
+    const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile, runOptions);
     if (result.environmentUpdates) environment = applyEnvironmentUpdates(environment, result.environmentUpdates);
 
     if (result.preRequestError || result.sendError) requestsFailedToSend++;

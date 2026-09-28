@@ -57,13 +57,31 @@ function generateCurl(config: RequestConfig): string {
   if (config.auth.type === 'apiKey' && config.auth.apiKey?.addTo === 'header') {
     lines.push(`  -H '${escapeSingleQuotes(`${config.auth.apiKey.key}: ${config.auth.apiKey.value}`)}'`);
   }
+  if (config.auth.type === 'digest' && config.auth.digest) {
+    lines.push(
+      `  --digest -u '${escapeSingleQuotes(`${config.auth.digest.username}:${config.auth.digest.password}`)}'`,
+    );
+  }
+  const oauth2 = oauth2Header(config);
+  if (oauth2) lines.push(`  -H '${escapeSingleQuotes(`Authorization: ${oauth2}`)}'`);
   const body = bodyString(config);
   if (body !== undefined) lines.push(`  -d '${escapeSingleQuotes(body)}'`);
   return lines.join(' \\\n');
 }
 
+/** An OAuth 2.0 request's Authorization value: its token, or a placeholder for one. */
+function oauth2Header(config: RequestConfig): string | undefined {
+  const oauth2 = config.auth.type === 'oauth2' ? config.auth.oauth2 : undefined;
+  if (!oauth2 || oauth2.addTo === 'query') return undefined;
+  const prefix = oauth2.headerPrefix ?? 'Bearer';
+  const token = oauth2.token?.accessToken ?? '<access token>';
+  return prefix ? `${prefix} ${token}` : token;
+}
+
 function authHeaders(config: RequestConfig): Record<string, string> {
   const headers: Record<string, string> = {};
+  const oauth2 = oauth2Header(config);
+  if (oauth2) headers.Authorization = oauth2;
   if (config.auth.type === 'bearer' && config.auth.bearer?.token)
     headers.Authorization = `Bearer ${config.auth.bearer.token}`;
   if (config.auth.type === 'apiKey' && config.auth.apiKey?.addTo === 'header')

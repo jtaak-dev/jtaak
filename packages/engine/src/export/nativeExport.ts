@@ -59,6 +59,20 @@ function stripAuth(auth: AuthConfig): AuthConfig {
     ...(auth.basic && { basic: { ...auth.basic, password: blank(auth.basic.password) } }),
     ...(auth.bearer && { bearer: { token: blank(auth.bearer.token) } }),
     ...(auth.apiKey && { apiKey: { ...auth.apiKey, value: blank(auth.apiKey.value) } }),
+    ...(auth.digest && { digest: { ...auth.digest, password: blank(auth.digest.password) } }),
+    ...(auth.oauth2 && { oauth2: stripOAuth2(auth.oauth2) }),
+  };
+}
+
+/** An OAuth 2.0 client secret and password are blanked, and a token the request carries is left out. */
+function stripOAuth2({
+  token: _token,
+  ...oauth2
+}: NonNullable<AuthConfig['oauth2']>): NonNullable<AuthConfig['oauth2']> {
+  return {
+    ...oauth2,
+    ...(oauth2.clientSecret !== undefined && { clientSecret: blank(oauth2.clientSecret) }),
+    ...(oauth2.password !== undefined && { password: blank(oauth2.password) }),
   };
 }
 
