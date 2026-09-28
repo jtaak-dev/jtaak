@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import type { Agent } from 'node:http';
 import { createRequire } from 'node:module';
@@ -165,7 +166,36 @@ export function tlsOptionsFor(
     if (certificate.keyPath) options.key = readTlsFile(certificate.keyPath, 'client certificate key file');
   }
   if (certificate?.passphrase && (options.pfx || options.key)) options.passphrase = certificate.passphrase;
+  if (certificate?.pfxPath && options.pfx) checkPfx(certificate.pfxPath, options.pfx, options.passphrase);
   return options;
+}
+
+// PFX files that opened, by their contents and passphrase, so each is checked once.
+const openedPfx = new Set<string>();
+
+/**
+ * Opens a PFX as a TLS connection will, so the two usual problems get a
+ * message that says what to do rather than OpenSSL's: old encryption
+ * (RC2, still common in PFX files made by older tools), which
+ * OpenSSL 3 no longer reads, and a wrong passphrase.
+ */
+function checkPfx(path: string, pfx: Buffer, passphrase: string | undefined): void {
+  const id = `${createHash('sha256').update(pfx).digest('hex')}\u0000${passphrase ?? ''}`;
+  if (openedPfx.has(id)) return;
+  try {
+    tls.createSecureContext({ pfx, ...(passphrase && { passphrase }) });
+  } catch (error) {
+    const message = (error as Error).message;
+    const reason = /unsupported/i.test(message)
+      ? "it's encrypted the old way (RC2), which OpenSSL 3 can't read. Export it again with AES " +
+        '(`openssl pkcs12 -legacy -in old.pfx -nodes -out both.pem`, then `openssl pkcs12 -export -in both.pem -out new.pfx`), ' +
+        'or use the certificate and key as PEM files'
+      : /mac verify|bad decrypt|password/i.test(message)
+        ? 'the passphrase is wrong'
+        : message;
+    throw new Error(`Couldn't use the client certificate (PFX) file "${path}": ${reason}`, { cause: error });
+  }
+  openedPfx.add(id);
 }
 
 /** `tlsOptionsFor` the host and port `url` connects to. */

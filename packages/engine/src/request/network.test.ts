@@ -278,7 +278,7 @@ describe('client certificates and extra authorities over HTTPS', () => {
   it('says when the passphrase is wrong', async () => {
     const wrong = [{ ...pfxCertificate![0], passphrase: 'nope' }];
     await expect(executeRequest(request(`${httpsUrl}/`, { caPaths: ca(), clientCertificates: wrong }))).rejects.toThrow(
-      /mac verify failure|bad decrypt|pkcs12/i,
+      /Couldn't use the client certificate \(PFX\) file ".*client\.pfx": the passphrase is wrong/,
     );
   });
 });
