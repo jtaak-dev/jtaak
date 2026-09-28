@@ -86,6 +86,58 @@ describe('runCollection', () => {
     expect(progress).toEqual([0, 1]);
     expect(items.map((i) => i.requestName)).toEqual(['a', 'b']);
   });
+
+  it('stops after the first failure with stopOnFailure, and says so', async () => {
+    const test = 'jt.test("ok", () => jt.expect(jt.response.status).toBe(200));';
+    const requests: RunnableRequest[] = [
+      { id: '1', name: 'a', config: config({ testScript: test }) },
+      { id: '2', name: 'b', config: config({ url: `${baseUrl}/fail`, testScript: test }) },
+      { id: '3', name: 'c', config: config() },
+    ];
+    const stopped = await runCollection(requests, emptyScopes(), undefined, undefined, { stopOnFailure: true });
+    expect(stopped.items.map((i) => i.requestName)).toEqual(['a', 'b']);
+    expect(stopped.stoppedEarly).toBe(true);
+    const full = await runCollection(requests, emptyScopes());
+    expect(full.items).toHaveLength(3);
+    expect(full.stoppedEarly).toBeUndefined();
+  });
+});
+
+describe('cookies and tokens in a run', () => {
+  let apiServer: http.Server;
+  let api: string;
+  let tokenRequests = 0;
+  beforeAll(async () => {
+    apiServer = http.createServer((req, res) => {
+      if (req.url === '/token') {
+        tokenRequests++;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ access_token: `t${tokenRequests}`, expires_in: 60 }));
+        return;
+      }
+      if (req.url === '/login') res.setHeader('set-cookie', 'session=s1; Path=/');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ cookie: req.headers.cookie ?? null, authorization: req.headers.authorization ?? null }));
+    });
+    await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
+    api = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
+  });
+  afterAll(() => apiServer.close());
+
+  it('sends what a cookie jar kept to the requests after, and shares one OAuth token', async () => {
+    const { CookieJar } = await import('../request/cookieJar');
+    const oauth2 = { grantType: 'client_credentials' as const, tokenUrl: `${api}/token`, clientId: 'c' };
+    const requests: RunnableRequest[] = [
+      { id: '1', name: 'login', config: config({ url: `${api}/login` }) },
+      { id: '2', name: 'me', config: config({ url: `${api}/me`, auth: { type: 'oauth2', oauth2 } }) },
+      { id: '3', name: 'again', config: config({ url: `${api}/me`, auth: { type: 'oauth2', oauth2 } }) },
+    ];
+    const report = await runCollection(requests, emptyScopes(), undefined, undefined, { cookieJar: new CookieJar() });
+    const bodies = report.items.map((i) => JSON.parse(i.result.response!.body));
+    expect(bodies.map((b) => b.cookie)).toEqual([null, 'session=s1', 'session=s1']);
+    expect(bodies.slice(1).map((b) => b.authorization)).toEqual(['Bearer t1', 'Bearer t1']);
+    expect(tokenRequests).toBe(1);
+  });
 });
 
 describe('environment changes in a run', () => {

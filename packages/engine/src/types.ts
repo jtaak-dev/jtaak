@@ -856,6 +856,8 @@ export interface CollectionRunReport {
   /** The run's net changes to the environment, when there are any: each
    * request's scripts see the changes made before them. */
   environmentUpdates?: EnvironmentUpdates;
+  /** Set when `stopOnFailure` ended the run before its last request (`items` has those that ran). */
+  stoppedEarly?: boolean;
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */
