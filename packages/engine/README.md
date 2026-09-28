@@ -186,6 +186,14 @@ Scripts use the `jt` object: `jt.test`, `jt.expect` (`toBe`, `toEqual`,
 `jt.environment`. They also get `console`, whose output is returned in
 `scriptLogs`.
 
+Scripts written for Postman run too: `pm` has its common calls, over the
+same values (`pm.test`, `pm.expect` with Chai's chains such as
+`.to.equal`, `.to.have.property` and `.to.be.true`, `pm.response` with
+`.to.have.status` and `.to.be.ok`, `pm.environment`, `pm.variables`,
+`pm.request`, `pm.cookies`). What it lacks, such as `pm.sendRequest`,
+throws, naming the call; `importPostmanCollection` lists the requests whose
+scripts use such calls as `scriptWarnings` (`unsupportedPostmanCalls`).
+
 Both `jt.variables` and `jt.environment` start as the environment's values
 (`scopes.environment`), and the request resolves `{{name}}` against what
 scripts set in either. What they set in `jt.variables` lasts only for this

@@ -155,6 +155,7 @@ export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmen
 export type { ScriptContext, ScriptCookie, ScriptStreamMessage } from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
+export { unsupportedPostmanCalls, SUPPORTED_PM_API } from './scripting/postman.js';
 export {
   runConnectionTests,
   CONNECTION_TEST_MESSAGE_LIMIT,
