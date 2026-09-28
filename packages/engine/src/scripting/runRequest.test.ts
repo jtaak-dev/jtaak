@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runRequestWithScripts } from './runRequest';
+import { CookieJar } from '../request/cookieJar';
 import { emptyScopes } from '../types';
 import type { RequestConfig, VariableScope } from '../types';
 
@@ -35,6 +36,38 @@ function baseConfig(overrides: Partial<RequestConfig> = {}): RequestConfig {
 }
 
 describe('runRequestWithScripts', () => {
+  it("lets scripts read the jar's cookies for the URL, before and after the send", async () => {
+    const cookieJar = new CookieJar();
+    cookieJar.store(`${baseUrl}/`, ['session=s1; HttpOnly', 'theme=dark']);
+    cookieJar.store('https://example.com/', ['other=1']);
+    const result = await runRequestWithScripts(
+      baseConfig({
+        url: '{{base}}/me',
+        preRequestScript: 'jt.variables.session = jt.cookies.get("session");',
+        testScript: `
+          jt.test('cookies', () => {
+            jt.expect(jt.cookies.toObject()).toEqual({ session: 's1', theme: 'dark' });
+            jt.expect(jt.cookies.has('other')).toBe(false);
+            jt.expect(jt.cookies.all()[0].httpOnly).toBe(true);
+            jt.expect(jt.variables.session).toBe('s1');
+          });
+        `,
+      }),
+      { ...emptyScopes(), environment: { base: baseUrl } },
+      undefined,
+      { cookieJar },
+    );
+    expect(result.testResults).toEqual([{ name: 'cookies', passed: true }]);
+  });
+
+  it('gives scripts no cookies without a jar', async () => {
+    const result = await runRequestWithScripts(
+      baseConfig({ testScript: 'jt.test("none", () => jt.expect(jt.cookies.toObject()).toEqual({}));' }),
+      emptyScopes(),
+    );
+    expect(result.testResults).toEqual([{ name: 'none', passed: true }]);
+  });
+
   it('sends the request and returns no test results when no scripts are set', async () => {
     const result = await runRequestWithScripts(baseConfig(), emptyScopes());
     expect(result.response?.status).toBe(200);

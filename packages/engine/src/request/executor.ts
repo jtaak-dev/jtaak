@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import type { ExecutedResponse, GraphQlProtocolConfig, KeyValue, RequestConfig } from '../types.js';
+import type { CookieJar } from './cookieJar.js';
 import { withErrorDetail } from './errors.js';
 import { timingPhases, withTiming } from './timing.js';
 import { fetchFor } from './tls.js';
@@ -95,6 +96,78 @@ export function buildRequestHeaders(config: RequestConfig): Record<string, strin
   return headers;
 }
 
+export interface ExecuteOptions {
+  /**
+   * Cookies kept between requests: the jar's cookies for the URL are sent
+   * (after any `Cookie` header the request sets itself, which wins for a
+   * name both have), and what the response sets is stored. Redirects are
+   * then followed here rather than by `fetch`, so cookies set along the way
+   * are kept and sent to where they lead. Not used for a request with
+   * `useCookies: false`.
+   */
+  cookieJar?: CookieJar;
+}
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 20;
+
+function withJarCookies(headers: Record<string, string>, jar: CookieJar, url: string): Record<string, string> {
+  const fromJar = jar.cookiesFor(url);
+  if (fromJar.length === 0) return headers;
+  const key = Object.keys(headers).find((name) => name.toLowerCase() === 'cookie');
+  const own = key ? headers[key] : '';
+  const ownNames = new Set(
+    own
+      .split(';')
+      .map((pair) => pair.split('=')[0].trim())
+      .filter(Boolean),
+  );
+  const added = fromJar.filter((cookie) => !ownNames.has(cookie.name)).map((c) => `${c.name}=${c.value}`);
+  if (added.length === 0) return headers;
+  const next = { ...headers };
+  if (key) delete next[key];
+  next.Cookie = [own.trim(), ...added].filter(Boolean).join('; ');
+  return next;
+}
+
+/**
+ * fetch with redirects followed by hand, as `redirect: 'follow'` would
+ * (303, and 301/302 after a POST, turn into a GET without a body;
+ * Authorization isn't sent to another origin), but with the jar's cookies
+ * sent on each hop and what each hop sets stored. Returns the last response
+ * and every Set-Cookie header along the way.
+ */
+async function fetchWithJar(
+  config: RequestConfig,
+  jar: CookieJar,
+  first: { url: string; method: string; headers: Record<string, string>; body: BodyInit | undefined },
+): Promise<{ response: Response; setCookies: string[] }> {
+  const send = fetchFor(config);
+  let { url, method, headers, body } = first;
+  const setCookies: string[] = [];
+  for (let hop = 0; ; hop++) {
+    const response = await send(url, { method, headers: withJarCookies(headers, jar, url), body, redirect: 'manual' });
+    const cookies = response.headers.getSetCookie();
+    jar.store(url, cookies);
+    setCookies.push(...cookies);
+    const location = response.headers.get('location');
+    if (!REDIRECTS.has(response.status) || !location || hop >= MAX_REDIRECTS) return { response, setCookies };
+    await response.body?.cancel();
+    const next = new URL(location, url);
+    if (next.origin !== new URL(url).origin) {
+      headers = Object.fromEntries(Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'authorization'));
+    }
+    if (response.status === 303 ? method !== 'HEAD' : response.status <= 302 && method === 'POST') {
+      method = 'GET';
+      body = undefined;
+      headers = Object.fromEntries(
+        Object.entries(headers).filter(([name]) => !['content-type', 'content-length'].includes(name.toLowerCase())),
+      );
+    }
+    url = next.toString();
+  }
+}
+
 /**
  * Sends a request and returns a fully-resolved response.
  *
@@ -103,7 +176,7 @@ export function buildRequestHeaders(config: RequestConfig): Record<string, strin
  * keep this function free of anything that isn't strictly necessary to
  * build the request, send it, and time it accurately.
  */
-export async function executeRequest(config: RequestConfig): Promise<ExecutedResponse> {
+export async function executeRequest(config: RequestConfig, options: ExecuteOptions = {}): Promise<ExecutedResponse> {
   const protocol = config.protocol ?? 'http';
   if (protocol !== 'http' && protocol !== 'graphql') {
     throw new Error(
@@ -121,17 +194,20 @@ export async function executeRequest(config: RequestConfig): Promise<ExecutedRes
     headers['Content-Type'] = 'application/json';
   }
 
+  const jar = config.useCookies === false ? undefined : options.cookieJar;
   const {
-    result: { response, bodyText },
+    result: { response, bodyText, setCookies },
     marks,
   } = await withTiming(async () => {
     try {
-      const response = await fetchFor(config)(buildUrl(config), {
-        method,
-        headers,
-        body: hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined,
-      });
-      return { response, bodyText: await response.text() };
+      const url = buildUrl(config);
+      const body = hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined;
+      if (jar) {
+        const { response, setCookies } = await fetchWithJar(config, jar, { url, method, headers, body });
+        return { response, setCookies, bodyText: await response.text() };
+      }
+      const response = await fetchFor(config)(url, { method, headers, body });
+      return { response, setCookies: response.headers.getSetCookie(), bodyText: await response.text() };
     } catch (error) {
       throw withErrorDetail(error);
     }
@@ -150,6 +226,6 @@ export async function executeRequest(config: RequestConfig): Promise<ExecutedRes
     body: bodyText,
     timings: { start, end, durationMs: end - start, phases: timingPhases(marks, end) },
     sizeBytes: Buffer.byteLength(bodyText, 'utf-8'),
-    setCookies: response.headers.getSetCookie(),
+    setCookies,
   };
 }

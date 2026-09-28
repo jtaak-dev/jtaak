@@ -67,6 +67,10 @@ export interface RequestConfig {
    * authenticated). Applies to HTTP, GraphQL, SSE, WebSocket, gRPC over TLS
    * and MCP over HTTP (see request/tls.ts). */
   verifyTls?: boolean;
+  /** Use the cookie jar, when the caller gives one (see `ExecuteOptions`):
+   * send its cookies and keep what the response sets. On unless set to
+   * `false`. */
+  useCookies?: boolean;
   /** Payload specific to `protocol` (e.g. a GraphQL query/variables, gRPC
    * service/method) — shape is owned by each protocol; `http`
    * doesn't use it since `method`/`url`/`body`/`auth` above already cover it.
@@ -158,7 +162,8 @@ export interface ExecutedResponse {
   sizeBytes: number;
   /** Each `Set-Cookie` header as sent: `headers` joins them into one value,
    * which can't be split again (dates contain commas). `parseSetCookie`
-   * reads one. Absent on responses stored before it existed. */
+   * reads one. With a cookie jar, redirects' cookies are here too, in the
+   * order they came. Absent on responses stored before it existed. */
   setCookies?: string[];
 }
 

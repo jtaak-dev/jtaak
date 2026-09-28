@@ -23,6 +23,20 @@ export interface ScriptContext {
    * `<namespace>.environment` is another name for `<namespace>.variables`.
    */
   environment?: Record<string, string>;
+  /** The cookie jar's cookies for the request's URL, read as `<namespace>.cookies`. */
+  cookies?: ScriptCookie[];
+}
+
+/** A cookie as scripts read it. */
+export interface ScriptCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** ISO 8601; absent for a cookie with no expiry. */
+  expires?: string;
+  secure: boolean;
+  httpOnly: boolean;
 }
 
 export interface ScriptConsoleEntry {
@@ -165,6 +179,25 @@ const PRELUDE = String.raw`
       })
     : undefined;
 
+  const cookieList = input.cookies || [];
+  const cookies = {
+    get(name) {
+      const found = cookieList.find((cookie) => cookie.name === name);
+      return found ? found.value : undefined;
+    },
+    has(name) {
+      return cookieList.some((cookie) => cookie.name === name);
+    },
+    toObject() {
+      const all = {};
+      for (const cookie of cookieList) if (!(cookie.name in all)) all[cookie.name] = cookie.value;
+      return all;
+    },
+    all() {
+      return cookieList.map((cookie) => Object.assign({}, cookie));
+    },
+  };
+
   globalThis[input.namespace] = {
     test(name, fn) {
       try {
@@ -181,6 +214,7 @@ const PRELUDE = String.raw`
     variables,
     request: input.request,
     response,
+    cookies,
   };
 
   globalThis.__output = () => JSON.stringify({ results, logs, variables, environment: environmentValues });
@@ -302,6 +336,7 @@ export async function runScript(
           response: context.response,
           variables: context.variables,
           environment: context.environment,
+          cookies: context.cookies,
         }),
       );
       ctx.setProp(ctx.global, '__input', input);

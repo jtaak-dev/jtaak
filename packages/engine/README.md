@@ -191,6 +191,33 @@ set in `jt.environment` reaches the requests after it (a login request's
 token, say), and the report's `environmentUpdates` has the run's net
 changes.
 
+## Cookies
+
+Pass a `CookieJar` and requests keep cookies the way a browser does (RFC
+6265): what a response sets is stored for its domain and path, and sent with
+later requests that match. Secure cookies go only over HTTPS or to the local
+machine, and redirects are followed with the jar, so a cookie a login's
+redirect sets isn't lost. A request with `useCookies: false` neither sends nor
+keeps cookies. Scripts read the URL's cookies as `jt.cookies`: `get(name)`,
+`has(name)`, `toObject()` and `all()`.
+
+```ts
+import { CookieJar, loadCookieJar, runCollection, runRequestWithScripts, saveCookieJar } from '@jtaak/engine';
+
+const cookieJar = new CookieJar();
+await runRequestWithScripts(login, scopes, undefined, { cookieJar }); // stores the session cookie
+await runRequestWithScripts(profile, scopes, undefined, { cookieJar }); // sends it
+await runCollection(requests, scopes, undefined, undefined, { cookieJar });
+
+// Or a workspace's cookies, kept in the database:
+const jar = loadCookieJar(db, workspace.id);
+await runRequestWithScripts(request, scopes, undefined, { cookieJar: jar });
+saveCookieJar(db, workspace.id, jar); // writes only what changed
+```
+
+`listCookies`, `saveCookie`, `deleteCookie` and `clearCookies` read and edit
+a workspace's stored cookies.
+
 ## Storage
 
 ```ts

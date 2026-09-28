@@ -2,6 +2,7 @@ import { runRequestWithScripts } from '../scripting/runRequest.js';
 import { applyEnvironmentUpdates, diffEnvironment } from '../variables/environmentUpdates.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { CollectionRunItemResult, CollectionRunReport, RequestConfig, VariableScope } from '../types.js';
+import type { RunRequestOptions } from '../scripting/runRequest.js';
 
 export interface RunnableRequest {
   id: string;
@@ -31,12 +32,15 @@ export interface RunnableRequest {
  * What a request's scripts set in the environment reaches the requests after
  * it (a login request's token, say), and the run's net changes come back as
  * the report's `environmentUpdates`; saving them is the caller's choice.
+ * With `options.cookieJar`, cookies a request's response sets are sent by
+ * the requests after it (a login's session cookie, say).
  */
 export async function runCollection(
   requests: RunnableRequest[],
   scopes: VariableScope,
   onProgress?: (item: CollectionRunItemResult, index: number, total: number) => void,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
+  options: RunRequestOptions = {},
 ): Promise<CollectionRunReport> {
   const start = performance.now();
   const items: CollectionRunItemResult[] = [];
@@ -47,7 +51,7 @@ export async function runCollection(
 
   for (let i = 0; i < requests.length; i++) {
     const request = requests[i];
-    const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile);
+    const result = await runRequestWithScripts(request.config, { ...scopes, environment }, profile, options);
     if (result.environmentUpdates) environment = applyEnvironmentUpdates(environment, result.environmentUpdates);
 
     if (result.preRequestError || result.sendError) requestsFailedToSend++;

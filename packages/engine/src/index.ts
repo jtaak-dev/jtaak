@@ -96,7 +96,7 @@ export type {
 } from './types.js';
 export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION, MESSAGING_PROTOCOLS } from './types.js';
 
-export { executeRequest, buildRequestHeaders } from './request/executor.js';
+export { executeRequest, buildRequestHeaders, type ExecuteOptions } from './request/executor.js';
 export { openStream } from './request/streamExecutor.js';
 export type { McpStreamHandle } from './request/mcp.js';
 
@@ -108,11 +108,20 @@ export { executeGrpcUnaryCall } from './request/grpc.js';
 
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
+export { CookieJar, type CookieKey, type StoredCookie } from './request/cookieJar.js';
+export {
+  listCookies,
+  saveCookie,
+  deleteCookie,
+  clearCookies,
+  loadCookieJar,
+  saveCookieJar,
+} from './storage/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
-export type { ScriptContext } from './scripting/sandbox.js';
+export type { ScriptContext, ScriptCookie } from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
-export { runRequestWithScripts } from './scripting/runRequest.js';
+export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
 
 export type { RunnableRequest } from './runner/collectionRunner.js';
 export { runCollection } from './runner/collectionRunner.js';

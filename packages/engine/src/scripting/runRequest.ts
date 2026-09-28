@@ -4,6 +4,27 @@ import { diffEnvironment } from '../variables/environmentUpdates.js';
 import { runScript, type ScriptConsoleEntry } from './sandbox.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { RequestConfig, RequestRunResult, ScriptLogEntry, VariableScope } from '../types.js';
+import type { CookieJar } from '../request/cookieJar.js';
+import type { ScriptCookie } from './sandbox.js';
+
+export interface RunRequestOptions {
+  /** Cookies kept between requests (see `ExecuteOptions.cookieJar`); scripts read the URL's cookies as `<namespace>.cookies`. */
+  cookieJar?: CookieJar;
+}
+
+/** The jar's cookies for a request's URL, as scripts see them. */
+function scriptCookies(jar: CookieJar | undefined, url: string): ScriptCookie[] {
+  if (!jar) return [];
+  return jar.cookiesFor(url).map(({ name, value, domain, path, expiresAt, secure, httpOnly }) => ({
+    name,
+    value,
+    domain,
+    path,
+    ...(expiresAt !== undefined && { expires: new Date(expiresAt).toISOString() }),
+    secure,
+    httpOnly,
+  }));
+}
 
 function tagPhase(entries: ScriptConsoleEntry[], phase: ScriptLogEntry['phase']): ScriptLogEntry[] {
   return entries.map((entry) => ({ ...entry, phase }));
@@ -27,7 +48,9 @@ export async function runRequestWithScripts(
   config: RequestConfig,
   scopes: VariableScope,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
+  options: RunRequestOptions = {},
 ): Promise<RequestRunResult> {
+  const { cookieJar } = options;
   // A mutable working copy: a pre-request script can set a variable (e.g. a
   // timestamp or a token) that this same request's URL/headers/body then
   // resolve against, before anything is sent over the network.
@@ -44,7 +67,12 @@ export async function runRequestWithScripts(
     try {
       const preRequestRun = await runScript(
         config.preRequestScript,
-        { request: config, variables, environment },
+        {
+          request: config,
+          variables,
+          environment,
+          cookies: scriptCookies(cookieJar, resolveDeep(config.url, { ...scopes, environment: variables })),
+        },
         undefined,
         profile,
       );
@@ -58,7 +86,7 @@ export async function runRequestWithScripts(
 
   let response;
   try {
-    response = await executeRequest(resolvedConfig);
+    response = await executeRequest(resolvedConfig, { cookieJar });
   } catch (error) {
     return withUpdates({ testResults: [], scriptLogs, sendError: (error as Error).message });
   }
@@ -68,7 +96,13 @@ export async function runRequestWithScripts(
     try {
       const testRun = await runScript(
         config.testScript,
-        { request: resolvedConfig, response, variables, environment },
+        {
+          request: resolvedConfig,
+          response,
+          variables,
+          environment,
+          cookies: scriptCookies(cookieJar, resolvedConfig.url),
+        },
         undefined,
         profile,
       );
