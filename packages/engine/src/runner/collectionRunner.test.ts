@@ -191,5 +191,6 @@ describe('performance budget: 500-request collection run', () => {
     // harness in a host application), but it is a genuine throughput regression guard: if this
     // starts creeping toward the bound, something got slow.
     expect(report.durationMs).toBeLessThan(10_000);
-  });
+    // Vitest's default 5 s timeout would otherwise end the test before that bound.
+  }, 15_000);
 });
