@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { createCollectionNode, createRequest } from '../storage/repository.js';
-import type { AuthConfig, HttpMethod, ImportResult, KeyValue, RequestBody, RequestConfig } from '../types.js';
+import type {
+  AuthConfig,
+  HttpMethod,
+  ImportResult,
+  KeyValue,
+  OAuth2Config,
+  RequestBody,
+  RequestConfig,
+} from '../types.js';
 
 // Postman Collection v2.1 shapes, kept deliberately loose (optional
 // everywhere) since this is untrusted external JSON — we defend with
@@ -27,6 +35,8 @@ interface PostmanAuth {
   bearer?: PostmanKeyValue[];
   basic?: PostmanKeyValue[];
   apikey?: PostmanKeyValue[];
+  digest?: PostmanKeyValue[];
+  oauth2?: PostmanKeyValue[];
 }
 interface PostmanEvent {
   listen?: string;
@@ -93,9 +103,42 @@ function convertAuth(auth: PostmanAuth | undefined): AuthConfig {
           addTo: findValue(auth.apikey, 'in') === 'query' ? 'query' : 'header',
         },
       };
+    case 'digest':
+      return {
+        type: 'digest',
+        digest: { username: findValue(auth.digest, 'username'), password: findValue(auth.digest, 'password') },
+      };
+    case 'oauth2':
+      return { type: 'oauth2', oauth2: convertOAuth2(auth.oauth2) };
     default:
       return { type: 'none' };
   }
+}
+
+/** Postman's OAuth 2.0 settings; its implicit grant (deprecated by OAuth 2.1) becomes authorization code. */
+function convertOAuth2(list: PostmanKeyValue[] | undefined): OAuth2Config {
+  const value = (key: string) => findValue(list, key);
+  const grant = value('grant_type');
+  const optional = (key: keyof OAuth2Config, from: string) => (value(from) ? { [key]: value(from) } : {});
+  return {
+    grantType:
+      grant === 'client_credentials'
+        ? 'client_credentials'
+        : grant === 'password_credentials'
+          ? 'password'
+          : 'authorization_code',
+    tokenUrl: value('accessTokenUrl'),
+    clientId: value('clientId'),
+    ...optional('authUrl', 'authUrl'),
+    ...optional('clientSecret', 'clientSecret'),
+    ...optional('scope', 'scope'),
+    ...optional('username', 'username'),
+    ...optional('password', 'password'),
+    ...optional('redirectUri', 'redirect_uri'),
+    ...(value('client_authentication') === 'body' && { clientAuth: 'body' as const }),
+    ...(value('addTokenTo') === 'queryParams' && { addTo: 'query' as const }),
+    ...(list?.some((entry) => entry.key === 'headerPrefix') && { headerPrefix: value('headerPrefix') }),
+  };
 }
 
 function extractScripts(events: PostmanEvent[] | undefined): { preRequestScript?: string; testScript?: string } {

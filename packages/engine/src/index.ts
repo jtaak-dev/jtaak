@@ -8,6 +8,9 @@ export type {
   KeyValue,
   RequestBody,
   AuthConfig,
+  OAuth2Config,
+  OAuth2GrantType,
+  OAuth2Token,
   RequestConfig,
   ExecutedResponse,
   RequestTimingPhases,
@@ -109,6 +112,24 @@ export { executeGrpcUnaryCall } from './request/grpc.js';
 export { resolveVariables, resolveDeep } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
 export { CookieJar, type CookieKey, type StoredCookie } from './request/cookieJar.js';
+export { parseDigestChallenge, digestAuthorization, type DigestChallenge, type DigestInput } from './request/digest.js';
+export {
+  MemoryOAuth2TokenStore,
+  oauth2TokenKey,
+  isOAuth2TokenValid,
+  createPkce,
+  buildAuthorizationUrl,
+  fetchClientCredentialsToken,
+  fetchPasswordToken,
+  refreshOAuth2Token,
+  authorizeInBrowser,
+  getOAuth2Token,
+  type OAuth2TokenStore,
+  type OAuth2RequestOptions,
+  type BrowserAuthorizationOptions,
+  type GetOAuth2TokenOptions,
+} from './request/oauth2.js';
+export { sqliteOAuth2TokenStore, clearOAuth2Tokens } from './storage/oauth2Tokens.js';
 export {
   listCookies,
   saveCookie,

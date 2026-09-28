@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import type { ExecutedResponse, GraphQlProtocolConfig, KeyValue, RequestConfig } from '../types.js';
 import type { CookieJar } from './cookieJar.js';
+import { digestAuthorization, parseDigestChallenge } from './digest.js';
 import { withErrorDetail } from './errors.js';
 import { timingPhases, withTiming } from './timing.js';
 import { fetchFor } from './tls.js';
@@ -23,6 +24,10 @@ export function buildUrl(config: RequestConfig): string {
   }
   if (config.auth.type === 'apiKey' && config.auth.apiKey?.addTo === 'query') {
     url.searchParams.append(config.auth.apiKey.key, config.auth.apiKey.value);
+  }
+  const oauth2 = config.auth.type === 'oauth2' ? config.auth.oauth2 : undefined;
+  if (oauth2?.addTo === 'query' && oauth2.token?.accessToken) {
+    url.searchParams.append('access_token', oauth2.token.accessToken);
   }
   return url.toString();
 }
@@ -81,6 +86,12 @@ function applyAuthHeaders(config: RequestConfig, headers: Record<string, string>
   if (config.auth.type === 'apiKey' && config.auth.apiKey?.addTo === 'header') {
     headers[config.auth.apiKey.key] = config.auth.apiKey.value;
   }
+  const oauth2 = config.auth.type === 'oauth2' ? config.auth.oauth2 : undefined;
+  if (oauth2 && oauth2.addTo !== 'query' && oauth2.token?.accessToken) {
+    const prefix = oauth2.headerPrefix ?? 'Bearer';
+    headers.Authorization = prefix ? `${prefix} ${oauth2.token.accessToken}` : oauth2.token.accessToken;
+  }
+  // Digest's Authorization answers the server's challenge; executeRequest adds it.
 }
 
 /**
@@ -202,12 +213,32 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
     try {
       const url = buildUrl(config);
       const body = hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : buildBody(config)) : undefined;
-      if (jar) {
-        const { response, setCookies } = await fetchWithJar(config, jar, { url, method, headers, body });
-        return { response, setCookies, bodyText: await response.text() };
+      const send = async (sent: Record<string, string>): Promise<{ response: Response; setCookies: string[] }> => {
+        if (jar) return fetchWithJar(config, jar, { url, method, headers: sent, body });
+        const response = await fetchFor(config)(url, { method, headers: sent, body });
+        return { response, setCookies: response.headers.getSetCookie() };
+      };
+      let sent = await send(headers);
+      // Digest: the first answer is a 401 with the challenge; answer it and send again.
+      const digest = config.auth.type === 'digest' ? config.auth.digest : undefined;
+      const challenge =
+        digest && sent.response.status === 401
+          ? parseDigestChallenge(sent.response.headers.get('www-authenticate') ?? '')
+          : undefined;
+      if (digest && challenge) {
+        await sent.response.body?.cancel();
+        const target = new URL(url);
+        const authorization = digestAuthorization(challenge, {
+          username: digest.username,
+          password: digest.password,
+          method,
+          uri: `${target.pathname}${target.search}`,
+          body: typeof body === 'string' ? body : body === undefined ? '' : undefined,
+        });
+        const retried = await send({ ...headers, Authorization: authorization });
+        sent = { response: retried.response, setCookies: [...sent.setCookies, ...retried.setCookies] };
       }
-      const response = await fetchFor(config)(url, { method, headers, body });
-      return { response, setCookies: response.headers.getSetCookie(), bodyText: await response.text() };
+      return { ...sent, bodyText: await sent.response.text() };
     } catch (error) {
       throw withErrorDetail(error);
     }

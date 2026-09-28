@@ -323,6 +323,51 @@ describe('importNative', () => {
   });
 });
 
+describe('request auth and settings', () => {
+  it('keeps Digest and OAuth 2.0 auth and the cookie jar setting, but no OAuth token', () => {
+    const d = doc();
+    const request = d.collections.flatMap((c) => c.items).find((i) => i.type === 'request')!;
+    if (request.type !== 'request') throw new Error('expected a request');
+    request.config.useCookies = false;
+    request.config.auth = {
+      type: 'oauth2',
+      oauth2: {
+        grantType: 'authorization_code',
+        authUrl: 'https://id/auth',
+        tokenUrl: 'https://id/token',
+        clientId: 'app',
+        usePkce: false,
+        addTo: 'query',
+        token: { accessToken: 'stale', obtainedAt: 1 },
+      },
+    };
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    importNative(db, workspaceId, validateNativeExport(d), { includeScripts: true, includeEnvironments: false });
+    const api = getCollectionTree(db, workspaceId).find((c) => c.name === 'Users API')!;
+    const config = getRequest(db, api.requests[0].id)!.config;
+    expect(config.useCookies).toBe(false);
+    expect(config.auth).toEqual({
+      type: 'oauth2',
+      oauth2: {
+        grantType: 'authorization_code',
+        tokenUrl: 'https://id/token',
+        clientId: 'app',
+        authUrl: 'https://id/auth',
+        usePkce: false,
+        addTo: 'query',
+      },
+    });
+
+    request.config.auth = { type: 'digest', digest: { username: 'u', password: 'p' } };
+    expect(validateNativeExport(d).collections[0].items[0]).toMatchObject({
+      config: { auth: { type: 'digest', digest: { username: 'u', password: 'p' } } },
+    });
+    request.config.auth = { type: 'oauth2', oauth2: { grantType: 'implicit' } } as never;
+    expect(() => validateNativeExport(d)).toThrow('grantType: expected one of');
+  });
+});
+
 describe('the TLS certificate check setting', () => {
   // The fixture's request, WebSocket and MCP items with the check turned off.
   function insecureDoc(): NativeExportDocument {

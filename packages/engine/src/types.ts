@@ -41,10 +41,65 @@ export interface RequestBody {
 }
 
 export interface AuthConfig {
-  type: 'none' | 'basic' | 'bearer' | 'apiKey';
+  /** `digest` and `oauth2` apply to HTTP and GraphQL requests (executeRequest, runRequestWithScripts). */
+  type: 'none' | 'basic' | 'bearer' | 'apiKey' | 'digest' | 'oauth2';
   basic?: { username: string; password: string };
   bearer?: { token: string };
   apiKey?: { key: string; value: string; addTo: 'header' | 'query' };
+  /** HTTP Digest (RFC 7616): the server's challenge is answered in executeRequest. */
+  digest?: { username: string; password: string };
+  oauth2?: OAuth2Config;
+}
+
+export type OAuth2GrantType = 'authorization_code' | 'client_credentials' | 'password';
+
+/**
+ * OAuth 2.0 (RFC 6749) settings. runRequestWithScripts gets a token before
+ * sending (request/oauth2.ts): the stored one while it's valid, else a
+ * refreshed or new one, and sends it as `token`.
+ */
+export interface OAuth2Config {
+  grantType: OAuth2GrantType;
+  /** The provider's authorization endpoint (authorization code only). */
+  authUrl?: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: string;
+  /** Space-separated. */
+  scope?: string;
+  /** Sent as `audience`, which some providers (Auth0, for one) need. */
+  audience?: string;
+  /** Resource owner's credentials (password grant only). */
+  username?: string;
+  password?: string;
+  /** Where the provider sends the browser back (authorization code only).
+   * Must be `http://127.0.0.1`, `http://localhost` or `http://[::1]`, with a
+   * port if the provider only accepts a registered one; default
+   * `http://127.0.0.1:<a free port>/callback`. */
+  redirectUri?: string;
+  /** Proof Key for Code Exchange (RFC 7636, S256), for authorization code. On unless `false`. */
+  usePkce?: boolean;
+  /** How the client id and secret reach the token endpoint: an HTTP Basic
+   * header (the default, RFC 6749 §2.3.1) or form fields in the body. */
+  clientAuth?: 'basic' | 'body';
+  /** Where the token goes: the Authorization header (the default) or the `access_token` query parameter. */
+  addTo?: 'header' | 'query';
+  /** Before the token in the Authorization header; default `Bearer`. */
+  headerPrefix?: string;
+  /** The token to send. runRequestWithScripts sets it from its token store;
+   * set it yourself to send a token you already have. */
+  token?: OAuth2Token;
+}
+
+export interface OAuth2Token {
+  accessToken: string;
+  tokenType?: string;
+  refreshToken?: string;
+  /** Milliseconds since the epoch; absent when the provider gave no `expires_in`. */
+  expiresAt?: number;
+  scope?: string;
+  idToken?: string;
+  obtainedAt: number;
 }
 
 export interface RequestConfig {

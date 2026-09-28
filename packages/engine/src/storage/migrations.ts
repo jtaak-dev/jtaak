@@ -166,6 +166,23 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // OAuth 2.0 tokens per workspace (storage/oauth2Tokens.ts), by
+    // oauth2TokenKey, so requests with the same client share one.
+    version: 6,
+    name: 'OAuth 2.0 tokens',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS oauth2_tokens (
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          key TEXT NOT NULL,
+          token_json TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (workspace_id, key)
+        );
+      `);
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

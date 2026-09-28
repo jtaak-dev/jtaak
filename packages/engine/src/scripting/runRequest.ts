@@ -5,11 +5,16 @@ import { runScript, type ScriptConsoleEntry } from './sandbox.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { RequestConfig, RequestRunResult, ScriptLogEntry, VariableScope } from '../types.js';
 import type { CookieJar } from '../request/cookieJar.js';
+import { getOAuth2Token, MemoryOAuth2TokenStore, type OAuth2TokenStore } from '../request/oauth2.js';
 import type { ScriptCookie } from './sandbox.js';
 
 export interface RunRequestOptions {
   /** Cookies kept between requests (see `ExecuteOptions.cookieJar`); scripts read the URL's cookies as `<namespace>.cookies`. */
   cookieJar?: CookieJar;
+  /** Where OAuth 2.0 tokens are kept (request/oauth2.ts). Without it, a token is got for this request only. */
+  oauth2Tokens?: OAuth2TokenStore;
+  /** Opens the provider's sign-in page, for the authorization code grant when there's no valid token. */
+  openBrowser?: (url: string) => void | Promise<void>;
 }
 
 /** The jar's cookies for a request's URL, as scripts see them. */
@@ -82,7 +87,25 @@ export async function runRequestWithScripts(
     }
   }
 
-  const resolvedConfig = resolveDeep(config, { ...scopes, environment: variables });
+  let resolvedConfig = resolveDeep(config, { ...scopes, environment: variables });
+
+  // OAuth 2.0: a token of the request's own is sent as it is; otherwise the
+  // store's, refreshed or new as needed (after variables, which the settings
+  // may use).
+  const oauth2 = resolvedConfig.auth.type === 'oauth2' ? resolvedConfig.auth.oauth2 : undefined;
+  if (oauth2 && !oauth2.token?.accessToken) {
+    try {
+      const { token } = await getOAuth2Token(oauth2, {
+        store: options.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
+        openBrowser: options.openBrowser,
+        productName: profile.productName,
+        verifyTls: resolvedConfig.verifyTls,
+      });
+      resolvedConfig = { ...resolvedConfig, auth: { ...resolvedConfig.auth, oauth2: { ...oauth2, token } } };
+    } catch (error) {
+      return withUpdates({ testResults: [], scriptLogs, sendError: (error as Error).message });
+    }
+  }
 
   let response;
   try {

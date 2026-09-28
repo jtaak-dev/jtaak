@@ -154,6 +154,84 @@ describe('importPostmanCollection', () => {
     expect(configs[2]).toEqual({ type: 'apiKey', apiKey: { key: 'X-Key', value: 'secret', addTo: 'query' } });
   });
 
+  it('converts Digest and OAuth 2.0 auth', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const oauth2 = (grant: string, extra: Array<{ key: string; value: string }> = []) => ({
+      type: 'oauth2',
+      oauth2: [
+        { key: 'grant_type', value: grant },
+        { key: 'accessTokenUrl', value: 'https://id/token' },
+        { key: 'clientId', value: 'app' },
+        { key: 'clientSecret', value: '{{secret}}' },
+        { key: 'scope', value: 'read' },
+        ...extra,
+      ],
+    });
+    const result = importPostmanCollection(db, workspace.id, {
+      info: { name: 'API' },
+      item: [
+        {
+          name: 'a',
+          request: {
+            method: 'GET',
+            url: 'https://x',
+            auth: {
+              type: 'digest',
+              digest: [
+                { key: 'username', value: 'u' },
+                { key: 'password', value: 'p' },
+              ],
+            },
+          },
+        },
+        {
+          name: 'b',
+          request: {
+            method: 'GET',
+            url: 'https://x',
+            auth: oauth2('authorization_code_with_pkce', [
+              { key: 'authUrl', value: 'https://id/auth' },
+              { key: 'redirect_uri', value: 'http://127.0.0.1:5000/cb' },
+              { key: 'addTokenTo', value: 'queryParams' },
+            ]),
+          },
+        },
+        {
+          name: 'c',
+          request: {
+            method: 'GET',
+            url: 'https://x',
+            auth: oauth2('client_credentials', [
+              { key: 'client_authentication', value: 'body' },
+              { key: 'headerPrefix', value: 'Token' },
+            ]),
+          },
+        },
+        { name: 'd', request: { method: 'GET', url: 'https://x', auth: oauth2('password_credentials') } },
+      ],
+    });
+    const requests = getCollectionTree(db, workspace.id).find((n) => n.id === result.collectionId)!.requests;
+    const [digest, code, client, password] = requests.map((r) => getRequest(db, r.id)!.config.auth);
+    expect(digest).toEqual({ type: 'digest', digest: { username: 'u', password: 'p' } });
+    const common = { tokenUrl: 'https://id/token', clientId: 'app', clientSecret: '{{secret}}', scope: 'read' };
+    expect(code).toEqual({
+      type: 'oauth2',
+      oauth2: {
+        grantType: 'authorization_code',
+        ...common,
+        authUrl: 'https://id/auth',
+        redirectUri: 'http://127.0.0.1:5000/cb',
+        addTo: 'query',
+      },
+    });
+    expect(client).toEqual({
+      type: 'oauth2',
+      oauth2: { grantType: 'client_credentials', ...common, clientAuth: 'body', headerPrefix: 'Token' },
+    });
+    expect(password).toEqual({ type: 'oauth2', oauth2: { grantType: 'password', ...common } });
+  });
+
   it('imports pre-request and test scripts verbatim', () => {
     const db = freshDb();
     const { workspace } = getOrCreateDefaultWorkspace(db);
