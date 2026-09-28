@@ -1359,6 +1359,184 @@
         }
       ],
       "items": []
+    },
+    {
+      "category": "messaging",
+      "name": "Sample — Messaging",
+      "folders": [
+        {
+          "name": "Public test brokers (work straight away)",
+          "folders": [],
+          "items": [
+            {
+              "type": "messaging",
+              "name": "Mosquitto test broker (MQTT 3.1.1)",
+              "protocol": "mqtt",
+              "url": "mqtt://test.mosquitto.org:1883",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "jtaak-sample/#"
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "Mosquitto over WebSocket and TLS (wss)",
+              "protocol": "mqtt",
+              "url": "wss://test.mosquitto.org:8081",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "jtaak-sample/#",
+                  "options": {
+                    "qos": 1
+                  }
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "HiveMQ public broker (MQTT 5)",
+              "protocol": "mqtt",
+              "url": "mqtt://broker.hivemq.com:1883",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {
+                "protocolVersion": 5
+              },
+              "subscriptions": [
+                {
+                  "channel": "jtaak-sample/#",
+                  "options": {
+                    "qos": 1
+                  }
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "NATS demo server",
+              "protocol": "nats",
+              "url": "nats://demo.nats.io:4222",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "jtaak.sample.>"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Local brokers (start them with Docker, see the README)",
+          "folders": [],
+          "items": [
+            {
+              "type": "messaging",
+              "name": "Kafka on localhost",
+              "protocol": "kafka",
+              "url": "kafka://localhost:9092",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "orders",
+                  "options": {
+                    "fromBeginning": true
+                  }
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "RabbitMQ on localhost",
+              "protocol": "amqp",
+              "url": "amqp://localhost:5672/",
+              "headers": [],
+              "auth": {
+                "type": "basic",
+                "basic": {
+                  "username": "guest",
+                  "password": "guest"
+                }
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "orders",
+                  "options": {
+                    "declare": true
+                  }
+                },
+                {
+                  "channel": "",
+                  "options": {
+                    "exchange": "amq.topic",
+                    "routingKey": "sensors.*"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "NATS on localhost",
+              "protocol": "nats",
+              "url": "nats://localhost:4222",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "orders.>"
+                },
+                {
+                  "channel": "jobs",
+                  "options": {
+                    "queue": "workers"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "messaging",
+              "name": "Socket.IO server on localhost",
+              "protocol": "socketio",
+              "url": "http://localhost:3000",
+              "headers": [],
+              "auth": {
+                "type": "none"
+              },
+              "settings": {},
+              "subscriptions": [
+                {
+                  "channel": "*"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "items": []
     }
   ],
   "environments": [
