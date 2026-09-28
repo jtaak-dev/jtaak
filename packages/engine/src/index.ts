@@ -187,6 +187,15 @@ export { parseCurlCommand } from './import/curl.js';
 export { importPostmanCollection } from './import/postmanCollection.js';
 export { importPostmanEnvironment } from './import/postmanEnvironment.js';
 export { importOpenApi } from './import/openApi.js';
+export {
+  importWsdl,
+  loadWsdl,
+  readWsdlDocument,
+  wsdlRequests,
+  type LoadWsdlOptions,
+  type WsdlImport,
+  type WsdlSource,
+} from './import/wsdl.js';
 export { exportNative, serializeNativeExport, isSecretName } from './export/nativeExport.js';
 export { importNative, isNativeExport, previewNativeImport, validateNativeExport } from './import/nativeImport.js';
 

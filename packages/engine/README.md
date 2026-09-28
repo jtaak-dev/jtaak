@@ -436,6 +436,14 @@ kept), and a Postman collection's saved responses import as examples.
 
 - `importPostmanCollection`, `importPostmanEnvironment`, `importOpenApi` and
   `parseCurlCommand` bring in existing work.
+- `importWsdl(db, workspaceId, await loadWsdl(urlOrPath))` imports a SOAP
+  service from its WSDL 1.1: a request per operation, with its endpoint, SOAP
+  version (from the binding), `SOAPAction` and a starting envelope built from
+  the input message's schema types (`?` and sample values, with optional and
+  repeated elements marked). `loadWsdl` fetches or reads the WSDL and the
+  WSDLs and schemas it imports or includes (an unreadable import is a warning);
+  `wsdlRequests` returns the requests without storing them. Document and rpc
+  styles are covered; HTTP bindings and WSDL 2.0 aren't.
 - `exportNative` writes the engine's own format (`.jt` files,
   `format: "jtaak-export"`). The output is deterministic, so exports diff
   cleanly in Git, and credentials are blanked unless you ask for them.
