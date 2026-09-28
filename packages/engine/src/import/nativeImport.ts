@@ -237,6 +237,7 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
       settings: i.settings === undefined ? {} : JSON.parse(JSON.stringify(obj(i.settings, `${path}.settings`))),
       subscriptions: subscriptions(i.subscriptions, `${path}.subscriptions`),
       ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
+      ...withTestScript(i.testScript, `${path}.testScript`),
     };
   }
   if (expected === 'websocket') {
@@ -248,6 +249,7 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
       subprotocols: strList(i.subprotocols, `${path}.subprotocols`),
       auth: auth(i.auth, `${path}.auth`),
       ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
+      ...withTestScript(i.testScript, `${path}.testScript`),
     };
   }
   return {
@@ -271,6 +273,11 @@ function subscriptions(value: unknown, path: string): MessagingSubscription[] {
     if (s.options === undefined) return { channel };
     return { channel, options: JSON.parse(JSON.stringify(obj(s.options, `${path}[${index}].options`))) };
   });
+}
+
+function withTestScript(value: unknown, path: string): { testScript?: string } {
+  const testScript = optStr(value, path);
+  return testScript ? { testScript } : {};
 }
 
 function withVerifyTls(value: unknown, path: string): { verifyTls?: boolean } {
@@ -370,6 +377,8 @@ export function previewNativeImport(doc: NativeExportDocument): NativeImportPrev
     if (i.type === 'request') {
       if (i.config.preRequestScript?.trim() || i.config.testScript?.trim()) scriptRequestCount++;
       if (i.config.body.mode === 'binary' && i.config.body.binaryPath) localFileRequestCount++;
+    } else if ((i.type === 'websocket' || i.type === 'messaging') && i.testScript?.trim()) {
+      scriptRequestCount++;
     } else if (i.type === 'mcp' && i.transport === 'stdio') {
       mcpStdioCommands.push([i.command, ...i.args].join(' '));
     }
@@ -430,6 +439,7 @@ export function importNative(
         settings: i.settings,
         subscriptions: i.subscriptions,
         verifyTls: i.verifyTls ?? true,
+        ...(options.includeScripts && i.testScript && { testScript: i.testScript }),
       });
     } else if (i.type === 'websocket') {
       const created = createWebSocketConnection(db, { collectionId, name: i.name, url: i.url });
@@ -439,6 +449,7 @@ export function importNative(
         subprotocols: i.subprotocols,
         auth: i.auth,
         verifyTls: i.verifyTls ?? true,
+        ...(options.includeScripts && i.testScript && { testScript: i.testScript }),
       });
     } else {
       const created = createMcpServerConnection(db, {

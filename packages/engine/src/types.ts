@@ -295,6 +295,8 @@ export interface WebSocketConnection {
   auth: AuthConfig;
   /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
   verifyTls: boolean;
+  /** Tests over the messages the connection sees (runConnectionTests); absent when there are none. */
+  testScript?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -372,6 +374,8 @@ export interface MessagingConnection {
   subscriptions: MessagingSubscription[];
   /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
   verifyTls: boolean;
+  /** Tests over the messages the connection sees (runConnectionTests); absent when there are none. */
+  testScript?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -951,6 +955,7 @@ export type NativeExportItem =
       auth: AuthConfig;
       /** Only written when `false` (see `RequestConfig.verifyTls`); absent means on. */
       verifyTls?: boolean;
+      testScript?: string;
     }
   | {
       type: 'mcp';
@@ -974,6 +979,7 @@ export type NativeExportItem =
       subscriptions: MessagingSubscription[];
       /** As for websocket items. */
       verifyTls?: boolean;
+      testScript?: string;
     };
 
 export interface NativeExportFolder {
@@ -1030,10 +1036,11 @@ export interface NativeImportPreview {
   secretsStripped: boolean;
   collections: { name: string; category: CollectionCategory; folderCount: number; itemCount: number }[];
   environments: string[];
-  /** Requests carrying a pre-request or test script. Scripts run in the
-   * QuickJS sandbox, but a pre-request script from someone else's file can
-   * still change the variables its request is sent with (and so where
-   * credentials go), so the user opts in to them. */
+  /** Requests carrying a pre-request or test script, and connections carrying
+   * a test script. Scripts run in the QuickJS sandbox, but a pre-request
+   * script from someone else's file can still change the variables its
+   * request is sent with (and so where credentials go), so the user opts in
+   * to them. */
   scriptRequestCount: number;
   /** Every stdio MCP server's command line — connecting one runs it locally. */
   mcpStdioCommands: string[];

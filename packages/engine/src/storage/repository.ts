@@ -435,6 +435,7 @@ interface WsConnectionRow {
   subprotocols_json: string;
   auth_json: string;
   verify_tls: number;
+  test_script: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -451,6 +452,7 @@ function toWebSocketConnection(row: WsConnectionRow): WebSocketConnection {
     subprotocols: JSON.parse(row.subprotocols_json) as string[],
     auth: JSON.parse(row.auth_json) as AuthConfig,
     verifyTls: row.verify_tls !== 0,
+    ...(row.test_script && { testScript: row.test_script }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -510,21 +512,30 @@ export function renameWebSocketConnection(db: Database.Database, id: string, nam
   db.prepare('UPDATE ws_connections SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id);
 }
 
-/** Updates a connection's endpoint/headers/subprotocols/auth/TLS check — everything but its name
- * (see renameWebSocketConnection). Leaving `verifyTls` out keeps the saved value. */
+/** Updates a connection's endpoint/headers/subprotocols/auth/TLS check/test script — everything but
+ * its name (see renameWebSocketConnection). Leaving `verifyTls` or `testScript` out keeps the saved
+ * value; an empty `testScript` removes it. */
 export function updateWebSocketConnection(
   db: Database.Database,
   id: string,
-  patch: { url: string; headers: KeyValue[]; subprotocols: string[]; auth: AuthConfig; verifyTls?: boolean },
+  patch: {
+    url: string;
+    headers: KeyValue[];
+    subprotocols: string[];
+    auth: AuthConfig;
+    verifyTls?: boolean;
+    testScript?: string;
+  },
 ): void {
   db.prepare(
-    'UPDATE ws_connections SET url = ?, headers_json = ?, subprotocols_json = ?, auth_json = ?, verify_tls = COALESCE(?, verify_tls), updated_at = ? WHERE id = ?',
+    'UPDATE ws_connections SET url = ?, headers_json = ?, subprotocols_json = ?, auth_json = ?, verify_tls = COALESCE(?, verify_tls), test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
   ).run(
     patch.url,
     JSON.stringify(patch.headers),
     JSON.stringify(patch.subprotocols),
     JSON.stringify(patch.auth),
     patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    patch.testScript ?? null,
     Date.now(),
     id,
   );
@@ -767,6 +778,7 @@ interface MessagingConnectionRow {
   settings_json: string;
   subscriptions_json: string;
   verify_tls: number;
+  test_script: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -785,6 +797,7 @@ function toMessagingConnection(row: MessagingConnectionRow): MessagingConnection
     settings: JSON.parse(row.settings_json) as Record<string, unknown>,
     subscriptions: JSON.parse(row.subscriptions_json) as MessagingSubscription[],
     verifyTls: row.verify_tls !== 0,
+    ...(row.test_script && { testScript: row.test_script }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -850,7 +863,8 @@ export function renameMessagingConnection(db: Database.Database, id: string, nam
   db.prepare('UPDATE messaging_connections SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id);
 }
 
-/** Updates everything but the name (see renameMessagingConnection). Leaving `verifyTls` out keeps the saved value. */
+/** Updates everything but the name (see renameMessagingConnection). Leaving `verifyTls` or
+ * `testScript` out keeps the saved value; an empty `testScript` removes it. */
 export function updateMessagingConnection(
   db: Database.Database,
   id: string,
@@ -862,10 +876,11 @@ export function updateMessagingConnection(
     settings: Record<string, unknown>;
     subscriptions: MessagingSubscription[];
     verifyTls?: boolean;
+    testScript?: string;
   },
 ): void {
   db.prepare(
-    'UPDATE messaging_connections SET protocol = ?, url = ?, headers_json = ?, auth_json = ?, settings_json = ?, subscriptions_json = ?, verify_tls = COALESCE(?, verify_tls), updated_at = ? WHERE id = ?',
+    'UPDATE messaging_connections SET protocol = ?, url = ?, headers_json = ?, auth_json = ?, settings_json = ?, subscriptions_json = ?, verify_tls = COALESCE(?, verify_tls), test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
   ).run(
     patch.protocol,
     patch.url,
@@ -874,6 +889,7 @@ export function updateMessagingConnection(
     JSON.stringify(patch.settings),
     JSON.stringify(patch.subscriptions),
     patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    patch.testScript ?? null,
     Date.now(),
     id,
   );

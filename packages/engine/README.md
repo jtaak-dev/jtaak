@@ -210,6 +210,22 @@ built-in call such as a large `sort`, is terminated. They get no
 Node.js or host objects, no timers and no network; data goes in and out only as
 JSON.
 
+`runConnectionTests(script, { request, messages })` runs a test script over
+what a WebSocket, SSE or messaging connection has sent and received. Each of
+`jt.messages` has `direction`, `channel`, `data`, `at` (milliseconds since
+the connection opened) and `json()`; run it again as messages arrive for
+results that say how the connection is doing so far:
+
+```ts
+jt.test('an order is paid within 5 s', () => {
+  const paid = jt.messages.find((m) => m.channel === 'orders' && m.json().status === 'paid');
+  jt.expect(paid).toBeDefined();
+  jt.expect(paid.at).toBeLessThan(5000);
+});
+```
+
+WebSocket and messaging connections keep a script as `testScript`.
+
 `runCollection(requests, scopes, onProgress)` runs a list of requests in order
 with their scripts and returns a pass/fail report. What one request's scripts
 set in `jt.environment` reaches the requests after it (a login request's

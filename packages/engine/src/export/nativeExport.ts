@@ -129,6 +129,7 @@ function wsItem(c: WebSocketConnection, includeSecrets: boolean): NativeExportIt
     auth: includeSecrets ? c.auth : stripAuth(c.auth),
     // Only when off, so files for the usual case don't change.
     ...(!c.verifyTls && { verifyTls: false }),
+    ...(c.testScript && { testScript: c.testScript }),
   };
 }
 
@@ -156,6 +157,7 @@ function messagingItem(c: MessagingConnection, includeSecrets: boolean): NativeE
     settings: includeSecrets ? c.settings : stripSettings(c.settings),
     subscriptions: c.subscriptions,
     ...(!c.verifyTls && { verifyTls: false }),
+    ...(c.testScript && { testScript: c.testScript }),
   };
 }
 

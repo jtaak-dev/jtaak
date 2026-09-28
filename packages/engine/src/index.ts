@@ -144,9 +144,16 @@ export {
 } from './storage/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
-export type { ScriptContext, ScriptCookie } from './scripting/sandbox.js';
+export type { ScriptContext, ScriptCookie, ScriptStreamMessage } from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
+export {
+  runConnectionTests,
+  CONNECTION_TEST_MESSAGE_LIMIT,
+  CONNECTION_TEST_DATA_LIMIT,
+  type ConnectionTestInput,
+  type ConnectionTestResult,
+} from './scripting/connectionTests.js';
 
 export type { RunnableRequest } from './runner/collectionRunner.js';
 export { runCollection, type RunCollectionOptions } from './runner/collectionRunner.js';
