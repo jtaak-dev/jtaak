@@ -25,6 +25,21 @@ export interface ScriptContext {
   environment?: Record<string, string>;
   /** The cookie jar's cookies for the request's URL, read as `<namespace>.cookies`. */
   cookies?: ScriptCookie[];
+  /** A connection's messages so far, read as `<namespace>.messages` (see runConnectionTests). */
+  messages?: ScriptStreamMessage[];
+}
+
+/** A message a connection sent or received, as a connection's test script reads it. */
+export interface ScriptStreamMessage {
+  direction: 'sent' | 'received';
+  /** Where it came from or went: a messaging topic, queue or event name, or an SSE event's type. */
+  channel?: string;
+  data: string;
+  /** Milliseconds since the connection opened. */
+  at: number;
+  /** A messaging message's key, headers and protocol details, when it has them. */
+  key?: string;
+  headers?: Record<string, string>;
 }
 
 /** A cookie as scripts read it. */
@@ -198,6 +213,14 @@ const PRELUDE = String.raw`
     },
   };
 
+  const messages = (input.messages || []).map((message) =>
+    Object.assign({}, message, {
+      json() {
+        return JSON.parse(message.data);
+      },
+    }),
+  );
+
   globalThis[input.namespace] = {
     test(name, fn) {
       try {
@@ -215,6 +238,7 @@ const PRELUDE = String.raw`
     request: input.request,
     response,
     cookies,
+    messages,
   };
 
   globalThis.__output = () => JSON.stringify({ results, logs, variables, environment: environmentValues });
@@ -337,6 +361,7 @@ export async function runScript(
           variables: context.variables,
           environment: context.environment,
           cookies: context.cookies,
+          messages: context.messages,
         }),
       );
       ctx.setProp(ctx.global, '__input', input);

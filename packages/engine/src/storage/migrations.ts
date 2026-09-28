@@ -183,6 +183,16 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // WebSocket and messaging connections gain a test script, run over the
+    // messages a connection sees (scripting/connectionTests.ts).
+    version: 7,
+    name: 'connection test scripts',
+    up(db) {
+      ensureColumn(db, 'ws_connections', 'test_script', 'TEXT');
+      ensureColumn(db, 'messaging_connections', 'test_script', 'TEXT');
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {
