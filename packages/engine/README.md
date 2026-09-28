@@ -387,6 +387,12 @@ const { workspace } = getOrCreateDefaultWorkspace(db);
 const tree = getCollectionTree(db, workspace.id);
 ```
 
+A database can hold several workspaces, each with its own collections,
+environments, history, cookies, OAuth tokens and response examples:
+`createWorkspace`, `openWorkspace` (which adds each category's default
+collection the first time), `renameWorkspace`, `deleteWorkspace` (with
+everything in it) and `resetWorkspace` (empty it, keeping its id).
+
 The schema is versioned: opening a database migrates it forward, and a database
 written by a newer version of the engine is refused with `DatabaseTooNewError`
 rather than modified.

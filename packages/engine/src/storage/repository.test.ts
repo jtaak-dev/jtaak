@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type Database from 'better-sqlite3';
 import { openDatabase } from './db';
+import { addHistoryEntry } from './history';
+import { saveCookie } from './cookies';
 import {
   createCollectionNode,
   createEnvironment,
@@ -19,6 +21,12 @@ import {
   getMcpTree,
   getOrCreateDefaultWorkspace,
   getRequest,
+  getWorkspace,
+  openWorkspace,
+  renameWorkspace,
+  deleteWorkspace,
+  resetWorkspace,
+  DEFAULT_WORKSPACE_NAME,
   getWebSocketConnection,
   getWebSocketTree,
   listEnvironments,
@@ -42,6 +50,19 @@ import {
   updateWebSocketConnection,
 } from './repository';
 import type { CollectionCategory, RequestConfig } from '../types';
+
+function sampleConfig(): RequestConfig {
+  return {
+    id: '',
+    name: 'r',
+    method: 'GET',
+    url: 'https://a.test',
+    params: [],
+    headers: [],
+    body: { mode: 'none' },
+    auth: { type: 'none' },
+  };
+}
 
 function freshDb(): Database.Database {
   return openDatabase(':memory:');
@@ -114,6 +135,63 @@ describe('workspaces', () => {
     createWorkspace(db, 'Team A');
     createWorkspace(db, 'Team B');
     expect(listWorkspaces(db).map((w) => w.name)).toEqual(['Team A', 'Team B']);
+  });
+
+  it('opens a new workspace with its own default collections, and renames it', () => {
+    const db = freshDb();
+    getOrCreateDefaultWorkspace(db);
+    const other = createWorkspace(db, 'Other');
+    expect(openWorkspace(db, other.id)).toEqual(other);
+    expect(getCollectionTree(db, other.id).map((n) => n.name)).toEqual(['My Collection']);
+    renameWorkspace(db, other.id, 'Renamed');
+    expect(getWorkspace(db, other.id)?.name).toBe('Renamed');
+    expect(openWorkspace(db, 'nope')).toBeUndefined();
+  });
+
+  it('deletes a workspace with everything in it, and leaves the others alone', () => {
+    const db = freshDb();
+    const { workspace: kept } = getOrCreateDefaultWorkspace(db);
+    const gone = openWorkspace(db, createWorkspace(db, 'Gone').id)!;
+    const [collection] = getCollectionTree(db, gone.id);
+    createRequest(db, { collectionId: collection.id, name: 'r', config: sampleConfig() });
+    createEnvironment(db, gone.id, 'Env');
+    addHistoryEntry(db, { workspaceId: gone.id, config: sampleConfig() });
+    saveCookie(db, gone.id, {
+      domain: 'a.test',
+      path: '/',
+      name: 'c',
+      value: 'v',
+      hostOnly: true,
+      secure: false,
+      httpOnly: false,
+      createdAt: 0,
+    });
+
+    deleteWorkspace(db, gone.id);
+    expect(listWorkspaces(db).map((w) => w.id)).toEqual([kept.id]);
+    for (const table of ['collections', 'requests', 'environments', 'request_history', 'cookies', 'workspace_seeds']) {
+      const count = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM ${table} WHERE ${table === 'requests' ? 'collection_id NOT IN (SELECT id FROM collections)' : 'workspace_id = ?'}`,
+        )
+        .get(...(table === 'requests' ? [] : [gone.id])) as { n: number };
+      expect([table, count.n]).toEqual([table, 0]);
+    }
+    expect(getCollectionTree(db, kept.id)).toHaveLength(1);
+  });
+
+  it('empties a workspace in place, back to the default name and collections', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    renameWorkspace(db, workspace.id, 'Mine');
+    const [collection] = getCollectionTree(db, workspace.id);
+    createRequest(db, { collectionId: collection.id, name: 'r', config: sampleConfig() });
+    createEnvironment(db, workspace.id, 'Env');
+
+    const reset = resetWorkspace(db, workspace.id);
+    expect(reset).toEqual({ id: workspace.id, name: DEFAULT_WORKSPACE_NAME, createdAt: workspace.createdAt });
+    expect(getCollectionTree(db, workspace.id).map((n) => [n.name, n.requests.length])).toEqual([['My Collection', 0]]);
+    expect(listEnvironments(db, workspace.id)).toEqual([]);
   });
 });
 
