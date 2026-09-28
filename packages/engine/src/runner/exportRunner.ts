@@ -12,7 +12,7 @@ export interface ExportRequestSelection {
 }
 
 /** What runCollection sends: requests answered by one HTTP exchange. The rest go through openStream or a gRPC call. */
-const RUNNABLE: readonly Protocol[] = ['http', 'graphql'];
+const RUNNABLE: readonly Protocol[] = ['http', 'graphql', 'soap'];
 
 /**
  * The requests in an export file's API collections, in the order they

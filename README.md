@@ -1,7 +1,7 @@
 # jtaak
 
 A local-first API request engine and command-line client. It sends and times
-HTTP, GraphQL, Server-Sent Events, gRPC (unary and streaming), WebSocket and MCP (Model Context
+HTTP, GraphQL, Server-Sent Events, gRPC (unary and streaming), SOAP, WebSocket and MCP (Model Context
 Protocol) requests, connects to MQTT, Kafka, Socket.IO, AMQP and NATS, runs
 pre-request and test scripts in a sandbox, imports Postman, OpenAPI and cURL,
 and stores its data in SQLite. No account, no cloud, no telemetry: it only talks

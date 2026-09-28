@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import type { ExecutedResponse, GraphQlProtocolConfig, KeyValue, RequestConfig } from '../types.js';
 import type { CookieJar } from './cookieJar.js';
 import { digestAuthorization, parseDigestChallenge } from './digest.js';
+import { soapAsHttp } from './soap.js';
 import { withErrorDetail } from './errors.js';
 import { timingPhases, withTiming } from './timing.js';
 import { fetchFor } from './tls.js';
@@ -188,6 +189,8 @@ async function fetchWithJar(
  * build the request, send it, and time it accurately.
  */
 export async function executeRequest(config: RequestConfig, options: ExecuteOptions = {}): Promise<ExecutedResponse> {
+  // SOAP is an HTTP POST of its envelope.
+  if (config.protocol === 'soap') return executeRequest(soapAsHttp(config), options);
   const protocol = config.protocol ?? 'http';
   if (protocol !== 'http' && protocol !== 'graphql') {
     throw new Error(

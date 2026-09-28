@@ -134,6 +134,7 @@ export interface RequestConfig {
   protocolConfig?:
     | Record<string, unknown>
     | GraphQlProtocolConfig
+    | SoapProtocolConfig
     | WebSocketProtocolConfig
     | GrpcProtocolConfig
     | McpProtocolConfig
@@ -152,6 +153,14 @@ export interface GraphQlProtocolConfig {
   query: string;
   variables?: Record<string, unknown>;
   operationName?: string;
+}
+
+/** `protocolConfig` for `protocol: 'soap'`: the envelope is the request's raw
+ * body, POSTed as request/soap.ts's `soapAsHttp` describes. */
+export interface SoapProtocolConfig {
+  version: '1.1' | '1.2';
+  /** The operation's action URI: SOAP 1.1's `SOAPAction` header, SOAP 1.2's `action` parameter. */
+  action?: string;
 }
 
 /** One field on a GraphQL type, as surfaced by introspection — `typeName` is
