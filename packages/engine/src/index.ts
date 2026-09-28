@@ -145,7 +145,13 @@ export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
 
 export type { RunnableRequest } from './runner/collectionRunner.js';
-export { runCollection } from './runner/collectionRunner.js';
+export { runCollection, type RunCollectionOptions } from './runner/collectionRunner.js';
+export {
+  runnableRequestsFromExport,
+  type ExportedRequest,
+  type ExportRequestSelection,
+} from './runner/exportRunner.js';
+export { junitReport, type JunitOptions } from './runner/junit.js';
 
 export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';
 

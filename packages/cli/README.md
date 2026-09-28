@@ -38,10 +38,60 @@ response body:
 
 The exit code is non-zero if the request can't be sent.
 
-## What's next
+## Running a collection: `jt run`
 
-The CLI is at an early stage. The plan is a collection runner for CI: run a
-workspace export (`.jt`), with its scripts and tests, and report the results.
+`jt run` runs the requests in an export file (`.jt`), in order, with their
+pre-request and test scripts, and reports each one as it finishes:
+
+```bash
+jt run shop.jt --env Staging --junit results.xml
+```
+
+```
+jt run shop.jt, environment "Staging": 3 requests
+
+Shop
+  ✓ Log in POST {{base}}/login → 200 OK, 88 ms
+      ✓ status is 200
+  ✓ Profile GET {{base}}/me → 200 OK, 12 ms
+      ✓ has the session
+
+Shop / Admin
+  ✗ Delete user DELETE {{base}}/users/7 → 403 Forbidden, 9 ms
+      ✗ status is 204: expected 403 to be 204
+
+3 requests, 3 tests (1 failed), 0.2 s
+```
+
+It exits with 0 when every request was sent and every test passed, 1 when
+not, and 2 when the run couldn't start (a bad option or file), so it can gate
+a CI job. Cookies are kept from one request to the next, and what a script
+sets in `jt.environment` reaches the requests after it, as in a run from an
+app. OAuth 2.0 client credentials and password tokens are got as needed;
+the authorization code grant needs a browser, so give such requests a token
+another way (a `{{variable}}` in a Bearer token, say).
+
+| Option                | What it does                                                                |
+| --------------------- | --------------------------------------------------------------------------- |
+| `-e, --env <name>`    | Use one of the file's environments                                          |
+| `--env-file <file>`   | Variables from JSON: `{ "name": "value" }`, or an exported environment (native or Postman) |
+| `--var <name=value>`  | Set a variable; repeatable, and wins over the environment                   |
+| `--folder <name>`     | Only one collection or folder: its name, or a path such as `Shop/Admin`    |
+| `--junit <file>`      | Also write the results as JUnit XML, which CI systems show as test results  |
+| `--bail`              | Stop after the first request that fails                                     |
+| `-k, --insecure`      | Don't check servers' TLS certificates (for testing only)                    |
+| `--format <id>`, `--namespace <name>` | For an export from another app built on jtaak: its format id and its scripts' namespace |
+
+gRPC, SSE, WebSocket and other streaming requests are listed as skipped.
+
+In a CI job, for example GitHub Actions:
+
+```yaml
+- run: npx jtaak run api-tests.jt --env CI --junit results.xml
+```
+
+then hand `results.xml` to your CI's JUnit test reporter to see each test in
+the job's results.
 
 ## License
 

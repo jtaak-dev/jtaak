@@ -86,6 +86,49 @@ try {
   }
   console.log(`  ${statusLine}`);
 
+  // A run with a test script: the script sandbox (QuickJS) has to load from the published files too.
+  const exportFile = path.join(project, 'check.jt');
+  const junitFile = path.join(project, 'check.xml');
+  fs.writeFileSync(
+    exportFile,
+    JSON.stringify({
+      format: 'jtaak-export',
+      version: 1,
+      scope: 'workspace',
+      exportedAt: new Date().toISOString(),
+      secretsStripped: false,
+      environments: [],
+      collections: [
+        {
+          name: 'Check',
+          category: 'api',
+          folders: [],
+          items: [
+            {
+              type: 'request',
+              name: 'Hello',
+              config: {
+                method: 'GET',
+                url,
+                params: [],
+                headers: [],
+                body: { mode: 'none' },
+                auth: { type: 'none' },
+                testScript: 'jt.test("path", () => jt.expect(jt.response.json().path).toBe("/hello"));',
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  console.log('Running a collection with the installed CLI: jt run check.jt --junit check.xml');
+  const runResult = await runInShell('npx', ['--no-install', 'jt', 'run', exportFile, '--junit', junitFile], project);
+  if (runResult.code !== 0 || !runResult.stdout.includes('✓ path') || !fs.existsSync(junitFile)) {
+    fail(`unexpected output from jt run (exit ${runResult.code}):\n${runResult.stdout}\n${runResult.stderr}`);
+  }
+  console.log(`  ${runResult.stdout.trim().split(/\r?\n/).at(-1)}`);
+
   console.log('Opening a database through the installed engine…');
   const probe = await run(
     process.execPath,

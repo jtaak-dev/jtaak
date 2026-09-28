@@ -5,6 +5,11 @@ import type { CollectionRunItemResult, CollectionRunReport, RequestConfig, Varia
 import type { RunRequestOptions } from '../scripting/runRequest.js';
 import { MemoryOAuth2TokenStore } from '../request/oauth2.js';
 
+export interface RunCollectionOptions extends RunRequestOptions {
+  /** Stop after the first request that fails to send or fails a test. */
+  stopOnFailure?: boolean;
+}
+
 export interface RunnableRequest {
   id: string;
   name: string;
@@ -41,7 +46,7 @@ export async function runCollection(
   scopes: VariableScope,
   onProgress?: (item: CollectionRunItemResult, index: number, total: number) => void,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
-  options: RunRequestOptions = {},
+  options: RunCollectionOptions = {},
 ): Promise<CollectionRunReport> {
   const start = performance.now();
   const items: CollectionRunItemResult[] = [];
@@ -50,10 +55,12 @@ export async function runCollection(
   let requestsFailedToSend = 0;
   let environment = scopes.environment;
   // Without a token store, the run keeps one of its own, so its requests share a token.
+  const { stopOnFailure, ...requestOptions } = options;
   const runOptions: RunRequestOptions = {
-    ...options,
-    oauth2Tokens: options.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
+    ...requestOptions,
+    oauth2Tokens: requestOptions.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
   };
+  let stoppedEarly = false;
 
   for (let i = 0; i < requests.length; i++) {
     const request = requests[i];
@@ -69,6 +76,12 @@ export async function runCollection(
     const item: CollectionRunItemResult = { requestId: request.id, requestName: request.name, result };
     items.push(item);
     onProgress?.(item, i, requests.length);
+    const failed =
+      !!result.preRequestError || !!result.sendError || result.testResults.some((assertion) => !assertion.passed);
+    if (stopOnFailure && failed && i < requests.length - 1) {
+      stoppedEarly = true;
+      break;
+    }
   }
 
   const environmentUpdates = diffEnvironment(scopes.environment, environment);
@@ -80,5 +93,6 @@ export async function runCollection(
     requestsFailedToSend,
     durationMs: performance.now() - start,
     ...(Object.keys(environmentUpdates).length > 0 && { environmentUpdates }),
+    ...(stoppedEarly && { stoppedEarly }),
   };
 }
