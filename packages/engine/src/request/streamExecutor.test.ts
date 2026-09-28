@@ -25,8 +25,8 @@ describe('openStream', () => {
   // 'grpc' gets its own message: unary calls are implemented (via
   // executeGrpcUnaryCall, see grpc.test.ts), just not through openStream —
   // only the streaming call types are unimplemented here.
-  it('reports "grpc" streaming as unsupported, pointing at executeGrpcUnaryCall for unary', () => {
-    expect(() => openStream(baseConfig({ protocol: 'grpc' }), () => {})).toThrow(/executeGrpcUnaryCall/);
+  it('routes "grpc" to gRPC streams, which need the method (grpcStream.test.ts covers them)', () => {
+    expect(() => openStream(baseConfig({ protocol: 'grpc' }), () => {})).toThrow(/gRPC calls need protocolConfig/);
   });
 
   it('routes "sse" to the SSE implementation instead of "not implemented"', () => {

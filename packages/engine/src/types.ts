@@ -449,11 +449,21 @@ export interface KafkaProtocolConfig {
  */
 export interface GrpcProtocolConfig {
   /** Raw `.proto` source text — a single self-contained file; cross-file
-   * `import` statements aren't resolved (see request/grpc.ts). */
+   * `import` statements aren't resolved (see request/grpc.ts). Empty when
+   * the definitions come from server reflection. */
   protoFile: string;
+  /** Where the service definitions come from: `protoFile` (the default), or
+   * `reflectedSchema`, what the server itself described (see
+   * request/grpcReflection.ts). */
+  source?: 'proto' | 'reflection';
+  /** The server's services and messages as its reflection service described
+   * them, as protobufjs JSON (`reflectGrpcServer`). */
+  reflectedSchema?: Record<string, unknown>;
   /** Fully-qualified service name, e.g. `"greeter.Greeter"`. */
   serviceFullName: string;
   methodName: string;
+  /** The request, for a unary or server-streaming call; for client and
+   * bidirectional streams, messages go through `GrpcStreamHandle.send`. */
   requestMessage: Record<string, unknown>;
   /** Defaults to `true` — plaintext (no TLS), matching grpcurl's `-plaintext`
    * default for the local/dev servers this tool is most often pointed at. */
@@ -505,6 +515,28 @@ export interface GrpcProtoSummary {
  * `message` is absent when `status.code` isn't OK (0) — mirrors how
  * `RequestRunResult.response` is absent on a failed send, rather than
  * throwing, since a non-OK status is a normal, inspectable outcome. */
+/** The `data` of a `message` event on a gRPC stream (request/grpcStream.ts). */
+export interface GrpcStreamMessage {
+  direction: 'sent' | 'received';
+  message: Record<string, unknown>;
+}
+
+/** The `data` of a gRPC stream's `close` event: how the call ended. */
+export interface GrpcStreamStatus {
+  status: { code: number; details: string };
+  /** The server's response headers, then its trailers. */
+  headers: Record<string, string>;
+  metadata: Record<string, string>;
+}
+
+/** An open gRPC streaming call (openStream with `protocol: 'grpc'`). */
+export interface GrpcStreamHandle extends StreamHandle {
+  /** Sends a message (an object, or JSON text) on a client or bidirectional stream. */
+  send: (message: unknown) => void;
+  /** Half-closes: the client is done sending, and the server may answer and finish. */
+  end: () => void;
+}
+
 export interface GrpcUnaryResult {
   status: { code: number; details: string };
   message?: Record<string, unknown>;

@@ -2,6 +2,7 @@ import { openSseStream } from './sse.js';
 import { openWebSocketStream } from './websocket.js';
 import { openMcpStream } from './mcp.js';
 import { isMessagingProtocol, openMessagingStream } from './messaging/index.js';
+import { openGrpcStream } from './grpcStream.js';
 import { DEFAULT_ENGINE_PROFILE, MESSAGING_PROTOCOLS, type EngineProfile } from '../types.js';
 import type { RequestConfig, StreamEvent, StreamHandle, StreamingProtocol } from '../types.js';
 
@@ -23,7 +24,7 @@ function isStreamingProtocol(protocol: string): protocol is StreamingProtocol {
  * pushes events over time instead of resolving once (`executeRequest` in
  * executor.ts stays the right call for one-shot protocols: http, graphql,
  * soap). Each streaming protocol fills in its own branch here; unary gRPC
- * calls go through executeGrpcUnaryCall instead.
+ * calls go through executeGrpcUnaryCall instead, and streaming ones here.
  */
 export function openStream(
   config: RequestConfig,
@@ -42,12 +43,8 @@ export function openStream(
   if (protocol === 'mcp') return openMcpStream(config, onEvent, profile);
   // Returns a MessagingStreamHandle (subscribe, unsubscribe, publish).
   if (isMessagingProtocol(protocol)) return openMessagingStream(config, onEvent);
-  if (protocol === 'grpc') {
-    throw new Error(
-      "openStream doesn't support gRPC streaming methods yet (server/client/bidi); " +
-        'unary gRPC calls are supported via executeGrpcUnaryCall instead.',
-    );
-  }
+  // Returns a GrpcStreamHandle (send, end) for a streaming method; unary calls use executeGrpcUnaryCall.
+  if (protocol === 'grpc') return openGrpcStream(config, onEvent);
 
   throw new Error(`"${protocol}" streaming is not supported yet.`);
 }

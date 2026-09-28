@@ -1,7 +1,7 @@
 # @jtaak/engine
 
 A local-first API request engine for Node.js. It sends and times HTTP, GraphQL,
-Server-Sent Events, unary gRPC, WebSocket and MCP (Model Context Protocol)
+Server-Sent Events, gRPC (unary and streaming), WebSocket and MCP (Model Context Protocol)
 requests; connects to MQTT, Kafka, Socket.IO, AMQP and NATS; runs pre-request
 and test scripts in a sandbox; resolves `{{variables}}`; imports Postman,
 OpenAPI and cURL; and stores workspaces, collections and environments in SQLite.
@@ -46,8 +46,33 @@ publishes; they don't add up to `durationMs`, which also covers building the
 request and any redirects.
 
 `protocol: 'graphql'` sends GraphQL over HTTP. For long-lived connections
-(`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`, and for unary gRPC
-calls from a pasted `.proto` file, `executeGrpcUnaryCall(config)`.
+(`sse`, `websocket`, `mcp`) use `openStream(config, onEvent)`.
+
+## gRPC
+
+A gRPC request's `protocolConfig` names the service and method, and where
+their definitions come from: a pasted `.proto` file (`protoFile`), or the
+server itself. `reflectGrpcServer(config)` asks the server's reflection
+service (v1, or v1alpha for older servers) for its services and messages,
+including the files they import; put its `schema` in `reflectedSchema` with
+`source: 'reflection'`. `summarizeGrpcSchema(protocolConfig)` lists the
+services, methods and message fields of either, for building a form.
+
+`executeGrpcUnaryCall(config)` makes a unary call. A streaming method goes
+through `openStream(config, onEvent)`, which returns a `GrpcStreamHandle`:
+
+```ts
+const call = openStream(
+  { ...config, protocol: 'grpc', protocolConfig: { ...grpc, methodName: 'Chat' } },
+  (event) => console.log(event.type, event.data), // open, message ({ direction, message }), error, close ({ status })
+) as GrpcStreamHandle;
+call.send({ text: 'hi' }); // client and bidirectional streams
+call.end(); // done sending; the server finishes
+call.close(); // or cancel
+```
+
+A server-streaming call sends `requestMessage` when it opens. Messages are
+checked against the request type before they're sent.
 
 `verifyTls: false` skips checking the server's TLS certificate, for testing a
 server with a self-signed, expired or wrong-host certificate. It works for every

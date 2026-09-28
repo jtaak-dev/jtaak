@@ -3,6 +3,7 @@ import type {
   GrpcFieldSummary,
   GrpcMessageSummary,
   GrpcMethodSummary,
+  GrpcProtocolConfig,
   GrpcProtoSummary,
   GrpcServiceSummary,
 } from '../types.js';
@@ -94,6 +95,36 @@ export function parseGrpcProto(protoFileContent: string, options: { forceRefresh
   const services: GrpcServiceSummary[] = [];
   const messages: GrpcMessageSummary[] = [];
   walkNamespace(root, services, messages);
+  return { services, messages };
+}
+
+// Reflected schemas are objects in a request's config; a parse is kept per object.
+const schemaRootCache = new WeakMap<object, Root>();
+
+/**
+ * The definitions a gRPC request uses: its reflected schema when its source
+ * is reflection, else its pasted `.proto` file.
+ */
+export function grpcRoot(config: Pick<GrpcProtocolConfig, 'protoFile' | 'source' | 'reflectedSchema'>): Root {
+  if (config.source !== 'reflection') return parseProtoRoot(config.protoFile);
+  if (!config.reflectedSchema) {
+    throw new Error("This gRPC request uses server reflection, but hasn't loaded the server's services yet.");
+  }
+  const cached = schemaRootCache.get(config.reflectedSchema);
+  if (cached) return cached;
+  const root = Root.fromJSON(config.reflectedSchema as Parameters<typeof Root.fromJSON>[0]);
+  root.resolveAll();
+  schemaRootCache.set(config.reflectedSchema, root);
+  return root;
+}
+
+/** parseGrpcProto for either source: a summary of the services and messages a request can use. */
+export function summarizeGrpcSchema(
+  config: Pick<GrpcProtocolConfig, 'protoFile' | 'source' | 'reflectedSchema'>,
+): GrpcProtoSummary {
+  const services: GrpcServiceSummary[] = [];
+  const messages: GrpcMessageSummary[] = [];
+  walkNamespace(grpcRoot(config), services, messages);
   return { services, messages };
 }
 
