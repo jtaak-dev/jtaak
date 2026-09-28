@@ -156,6 +156,10 @@ export interface ExecutedResponse {
     phases?: RequestTimingPhases;
   };
   sizeBytes: number;
+  /** Each `Set-Cookie` header as sent: `headers` joins them into one value,
+   * which can't be split again (dates contain commas). `parseSetCookie`
+   * reads one. Absent on responses stored before it existed. */
+  setCookies?: string[];
 }
 
 /** One event pushed by an open protocol connection (`openStream` in
