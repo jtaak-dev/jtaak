@@ -214,6 +214,27 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // A saved connection's TLS check can be left unset, to follow its
+    // caller's default (as RequestConfig.verifyTls can): verify_tls becomes
+    // nullable. Before, every connection was on unless turned off, so off
+    // stays off and on becomes unset. SQLite can't drop NOT NULL in place,
+    // so the column is copied to a new one that takes its name.
+    version: 9,
+    name: 'connection TLS verification can follow a default',
+    up(db) {
+      for (const table of ['ws_connections', 'mcp_connections', 'messaging_connections']) {
+        const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string; notnull: number }>;
+        if (!columns.find((c) => c.name === 'verify_tls')?.notnull) continue;
+        db.exec(`
+          ALTER TABLE ${table} ADD COLUMN verify_tls_setting INTEGER;
+          UPDATE ${table} SET verify_tls_setting = CASE WHEN verify_tls = 0 THEN 0 ELSE NULL END;
+          ALTER TABLE ${table} DROP COLUMN verify_tls;
+          ALTER TABLE ${table} RENAME COLUMN verify_tls_setting TO verify_tls;
+        `);
+      }
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

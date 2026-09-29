@@ -179,8 +179,8 @@ function wsItem(c: WebSocketConnection, includeSecrets: boolean): NativeExportIt
     headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
     subprotocols: c.subprotocols,
     auth: includeSecrets ? c.auth : stripAuth(c.auth),
-    // Only when off, so files for the usual case don't change.
-    ...(!c.verifyTls && { verifyTls: false }),
+    // Only when the connection sets it: unset, it follows the importer's default.
+    ...(c.verifyTls !== undefined && { verifyTls: c.verifyTls }),
     ...(c.testScript && { testScript: c.testScript }),
   };
 }
@@ -194,7 +194,7 @@ function mcpItem(c: McpServerConnection, includeSecrets: boolean): NativeExportI
     args: c.args,
     env: includeSecrets ? c.env : stripKeyValues(c.env),
     headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
-    ...(!c.verifyTls && { verifyTls: false }),
+    ...(c.verifyTls !== undefined && { verifyTls: c.verifyTls }),
   };
 }
 
@@ -208,7 +208,7 @@ function messagingItem(c: MessagingConnection, includeSecrets: boolean): NativeE
     auth: includeSecrets ? c.auth : stripAuth(c.auth),
     settings: includeSecrets ? c.settings : stripSettings(c.settings),
     subscriptions: c.subscriptions,
-    ...(!c.verifyTls && { verifyTls: false }),
+    ...(c.verifyTls !== undefined && { verifyTls: c.verifyTls }),
     ...(c.testScript && { testScript: c.testScript }),
   };
 }

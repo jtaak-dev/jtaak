@@ -462,12 +462,34 @@ describe('the TLS certificate check setting', () => {
     expect(nested.type === 'request' && 'verifyTls' in nested.config).toBe(false);
   });
 
-  it('leaves the check on for items without it', () => {
+  it("leaves the check unset for items without it, so they follow the importer's default", () => {
     const db = openDatabase(':memory:');
     const workspaceId = workspace(db);
     importNative(db, workspaceId, validateNativeExport(doc()), { includeScripts: true, includeEnvironments: false });
-    expect(getWebSocketTree(db, workspaceId).find((c) => c.name === 'Sockets')?.connections[0].verifyTls).toBe(true);
-    expect(getMcpTree(db, workspaceId).find((c) => c.name === 'Servers')?.connections[0].verifyTls).toBe(true);
+    const socket = getWebSocketTree(db, workspaceId).find((c) => c.name === 'Sockets')?.connections[0];
+    const server = getMcpTree(db, workspaceId).find((c) => c.name === 'Servers')?.connections[0];
+    expect(socket).toBeDefined();
+    expect(socket).not.toHaveProperty('verifyTls');
+    expect(server).not.toHaveProperty('verifyTls');
+  });
+
+  it('keeps an item that turns the check on, through an export and back', () => {
+    const d = doc();
+    const [echo] = d.collections[1].items as Array<Record<string, unknown>>;
+    echo.verifyTls = true;
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    importNative(db, workspaceId, validateNativeExport(d), { includeScripts: true, includeEnvironments: false });
+    const socket = getWebSocketTree(db, workspaceId).find((c) => c.name === 'Sockets')?.connections[0];
+    expect(socket?.verifyTls).toBe(true);
+    const exported = exportNative(
+      db,
+      workspaceId,
+      { scope: 'workspace' },
+      { includeSecrets: true, environmentIds: [] },
+    );
+    const items = exported.collections.flatMap((c) => c.items) as Array<Record<string, unknown>>;
+    expect(items.find((i) => i.name === echo.name)).toMatchObject({ verifyTls: true });
   });
 
   it('rejects a value that is not true or false', () => {

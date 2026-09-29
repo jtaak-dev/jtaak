@@ -43,7 +43,7 @@ describe('migrations', () => {
     db.close();
   });
 
-  it('v3: saved connections gain the TLS check setting, on for existing ones', () => {
+  it('v3: saved connections gain the TLS check setting (on for existing ones; v9 then unsets it)', () => {
     const filePath = tempDbPath();
     // A v2 database: connection tables without verify_tls.
     const v2 = openDatabase(filePath);
@@ -57,9 +57,44 @@ describe('migrations', () => {
 
     const db = openDatabase(filePath);
     expect(schemaVersion(db)).toBe(LATEST);
-    expect(db.prepare("SELECT verify_tls FROM ws_connections WHERE id = 'c1'").get()).toEqual({ verify_tls: 1 });
+    expect(db.prepare("SELECT verify_tls FROM ws_connections WHERE id = 'c1'").get()).toEqual({ verify_tls: null });
     const mcpColumns = db.prepare('PRAGMA table_info(mcp_connections)').all() as { name: string }[];
     expect(mcpColumns.map((c) => c.name)).toContain('verify_tls');
+    db.close();
+  });
+
+  it("v9: a connection's TLS check can be unset: off stays off, on becomes unset", () => {
+    const filePath = tempDbPath();
+    // A v8 database: verify_tls NOT NULL DEFAULT 1 in every connection table.
+    const v8 = openDatabase(filePath);
+    for (const table of ['ws_connections', 'mcp_connections', 'messaging_connections']) {
+      v8.exec(
+        `ALTER TABLE ${table} DROP COLUMN verify_tls; ALTER TABLE ${table} ADD COLUMN verify_tls INTEGER NOT NULL DEFAULT 1`,
+      );
+    }
+    v8.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'Old', 0)").run();
+    const insert = v8.prepare(
+      "INSERT INTO ws_connections (id, workspace_id, name, url, verify_tls, created_at, updated_at) VALUES (?, 'w1', ?, 'wss://x', ?, 0, 0)",
+    );
+    insert.run('on', 'Checked', 1);
+    insert.run('off', 'Unchecked', 0);
+    v8.prepare(
+      "INSERT INTO mcp_connections (id, workspace_id, name, transport, command, verify_tls, created_at, updated_at) VALUES ('m1', 'w1', 'Remote', 'http', 'https://x', 0, 0, 0)",
+    ).run();
+    v8.pragma('user_version = 8');
+    v8.close();
+
+    const db = openDatabase(filePath);
+    expect(schemaVersion(db)).toBe(LATEST);
+    expect(db.prepare('SELECT id, name, verify_tls FROM ws_connections ORDER BY id').all()).toEqual([
+      { id: 'off', name: 'Unchecked', verify_tls: 0 },
+      { id: 'on', name: 'Checked', verify_tls: null },
+    ]);
+    expect(db.prepare('SELECT verify_tls FROM mcp_connections').get()).toEqual({ verify_tls: 0 });
+    for (const table of ['ws_connections', 'mcp_connections', 'messaging_connections']) {
+      const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string; notnull: number }[];
+      expect(columns.find((c) => c.name === 'verify_tls')).toMatchObject({ notnull: 0 });
+    }
     db.close();
   });
 

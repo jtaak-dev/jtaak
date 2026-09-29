@@ -474,12 +474,12 @@ describe('WebSocket connections', () => {
     expect(updated.auth).toEqual({ type: 'bearer', bearer: { token: 'abc' } });
   });
 
-  it('checks TLS certificates by default, and keeps the setting when an update leaves it out', () => {
+  it('leaves the TLS check unset at first, keeps it when an update leaves it out, and unsets it with null', () => {
     const db = freshDb();
     const { wsCollectionId } = seededWorkspace(db);
     const connection = createWebSocketConnection(db, { collectionId: wsCollectionId, name: 'Chat', url: 'wss://x' });
-    expect(connection.verifyTls).toBe(true);
-    expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(true);
+    expect(connection).not.toHaveProperty('verifyTls');
+    expect(getWebSocketConnection(db, connection.id)).not.toHaveProperty('verifyTls');
 
     const patch = { url: 'wss://x', headers: [], subprotocols: [], auth: { type: 'none' as const } };
     updateWebSocketConnection(db, connection.id, { ...patch, verifyTls: false });
@@ -488,6 +488,8 @@ describe('WebSocket connections', () => {
     expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(false);
     updateWebSocketConnection(db, connection.id, { ...patch, verifyTls: true });
     expect(getWebSocketConnection(db, connection.id)!.verifyTls).toBe(true);
+    updateWebSocketConnection(db, connection.id, { ...patch, verifyTls: null });
+    expect(getWebSocketConnection(db, connection.id)).not.toHaveProperty('verifyTls');
   });
 
   it('deletes a connection', () => {
@@ -603,7 +605,7 @@ describe('MCP server connections', () => {
     expect(updated.headers).toEqual([{ key: 'Authorization', value: 'Bearer abc', enabled: true }]);
   });
 
-  it('checks TLS certificates by default for MCP servers, and keeps the setting when an update leaves it out', () => {
+  it("leaves an MCP server's TLS check unset at first, and keeps it when an update leaves it out", () => {
     const db = freshDb();
     const { mcpCollectionId } = seededWorkspace(db);
     const connection = createMcpServerConnection(db, {
@@ -612,12 +614,14 @@ describe('MCP server connections', () => {
       transport: 'http',
       command: 'https://x/mcp',
     });
-    expect(getMcpServerConnection(db, connection.id)!.verifyTls).toBe(true);
+    expect(getMcpServerConnection(db, connection.id)).not.toHaveProperty('verifyTls');
 
     const patch = { transport: 'http' as const, command: 'https://x/mcp', args: [], env: [], headers: [] };
     updateMcpServerConnection(db, connection.id, { ...patch, verifyTls: false });
     updateMcpServerConnection(db, connection.id, patch);
     expect(getMcpServerConnection(db, connection.id)!.verifyTls).toBe(false);
+    updateMcpServerConnection(db, connection.id, { ...patch, verifyTls: null });
+    expect(getMcpServerConnection(db, connection.id)).not.toHaveProperty('verifyTls');
   });
 
   it('deletes a connection', () => {
