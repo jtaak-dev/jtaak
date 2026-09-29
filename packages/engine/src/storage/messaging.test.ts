@@ -43,7 +43,8 @@ describe('messaging connections', () => {
       protocol: 'mqtt',
       url: 'mqtt://localhost:1883',
     });
-    expect(created).toMatchObject({ settings: {}, subscriptions: [], verifyTls: true, auth: { type: 'none' } });
+    expect(created).toMatchObject({ settings: {}, subscriptions: [], auth: { type: 'none' } });
+    expect(getMessagingConnection(db, created.id)).not.toHaveProperty('verifyTls');
 
     updateMessagingConnection(db, created.id, {
       protocol: 'mqtt',

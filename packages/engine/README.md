@@ -426,6 +426,12 @@ connections (`createMessagingConnection`, `updateMessagingConnection`,
 connection keeps its protocol, URL, headers, auth, the protocol's `settings`
 (its `protocolConfig`) and the `subscriptions` to make again on each connect.
 
+A saved WebSocket, MCP or messaging connection's `verifyTls` is optional, like
+a request's: `false` or `true` is the connection's own choice, and unset means
+it follows whatever default the host application applies when it connects (the
+engine's own is to check). An update that leaves `verifyTls` out keeps it, and
+`verifyTls: null` unsets it again. Exports carry it only when it's set.
+
 Request history is stored per workspace:
 
 ```ts

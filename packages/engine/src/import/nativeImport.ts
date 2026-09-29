@@ -494,7 +494,7 @@ export function importNative(
         auth: i.auth,
         settings: i.settings,
         subscriptions: i.subscriptions,
-        verifyTls: i.verifyTls ?? true,
+        ...(i.verifyTls !== undefined && { verifyTls: i.verifyTls }),
         ...(options.includeScripts && i.testScript && { testScript: i.testScript }),
       });
     } else if (i.type === 'websocket') {
@@ -504,7 +504,7 @@ export function importNative(
         headers: i.headers,
         subprotocols: i.subprotocols,
         auth: i.auth,
-        verifyTls: i.verifyTls ?? true,
+        ...(i.verifyTls !== undefined && { verifyTls: i.verifyTls }),
         ...(options.includeScripts && i.testScript && { testScript: i.testScript }),
       });
     } else {
@@ -520,7 +520,7 @@ export function importNative(
         args: i.args,
         env: i.env,
         headers: i.headers,
-        verifyTls: i.verifyTls ?? true,
+        ...(i.verifyTls !== undefined && { verifyTls: i.verifyTls }),
       });
     }
     result.itemCount++;

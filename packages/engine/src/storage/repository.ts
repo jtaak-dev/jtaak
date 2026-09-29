@@ -495,7 +495,7 @@ interface WsConnectionRow {
   headers_json: string;
   subprotocols_json: string;
   auth_json: string;
-  verify_tls: number;
+  verify_tls: number | null;
   test_script: string | null;
   created_at: number;
   updated_at: number;
@@ -512,11 +512,17 @@ function toWebSocketConnection(row: WsConnectionRow): WebSocketConnection {
     headers: JSON.parse(row.headers_json) as KeyValue[],
     subprotocols: JSON.parse(row.subprotocols_json) as string[],
     auth: JSON.parse(row.auth_json) as AuthConfig,
-    verifyTls: row.verify_tls !== 0,
+    ...(row.verify_tls !== null && { verifyTls: row.verify_tls !== 0 }),
     ...(row.test_script && { testScript: row.test_script }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** An update's `verify_tls = CASE WHEN ? THEN ? ELSE verify_tls END` parameters: whether
+ * to change it, and to what (undefined keeps it, null unsets it). */
+function verifyTlsParams(value: boolean | null | undefined): [number, number | null] {
+  return [value === undefined ? 0 : 1, value == null ? null : Number(value)];
 }
 
 export function listWebSocketConnections(db: Database.Database, workspaceId: string): WebSocketConnection[] {
@@ -547,7 +553,6 @@ export function createWebSocketConnection(
     headers: [],
     subprotocols: [],
     auth: { type: 'none' },
-    verifyTls: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -575,7 +580,7 @@ export function renameWebSocketConnection(db: Database.Database, id: string, nam
 
 /** Updates a connection's endpoint/headers/subprotocols/auth/TLS check/test script — everything but
  * its name (see renameWebSocketConnection). Leaving `verifyTls` or `testScript` out keeps the saved
- * value; an empty `testScript` removes it. */
+ * value; a `null` `verifyTls` unsets it (the caller's default applies) and an empty `testScript` removes it. */
 export function updateWebSocketConnection(
   db: Database.Database,
   id: string,
@@ -584,18 +589,18 @@ export function updateWebSocketConnection(
     headers: KeyValue[];
     subprotocols: string[];
     auth: AuthConfig;
-    verifyTls?: boolean;
+    verifyTls?: boolean | null;
     testScript?: string;
   },
 ): void {
   db.prepare(
-    'UPDATE ws_connections SET url = ?, headers_json = ?, subprotocols_json = ?, auth_json = ?, verify_tls = COALESCE(?, verify_tls), test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
+    'UPDATE ws_connections SET url = ?, headers_json = ?, subprotocols_json = ?, auth_json = ?, verify_tls = CASE WHEN ? THEN ? ELSE verify_tls END, test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
   ).run(
     patch.url,
     JSON.stringify(patch.headers),
     JSON.stringify(patch.subprotocols),
     JSON.stringify(patch.auth),
-    patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    ...verifyTlsParams(patch.verifyTls),
     patch.testScript ?? null,
     Date.now(),
     id,
@@ -635,7 +640,7 @@ interface McpConnectionRow {
   args_json: string;
   env_json: string;
   headers_json: string;
-  verify_tls: number;
+  verify_tls: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -652,7 +657,7 @@ function toMcpServerConnection(row: McpConnectionRow): McpServerConnection {
     args: JSON.parse(row.args_json) as string[],
     env: JSON.parse(row.env_json) as KeyValue[],
     headers: JSON.parse(row.headers_json) as KeyValue[],
-    verifyTls: row.verify_tls !== 0,
+    ...(row.verify_tls !== null && { verifyTls: row.verify_tls !== 0 }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -687,7 +692,6 @@ export function createMcpServerConnection(
     args: [],
     env: [],
     headers: [],
-    verifyTls: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -714,7 +718,8 @@ export function renameMcpServerConnection(db: Database.Database, id: string, nam
   db.prepare('UPDATE mcp_connections SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id);
 }
 
-/** Updates everything but the name (see renameMcpServerConnection). Leaving `verifyTls` out keeps the saved value. */
+/** Updates everything but the name (see renameMcpServerConnection). Leaving `verifyTls` out keeps the saved
+ * value; `null` unsets it (the caller's default applies). */
 export function updateMcpServerConnection(
   db: Database.Database,
   id: string,
@@ -724,18 +729,18 @@ export function updateMcpServerConnection(
     args: string[];
     env: KeyValue[];
     headers: KeyValue[];
-    verifyTls?: boolean;
+    verifyTls?: boolean | null;
   },
 ): void {
   db.prepare(
-    'UPDATE mcp_connections SET transport = ?, command = ?, args_json = ?, env_json = ?, headers_json = ?, verify_tls = COALESCE(?, verify_tls), updated_at = ? WHERE id = ?',
+    'UPDATE mcp_connections SET transport = ?, command = ?, args_json = ?, env_json = ?, headers_json = ?, verify_tls = CASE WHEN ? THEN ? ELSE verify_tls END, updated_at = ? WHERE id = ?',
   ).run(
     patch.transport,
     patch.command,
     JSON.stringify(patch.args),
     JSON.stringify(patch.env),
     JSON.stringify(patch.headers),
-    patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    ...verifyTlsParams(patch.verifyTls),
     Date.now(),
     id,
   );
@@ -838,7 +843,7 @@ interface MessagingConnectionRow {
   auth_json: string;
   settings_json: string;
   subscriptions_json: string;
-  verify_tls: number;
+  verify_tls: number | null;
   test_script: string | null;
   created_at: number;
   updated_at: number;
@@ -857,7 +862,7 @@ function toMessagingConnection(row: MessagingConnectionRow): MessagingConnection
     auth: JSON.parse(row.auth_json) as AuthConfig,
     settings: JSON.parse(row.settings_json) as Record<string, unknown>,
     subscriptions: JSON.parse(row.subscriptions_json) as MessagingSubscription[],
-    verifyTls: row.verify_tls !== 0,
+    ...(row.verify_tls !== null && { verifyTls: row.verify_tls !== 0 }),
     ...(row.test_script && { testScript: row.test_script }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -895,7 +900,6 @@ export function createMessagingConnection(
     auth: { type: 'none' },
     settings: {},
     subscriptions: [],
-    verifyTls: true,
     createdAt: now,
     updatedAt: now,
   };
@@ -913,7 +917,7 @@ export function createMessagingConnection(
     JSON.stringify(connection.auth),
     JSON.stringify(connection.settings),
     JSON.stringify(connection.subscriptions),
-    1,
+    null,
     connection.createdAt,
     connection.updatedAt,
   );
@@ -925,7 +929,8 @@ export function renameMessagingConnection(db: Database.Database, id: string, nam
 }
 
 /** Updates everything but the name (see renameMessagingConnection). Leaving `verifyTls` or
- * `testScript` out keeps the saved value; an empty `testScript` removes it. */
+ * `testScript` out keeps the saved value; a `null` `verifyTls` unsets it (the caller's default applies)
+ * and an empty `testScript` removes it. */
 export function updateMessagingConnection(
   db: Database.Database,
   id: string,
@@ -936,12 +941,12 @@ export function updateMessagingConnection(
     auth: AuthConfig;
     settings: Record<string, unknown>;
     subscriptions: MessagingSubscription[];
-    verifyTls?: boolean;
+    verifyTls?: boolean | null;
     testScript?: string;
   },
 ): void {
   db.prepare(
-    'UPDATE messaging_connections SET protocol = ?, url = ?, headers_json = ?, auth_json = ?, settings_json = ?, subscriptions_json = ?, verify_tls = COALESCE(?, verify_tls), test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
+    'UPDATE messaging_connections SET protocol = ?, url = ?, headers_json = ?, auth_json = ?, settings_json = ?, subscriptions_json = ?, verify_tls = CASE WHEN ? THEN ? ELSE verify_tls END, test_script = COALESCE(?, test_script), updated_at = ? WHERE id = ?',
   ).run(
     patch.protocol,
     patch.url,
@@ -949,7 +954,7 @@ export function updateMessagingConnection(
     JSON.stringify(patch.auth),
     JSON.stringify(patch.settings),
     JSON.stringify(patch.subscriptions),
-    patch.verifyTls === undefined ? null : Number(patch.verifyTls),
+    ...verifyTlsParams(patch.verifyTls),
     patch.testScript ?? null,
     Date.now(),
     id,

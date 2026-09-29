@@ -381,8 +381,8 @@ export interface WebSocketConnection {
   headers: KeyValue[];
   subprotocols: string[];
   auth: AuthConfig;
-  /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
-  verifyTls: boolean;
+  /** See `RequestConfig.verifyTls`: `false` skips the certificate check, `true` makes it; unset, the connection follows its caller's default (the engine's: checked). */
+  verifyTls?: boolean;
   /** Tests over the messages the connection sees (runConnectionTests); absent when there are none. */
   testScript?: string;
   createdAt: number;
@@ -460,8 +460,8 @@ export interface MessagingConnection {
   auth: AuthConfig;
   settings: Record<string, unknown>;
   subscriptions: MessagingSubscription[];
-  /** See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
-  verifyTls: boolean;
+  /** See `RequestConfig.verifyTls`: `false` skips the certificate check, `true` makes it; unset, the connection follows its caller's default (the engine's: checked). */
+  verifyTls?: boolean;
   /** Tests over the messages the connection sees (runConnectionTests); absent when there are none. */
   testScript?: string;
   createdAt: number;
@@ -775,8 +775,8 @@ export interface McpServerConnection {
   env: KeyValue[];
   /** http only. */
   headers: KeyValue[];
-  /** http only. See `RequestConfig.verifyTls`; `true` unless the user turned it off. */
-  verifyTls: boolean;
+  /** http only. See `RequestConfig.verifyTls`: `false` skips the certificate check, `true` makes it; unset, the connection follows its caller's default (the engine's: checked). */
+  verifyTls?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -1066,7 +1066,7 @@ export type NativeExportItem =
       headers: KeyValue[];
       subprotocols: string[];
       auth: AuthConfig;
-      /** Only written when `false` (see `RequestConfig.verifyTls`); absent means on. */
+      /** Written when the connection sets it (see `RequestConfig.verifyTls`); absent, it follows the importer's default. */
       verifyTls?: boolean;
       testScript?: string;
     }

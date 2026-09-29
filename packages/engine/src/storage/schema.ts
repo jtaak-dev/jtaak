@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS messaging_connections (
   auth_json TEXT NOT NULL DEFAULT '{"type":"none"}',
   settings_json TEXT NOT NULL DEFAULT '{}',
   subscriptions_json TEXT NOT NULL DEFAULT '[]',
-  verify_tls INTEGER NOT NULL DEFAULT 1,
+  -- See ws_connections.verify_tls.
+  verify_tls INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -103,8 +104,9 @@ CREATE TABLE IF NOT EXISTS ws_connections (
   headers_json TEXT NOT NULL DEFAULT '[]',
   subprotocols_json TEXT NOT NULL DEFAULT '[]',
   auth_json TEXT NOT NULL DEFAULT '{"type":"none"}',
-  -- 0 skips checking the server's TLS certificate (RequestConfig.verifyTls).
-  verify_tls INTEGER NOT NULL DEFAULT 1,
+  -- 0 skips checking the server's TLS certificate, 1 checks it
+  -- (RequestConfig.verifyTls); NULL follows the caller's default.
+  verify_tls INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -126,7 +128,7 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
   env_json TEXT NOT NULL DEFAULT '[]',
   headers_json TEXT NOT NULL DEFAULT '[]',
   -- http only; see ws_connections.verify_tls.
-  verify_tls INTEGER NOT NULL DEFAULT 1,
+  verify_tls INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
