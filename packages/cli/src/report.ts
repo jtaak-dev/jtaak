@@ -16,7 +16,7 @@ function palette(out: Output) {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function createReporter(out: Output) {
+export function createReporter(out: Output, command = 'jt') {
   const c = palette(out);
   const line = (text = '') => out.write(`${text}\n`);
   let lastPath = '';
@@ -25,10 +25,12 @@ export function createReporter(out: Output) {
     start(run: { file: string; folder?: string; environment?: string; count: number; skipped: ExportedRequest[] }) {
       const what = [run.folder ? `"${run.folder}" in ${run.file}` : run.file];
       if (run.environment) what.push(`environment "${run.environment}"`);
-      line(c.bold(`jt run ${what.join(', ')}: ${plural(run.count, 'request')}`));
+      line(c.bold(`${command} run ${what.join(', ')}: ${plural(run.count, 'request')}`));
       if (run.skipped.length > 0) {
         const names = run.skipped.map((r) => `${r.name} (${(r.config.protocol ?? 'http').toUpperCase()})`);
-        line(c.yellow(`Skipping ${plural(run.skipped.length, 'request')} jt run can't send: ${names.join(', ')}`));
+        line(
+          c.yellow(`Skipping ${plural(run.skipped.length, 'request')} ${command} run can't send: ${names.join(', ')}`),
+        );
       }
     },
 

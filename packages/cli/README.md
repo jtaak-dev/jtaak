@@ -100,6 +100,30 @@ In a CI job, for example GitHub Actions:
 then hand `results.xml` to your CI's JUnit test reporter to see each test in
 the job's results.
 
+## Shipping the CLI under your own name
+
+An application built on jtaak can ship this CLI as its own command, reading
+its own export format and running scripts under its own namespace, the same
+way it passes an `EngineProfile` to the engine. Depend on `jtaak` and call
+`runCli` from your bin:
+
+```js
+#!/usr/bin/env node
+import { runCli } from 'jtaak/cli';
+import { DEFAULT_ENGINE_PROFILE } from '@jtaak/engine';
+
+const profile = { ...DEFAULT_ENGINE_PROFILE, productName: 'Acme', scriptNamespace: 'acme', exportFormat: 'acme-export', exportExtension: '.acme' };
+process.exitCode = await runCli(process.argv.slice(2), { command: 'acme', profile });
+```
+
+`runCli(argv, { command, profile })` takes the arguments after the command
+name and resolves to the exit code; it never exits the process. The usage
+text and messages show `command` (default `jt`). `acme run` reads exports in
+the profile's `exportFormat` and runs their scripts under its
+`scriptNamespace` (default `DEFAULT_ENGINE_PROFILE`); `--format` and
+`--namespace` still override them. `jtaak/cli` is a plain ES module, so a
+CommonJS bin can `require('jtaak/cli')` on Node 22 and later.
+
 ## License
 
 Apache-2.0. Copyright 2026 Jana Software Lab.

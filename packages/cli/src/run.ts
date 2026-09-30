@@ -19,7 +19,9 @@ import {
 } from '@jtaak/engine';
 import { createReporter } from './report.js';
 
-export const RUN_USAGE = `Usage: jt run <export file> [options]
+/** `run`'s help text, for the command name and the profile whose format and namespace are the defaults. */
+export function runUsage(command = 'jt', profile: EngineProfile = DEFAULT_ENGINE_PROFILE): string {
+  return `Usage: ${command} run <export file> [options]
 
 Runs the file's requests with their scripts and tests, in order.
 
@@ -41,12 +43,13 @@ Options:
       --key <file>         the client certificate's PEM key
       --pass <phrase>      the key's or PFX's passphrase
       --format <id>        the file's format id, for an export from another app
-                           built on jtaak (default ${DEFAULT_ENGINE_PROFILE.exportFormat})
-      --namespace <name>   the scripts' namespace, for such a file (default ${DEFAULT_ENGINE_PROFILE.scriptNamespace})
+                           built on jtaak (default ${profile.exportFormat})
+      --namespace <name>   the scripts' namespace, for such a file (default ${profile.scriptNamespace})
   -h, --help               show this
 
 Exit code: 0 when every request was sent and every test passed, 1 when one
 wasn't, 2 when the run couldn't start (a bad option or file).`;
+}
 
 /** A problem with the command line or its files: exit code 2, before anything runs. */
 class UsageError extends Error {}
@@ -117,7 +120,17 @@ export function networkSettings(
   return Object.keys(network).length > 0 ? network : undefined;
 }
 
-export async function run(argv: string[]): Promise<number> {
+export interface RunOptions {
+  /** The command name, for the help text and messages. Default `jt`. */
+  command?: string;
+  /** The base profile; --format and --namespace override its exportFormat and scriptNamespace. */
+  profile?: EngineProfile;
+}
+
+export async function run(argv: string[], options: RunOptions = {}): Promise<number> {
+  const command = options.command ?? 'jt';
+  const baseProfile = options.profile ?? DEFAULT_ENGINE_PROFILE;
+  const usage = () => runUsage(command, baseProfile);
   let parsed;
   try {
     parsed = parseArgs({
@@ -143,23 +156,23 @@ export async function run(argv: string[]): Promise<number> {
       },
     });
   } catch (error) {
-    console.error(`${(error as Error).message}\n\n${RUN_USAGE}`);
+    console.error(`${(error as Error).message}\n\n${usage()}`);
     return 2;
   }
   const { values, positionals } = parsed;
   if (values.help) {
-    console.log(RUN_USAGE);
+    console.log(usage());
     return 0;
   }
   if (positionals.length !== 1) {
-    console.error(RUN_USAGE);
+    console.error(usage());
     return 2;
   }
   const [file] = positionals;
 
   try {
     const profile: EngineProfile = {
-      ...DEFAULT_ENGINE_PROFILE,
+      ...baseProfile,
       ...(values.format && { exportFormat: values.format }),
       ...(values.namespace && { scriptNamespace: values.namespace }),
     };
@@ -173,7 +186,7 @@ export async function run(argv: string[]): Promise<number> {
         typeof format === 'string' && format !== profile.exportFormat
           ? ` Its format is "${format}": to run it, add --format ${format} (and --namespace for its scripts).`
           : '';
-      throw new UsageError(`${file} isn't an export jt can run: ${(error as Error).message}.${hint}`);
+      throw new UsageError(`${file} isn't an export ${command} can run: ${(error as Error).message}.${hint}`);
     }
 
     let environment: Record<string, string> = {};
@@ -211,7 +224,7 @@ export async function run(argv: string[]): Promise<number> {
       if (network) request.config.network = network;
     }
 
-    const reporter = createReporter(process.stdout);
+    const reporter = createReporter(process.stdout, command);
     reporter.start({ file, folder: values.folder, environment: environmentName, count: requests.length, skipped });
     const startedAt = new Date();
     const report = await runCollection(
