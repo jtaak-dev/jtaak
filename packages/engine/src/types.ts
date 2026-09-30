@@ -1032,6 +1032,10 @@ export interface EngineProfile {
   exportExtension: string;
   /** Client name sent to MCP servers during the `initialize` handshake. */
   mcpClientName: string;
+  /** Other applications' native export format ids this one also imports
+   * (`isNativeExport`, `validateNativeExport`). None by default: only
+   * `exportFormat` is read. A file keeps its own `format` when validated. */
+  acceptFormats?: readonly string[];
 }
 
 export const DEFAULT_ENGINE_PROFILE: EngineProfile = {
@@ -1114,8 +1118,18 @@ export interface NativeExportEnvironment {
 
 export const NATIVE_EXPORT_VERSION = 1;
 
+/** Which application wrote an export file, and the global its scripts use. */
+export interface NativeExportGenerator {
+  /** The writing application's product name (its `EngineProfile.productName`). */
+  name: string;
+  /** The writing application's version, when it gave one (`NativeExportOptions.appVersion`). */
+  version?: string;
+  /** The global object the file's scripts call (its `EngineProfile.scriptNamespace`). */
+  scriptNamespace: string;
+}
+
 export interface NativeExportDocument {
-  /** The profile's `exportFormat` (see EngineProfile). */
+  /** The writing profile's `exportFormat` (see EngineProfile). */
   format: string;
   version: typeof NATIVE_EXPORT_VERSION;
   scope: ExportScope;
@@ -1123,6 +1137,9 @@ export interface NativeExportDocument {
   /** True when credentials were blanked at export time (see export/nativeExport.ts's
    * secret rules), so the importer can tell the user to fill them back in. */
   secretsStripped: boolean;
+  /** Written by `exportNative`; absent from files written before it existed.
+   * Additive, so it needs no format version bump: older importers ignore it. */
+  generator?: NativeExportGenerator;
   collections: NativeExportCollection[];
   environments: NativeExportEnvironment[];
 }
@@ -1140,6 +1157,8 @@ export interface NativeExportOptions {
   /** Environments to include for collection/category exports. A workspace
    * export always includes every environment and ignores this. */
   environmentIds: string[];
+  /** The exporting application's version, written as `generator.version`. Left out when not given. */
+  appVersion?: string;
 }
 
 /** Summary of a validated export file, shown before anything is written. */

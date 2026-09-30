@@ -50,6 +50,14 @@ export type {
   NatsProtocolConfig,
   AmqpProtocolConfig,
   KafkaProtocolConfig,
+  EngineProfile,
+  ExportScope,
+  NativeExportItem,
+  NativeExportFolder,
+  NativeExportCollection,
+  NativeExportEnvironment,
+  NativeExportDocument,
+  NativeExportGenerator,
 } from './types.js';
 export { emptyScopes, MESSAGING_PROTOCOLS } from './types.js';
 
@@ -78,6 +86,8 @@ export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmen
 
 export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';
 export { parseCurlCommand } from './import/curl.js';
+export { adaptNativeExport } from './import/adaptNativeExport.js';
+export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
 
 // protobufjs (unlike @grpc/grpc-js, which grpc.ts needs for the actual call)
 // is pure JS — parsing a pasted .proto file can happen locally in

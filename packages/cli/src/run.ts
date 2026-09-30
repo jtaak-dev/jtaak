@@ -186,7 +186,8 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
         typeof format === 'string' && format !== profile.exportFormat
           ? ` Its format is "${format}": to run it, add --format ${format} (and --namespace for its scripts).`
           : '';
-      throw new UsageError(`${file} isn't an export ${command} can run: ${(error as Error).message}.${hint}`);
+      const reason = (error as Error).message.replace(/\.$/, '');
+      throw new UsageError(`${file} isn't an export ${command} can run: ${reason}.${hint}`);
     }
 
     let environment: Record<string, string> = {};

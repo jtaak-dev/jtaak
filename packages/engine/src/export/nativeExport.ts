@@ -268,7 +268,8 @@ function findNode(nodes: AnyTreeNode[], id: string): AnyTreeNode | undefined {
 
 /**
  * Builds a native export document, identified by the profile's
- * `exportFormat`. Output is deterministic for the same data (apart from
+ * `exportFormat`, with a `generator` block naming the profile's product and
+ * script namespace (and `options.appVersion`, when given). Output is deterministic for the same data (apart from
  * `exportedAt`): fixed key order, tree order from sort_order, no ids or
  * timestamps — so exports can live in Git.
  */
@@ -312,6 +313,11 @@ export function exportNative(
     scope: target.scope,
     exportedAt: new Date().toISOString(),
     secretsStripped: !includeSecrets,
+    generator: {
+      name: profile.productName,
+      ...(options.appVersion !== undefined && { version: options.appVersion }),
+      scriptNamespace: profile.scriptNamespace,
+    },
     collections: roots.map((node) => toCollection(ctx, node)),
     environments,
   };

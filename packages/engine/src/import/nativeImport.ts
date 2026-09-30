@@ -22,6 +22,7 @@ import {
   type NativeExportDocument,
   type NativeExportEnvironment,
   type NativeExportFolder,
+  type NativeExportGenerator,
   type NativeExportItem,
   type NativeImportOptions,
   type NativeImportPreview,
@@ -38,6 +39,7 @@ import {
   type RequestBody,
   type RequestConfig,
 } from '../types.js';
+import { isScriptNamespace } from '../scripting/scriptNamespace.js';
 
 // ---- Validation --------------------------------------------------------------
 //
@@ -358,12 +360,31 @@ function environment(value: unknown, path: string): NativeExportEnvironment {
   };
 }
 
+/** Which application wrote the file. Informational, so a malformed block is dropped rather than failing the file. */
+function generator(value: unknown): NativeExportGenerator | undefined {
+  if (!isObject(value)) return undefined;
+  const { name: generatorName, version, scriptNamespace } = value;
+  if (typeof generatorName !== 'string' || !generatorName.trim()) return undefined;
+  if (version !== undefined && typeof version !== 'string') return undefined;
+  if (typeof scriptNamespace !== 'string' || !isScriptNamespace(scriptNamespace)) return undefined;
+  return { name: generatorName, ...(version !== undefined && { version }), scriptNamespace };
+}
+
+/** The profile's own format, or one of the others it imports. */
+function acceptsFormat(format: unknown, profile: EngineProfile): format is string {
+  return typeof format === 'string' && (format === profile.exportFormat || !!profile.acceptFormats?.includes(format));
+}
+
+const OTHER_APPLICATION = "This file was made by a different application and can't be imported.";
+
 export function isNativeExport(json: unknown, profile: EngineProfile = DEFAULT_ENGINE_PROFILE): boolean {
-  return isObject(json) && json.format === profile.exportFormat;
+  return isObject(json) && acceptsFormat(json.format, profile);
 }
 
 /** Checks an untrusted export file and returns a clean, fully-typed copy.
- * Throws with a readable message naming the offending field. */
+ * Throws with a readable message naming the offending field. The file's
+ * `format` must be the profile's `exportFormat` or one of its `acceptFormats`,
+ * and is kept as it is. */
 export function validateNativeExport(
   json: unknown,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
@@ -371,7 +392,14 @@ export function validateNativeExport(
   const product = profile.productName;
   try {
     const doc = obj(json, 'file');
-    if (doc.format !== profile.exportFormat) fail('format', `this is not a ${product} export file`);
+    const format = doc.format;
+    if (!acceptsFormat(format, profile)) {
+      // Another application's native export: say so without naming it.
+      if (typeof format === 'string' && typeof doc.version === 'number' && Array.isArray(doc.collections)) {
+        throw new Error(OTHER_APPLICATION);
+      }
+      fail('format', `this is not a ${product} export file`);
+    }
     if (typeof doc.version !== 'number') fail('version', 'expected a number');
     if (doc.version > NATIVE_EXPORT_VERSION) {
       throw new ValidationError(
@@ -379,12 +407,14 @@ export function validateNativeExport(
       );
     }
     if (doc.version !== NATIVE_EXPORT_VERSION) fail('version', `unsupported format version ${doc.version}`);
+    const writtenBy = generator(doc.generator);
     return {
-      format: profile.exportFormat,
+      format,
       version: NATIVE_EXPORT_VERSION,
       scope: oneOf(doc.scope, SCOPES, 'scope'),
       exportedAt: str(doc.exportedAt ?? '', 'exportedAt'),
       secretsStripped: doc.secretsStripped === true,
+      ...(writtenBy && { generator: writtenBy }),
       collections: arr(doc.collections, 'collections').map((value, i): NativeExportCollection => {
         const path = `collections[${i}]`;
         const category = oneOf(obj(value, path).category, CATEGORIES, `${path}.category`);

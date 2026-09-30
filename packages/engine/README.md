@@ -482,7 +482,9 @@ kept), and a Postman collection's saved responses import as examples.
   `format: "jtaak-export"`). The output is deterministic, so exports diff
   cleanly in Git, and credentials are blanked unless you ask for them.
   `validateNativeExport`, `previewNativeImport` and `importNative` read it back,
-  treating the file as untrusted input.
+  treating the file as untrusted input. Each file records which application
+  wrote it in a `generator` block (`name`, an optional `version` from
+  `NativeExportOptions.appVersion`, and the `scriptNamespace` its scripts use).
 - `generateSnippet(request, language)` produces cURL, `fetch`, axios, Python
   `requests` and Go code for a request.
 
@@ -511,11 +513,34 @@ const profile: EngineProfile = {
 Without one, everything uses `DEFAULT_ENGINE_PROFILE` (`jtaak`, `jt`,
 `jtaak-export`, `.jt`).
 
+Each application's native exports carry its own `format`, so by default it
+reads only its own files; another application's export fails with "This file
+was made by a different application and can't be imported." To exchange files
+with other applications built on the engine, list their format ids in
+`acceptFormats`:
+
+```ts
+import { adaptNativeExport, validateNativeExport } from '@jtaak/engine';
+
+const acme: EngineProfile = { ...profile, acceptFormats: ['other-export'] };
+const file = validateNativeExport(json, acme); // keeps format: 'other-export'
+const { doc, scriptsRewritten } = adaptNativeExport(file, acme);
+```
+
+`adaptNativeExport` rewrites the file's scripts from the namespace in its
+`generator` block to the profile's (`other.test(...)` becomes `acme.test(...)`)
+and returns a copy. It uses `rewriteScriptNamespace(source, from, to)`, which
+renames the global only where it's used as an object (`from.x`, `from?.x`,
+`from[x]`), leaving strings, template text, comments, regex literals and
+property names alone. It doesn't track scopes, so a local variable with the
+same name, used the same way, is renamed too.
+
 ## Browser-safe entry point
 
 `@jtaak/engine/browser` exports only the parts with no Node.js built-ins or
-native modules (the types, the variable resolver, code snippets, cURL parsing and
-`.proto` parsing), for bundling into browser code.
+native modules (the types, the variable resolver, code snippets, cURL parsing,
+`.proto` parsing, `adaptNativeExport` and `rewriteScriptNamespace`), for
+bundling into browser code.
 
 ## License
 
