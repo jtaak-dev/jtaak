@@ -24,6 +24,13 @@
   "bin": {
     "jt": "./dist/index.js"
   },
+  "exports": {
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "NOTICE"

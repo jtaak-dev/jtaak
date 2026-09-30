@@ -8,7 +8,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     // src/ isn't published, so maps pointing into it would only dangle.
-    "sourceMap": false
+    "sourceMap": false,
+    // Types for the jtaak/cli subpath (runCli, for applications built on jtaak).
+    "declaration": true
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]
