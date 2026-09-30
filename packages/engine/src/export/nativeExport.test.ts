@@ -191,6 +191,31 @@ describe('exportNative format id', () => {
   });
 });
 
+describe('exportNative generator', () => {
+  const options = { includeSecrets: false, environmentIds: [] };
+
+  it("names the profile's product and script namespace, right after secretsStripped", () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = getOrCreateDefaultWorkspace(db).workspace.id;
+    const doc = exportNative(db, workspaceId, { scope: 'workspace' }, options);
+    expect(doc.generator).toEqual({ name: 'jtaak', scriptNamespace: 'jt' });
+    expect(Object.keys(doc.generator!)).toEqual(['name', 'scriptNamespace']);
+    expect(Object.keys(doc).indexOf('generator')).toBe(Object.keys(doc).indexOf('secretsStripped') + 1);
+    expect(serializeNativeExport(doc)).toContain(
+      '"secretsStripped": true,\n  "generator": {\n    "name": "jtaak",\n    "scriptNamespace": "jt"\n  },\n  "collections"',
+    );
+  });
+
+  it('includes the app version when given', () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = getOrCreateDefaultWorkspace(db).workspace.id;
+    const acme = { ...DEFAULT_ENGINE_PROFILE, productName: 'Acme', scriptNamespace: 'acme' };
+    const doc = exportNative(db, workspaceId, { scope: 'workspace' }, { ...options, appVersion: '3.2.1' }, acme);
+    expect(doc.generator).toEqual({ name: 'Acme', version: '3.2.1', scriptNamespace: 'acme' });
+    expect(Object.keys(doc.generator!)).toEqual(['name', 'version', 'scriptNamespace']);
+  });
+});
+
 describe('exportNative secrets', () => {
   it('blanks credentials and secret-named values but keeps variable references and ordinary values', () => {
     const db = openDatabase(':memory:');

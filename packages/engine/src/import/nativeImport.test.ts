@@ -129,10 +129,90 @@ describe('validateNativeExport', () => {
     expect(isNativeExport(acmeDoc, acme)).toBe(true);
     expect(isNativeExport(acmeDoc)).toBe(false);
     expect(validateNativeExport(acmeDoc, acme).format).toBe('acme-export');
-    expect(() => validateNativeExport(doc(), acme)).toThrow(
+    expect(() => validateNativeExport({ ...doc(), format: undefined }, acme)).toThrow(
       /Invalid Acme export — format: this is not a Acme export file/,
     );
     expect(() => validateNativeExport({ ...acmeDoc, version: 2 }, acme)).toThrow(/newer version of Acme/);
+  });
+
+  it("says another application's export was made elsewhere, without naming it", () => {
+    const acme = { ...DEFAULT_ENGINE_PROFILE, productName: 'Acme', exportFormat: 'acme-export' };
+    const message = "This file was made by a different application and can't be imported.";
+    let thrown: unknown;
+    try {
+      validateNativeExport({ ...doc(), format: 'other-export' }, acme);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as Error).message).toBe(message);
+    expect(() => validateNativeExport(doc(), acme)).toThrow(message);
+    expect(() => validateNativeExport({ ...doc(), format: 'other-export' })).toThrow(message);
+    // Only a file shaped like a native export gets it; anything else keeps the plain message.
+    expect(() => validateNativeExport({ format: 'other-export', version: 1 })).toThrow(
+      /format: this is not a jtaak export file/,
+    );
+    expect(() => validateNativeExport({ format: 'other-export', version: '1', collections: [] })).toThrow(
+      /format: this is not a jtaak export file/,
+    );
+    expect(() => validateNativeExport({ ...doc(), format: 42 })).toThrow(/format: this is not a jtaak export file/);
+  });
+
+  it("also accepts the profile's acceptFormats, keeping the file's own format", () => {
+    const acme = { ...DEFAULT_ENGINE_PROFILE, exportFormat: 'acme-export', acceptFormats: ['other-export'] };
+    const other = { ...doc(), format: 'other-export' };
+    expect(isNativeExport(other, acme)).toBe(true);
+    expect(isNativeExport({ ...doc(), format: 'acme-export' }, acme)).toBe(true);
+    expect(isNativeExport(doc(), acme)).toBe(false);
+    expect(isNativeExport({ ...doc(), format: 42 }, acme)).toBe(false);
+    expect(validateNativeExport(other, acme).format).toBe('other-export');
+    expect(validateNativeExport({ ...doc(), format: 'acme-export' }, acme).format).toBe('acme-export');
+    expect(() => validateNativeExport(doc(), acme)).toThrow(/made by a different application/);
+    // Without acceptFormats, only the profile's own format.
+    expect(isNativeExport(other)).toBe(false);
+  });
+
+  it('keeps a well-formed generator block and drops a malformed one', () => {
+    const withVersion = { name: 'Acme', version: '2.1.0', scriptNamespace: 'acme' };
+    expect(validateNativeExport({ ...doc(), generator: withVersion }).generator).toEqual(withVersion);
+    expect(validateNativeExport({ ...doc(), generator: { name: 'Acme', scriptNamespace: 'acme' } }).generator).toEqual({
+      name: 'Acme',
+      scriptNamespace: 'acme',
+    });
+    // Unknown fields inside it are dropped too.
+    const extra = validateNativeExport({ ...doc(), generator: { ...withVersion, build: 7 } } as unknown);
+    expect(extra.generator).toEqual(withVersion);
+    for (const malformed of [
+      'Acme',
+      null,
+      [],
+      {},
+      { name: 'Acme' },
+      { scriptNamespace: 'acme' },
+      { name: '  ', scriptNamespace: 'acme' },
+      { name: 'Acme', scriptNamespace: 'not valid' },
+      { name: 'Acme', scriptNamespace: 'return' },
+      { name: 'Acme', scriptNamespace: 7 },
+      { name: 'Acme', version: 2, scriptNamespace: 'acme' },
+    ]) {
+      const valid = validateNativeExport({ ...doc(), generator: malformed } as unknown);
+      expect(valid).not.toHaveProperty('generator');
+    }
+    expect(validateNativeExport(doc())).not.toHaveProperty('generator');
+  });
+
+  it('puts the generator right after secretsStripped', () => {
+    const valid = validateNativeExport({ ...doc(), generator: { scriptNamespace: 'jt', name: 'jtaak' } });
+    expect(Object.keys(valid)).toEqual([
+      'format',
+      'version',
+      'scope',
+      'exportedAt',
+      'secretsStripped',
+      'generator',
+      'collections',
+      'environments',
+    ]);
+    expect(Object.keys(valid.generator!)).toEqual(['name', 'scriptNamespace']);
   });
 
   it('asks for an update when the file is from a newer format version', () => {

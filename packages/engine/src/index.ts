@@ -101,6 +101,7 @@ export type {
   NativeExportCollection,
   NativeExportEnvironment,
   NativeExportDocument,
+  NativeExportGenerator,
   NativeExportTarget,
   NativeExportOptions,
   NativeImportPreview,
@@ -209,6 +210,8 @@ export {
 } from './import/wsdl.js';
 export { exportNative, serializeNativeExport, isSecretName } from './export/nativeExport.js';
 export { importNative, isNativeExport, previewNativeImport, validateNativeExport } from './import/nativeImport.js';
+export { adaptNativeExport } from './import/adaptNativeExport.js';
+export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
