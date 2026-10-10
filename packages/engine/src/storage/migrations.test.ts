@@ -98,6 +98,38 @@ describe('migrations', () => {
     db.close();
   });
 
+  it('v10: environments may have no workspace (global), keeping existing ones', () => {
+    const filePath = tempDbPath();
+    // A v9 database: environments.workspace_id NOT NULL.
+    const v9 = openDatabase(filePath);
+    v9.exec(`
+      DROP TABLE environments;
+      CREATE TABLE environments (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        variables_json TEXT NOT NULL DEFAULT '{}'
+      );
+    `);
+    v9.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'Old', 0)").run();
+    v9.prepare(
+      `INSERT INTO environments (id, workspace_id, name, variables_json) VALUES ('e1', 'w1', 'Staging', '{"a":"1"}')`,
+    ).run();
+    v9.pragma('user_version = 9');
+    v9.close();
+
+    const db = openDatabase(filePath);
+    expect(schemaVersion(db)).toBe(LATEST);
+    expect(db.prepare('SELECT * FROM environments').all()).toEqual([
+      { id: 'e1', workspace_id: 'w1', name: 'Staging', variables_json: '{"a":"1"}' },
+    ]);
+    db.prepare("INSERT INTO environments (id, workspace_id, name) VALUES ('g1', NULL, 'Global')").run();
+    // Still deleted with its workspace.
+    db.prepare("DELETE FROM workspaces WHERE id = 'w1'").run();
+    expect(db.prepare('SELECT id FROM environments').all()).toEqual([{ id: 'g1' }]);
+    db.close();
+  });
+
   it('applies only the migrations a database has not had yet, in order', () => {
     const applied: number[] = [];
     const migrations: Migration[] = [1, 2, 3].map((version) => ({

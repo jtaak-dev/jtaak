@@ -874,7 +874,9 @@ export interface ConnectionTreeNode<TConnection> extends CollectionNode {
 
 export interface Environment {
   id: string;
-  workspaceId: string;
+  /** The workspace it belongs to, or null for a global environment, one any
+   * workspace can use. */
+  workspaceId: string | null;
   name: string;
   variables: Record<string, string>;
 }
@@ -1154,8 +1156,9 @@ export type NativeExportTarget =
 export interface NativeExportOptions {
   /** Off by default: credentials are blanked unless this is true. */
   includeSecrets: boolean;
-  /** Environments to include for collection/category exports. A workspace
-   * export always includes every environment and ignores this. */
+  /** Environments to include for collection/category exports, the
+   * workspace's or global ones. A workspace export always includes every
+   * environment of the workspace (no global ones) and ignores this. */
   environmentIds: string[];
   /** The exporting application's version, written as `generator.version`. Left out when not given. */
   appVersion?: string;

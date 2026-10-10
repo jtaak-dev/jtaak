@@ -12,9 +12,10 @@ interface PostmanEnvironmentRoot {
   values?: PostmanEnvironmentValue[];
 }
 
+/** Imports a Postman environment into a workspace, or with `null` as a global environment. */
 export function importPostmanEnvironment(
   db: Database.Database,
-  workspaceId: string,
+  workspaceId: string | null,
   postmanJson: unknown,
 ): Environment {
   const root = postmanJson as PostmanEnvironmentRoot;

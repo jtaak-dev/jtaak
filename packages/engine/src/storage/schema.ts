@@ -80,9 +80,11 @@ CREATE TABLE IF NOT EXISTS requests (
   updated_at INTEGER NOT NULL
 );
 
+-- workspace_id is NULL for a global environment, one any workspace can use
+-- (migration 10).
 CREATE TABLE IF NOT EXISTS environments (
   id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   variables_json TEXT NOT NULL DEFAULT '{}'
 );

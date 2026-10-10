@@ -235,6 +235,30 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    // Global environments: an environment with no workspace, usable from any.
+    // SQLite can't drop a NOT NULL in place, so the table is rebuilt (nothing
+    // refers to it). A database created at v1 or later already has the
+    // nullable column from SCHEMA_SQL.
+    version: 10,
+    name: 'global environments',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(environments)').all() as Array<{ name: string; notnull: number }>;
+      if (!columns.find((c) => c.name === 'workspace_id')?.notnull) return;
+      db.exec(`
+        CREATE TABLE environments_v10 (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          variables_json TEXT NOT NULL DEFAULT '{}'
+        );
+        INSERT INTO environments_v10 (id, workspace_id, name, variables_json)
+          SELECT id, workspace_id, name, variables_json FROM environments;
+        DROP TABLE environments;
+        ALTER TABLE environments_v10 RENAME TO environments;
+      `);
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

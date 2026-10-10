@@ -303,9 +303,11 @@ export function exportNative(
     examples: loadExamples(db, workspaceId),
   };
   const wanted = new Set(options.environmentIds);
-  const environments = listEnvironments(db, workspaceId)
-    .filter((env) => target.scope === 'workspace' || wanted.has(env.id))
-    .map((env) => ({ name: env.name, variables: includeSecrets ? env.variables : stripVariables(env.variables) }));
+  const environments = (
+    target.scope === 'workspace'
+      ? listEnvironments(db, workspaceId)
+      : [...listEnvironments(db, workspaceId), ...listEnvironments(db, null)].filter((env) => wanted.has(env.id))
+  ).map((env) => ({ name: env.name, variables: includeSecrets ? env.variables : stripVariables(env.variables) }));
 
   return {
     format: profile.exportFormat,

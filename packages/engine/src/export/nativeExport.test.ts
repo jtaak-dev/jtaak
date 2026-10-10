@@ -162,6 +162,21 @@ describe('exportNative scopes', () => {
     expect(doc.environments.map((e) => e.name)).toEqual(['Staging']);
   });
 
+  it('can include a chosen global environment in a collection export, but not in a workspace export', () => {
+    const db = openDatabase(':memory:');
+    const { workspaceId, apiId } = fixture(db);
+    const shared = createEnvironment(db, null, 'Shared');
+    const doc = exportNative(
+      db,
+      workspaceId,
+      { scope: 'collection', nodeId: apiId },
+      { includeSecrets: false, environmentIds: [shared.id] },
+    );
+    expect(doc.environments.map((e) => e.name)).toEqual(['Shared']);
+    const workspaceDoc = exportNative(db, workspaceId, { scope: 'workspace' }, noSecrets);
+    expect(workspaceDoc.environments.map((e) => e.name).sort()).toEqual(['Prod', 'Staging']);
+  });
+
   it('rejects a node that does not exist', () => {
     const db = openDatabase(':memory:');
     const { workspaceId } = fixture(db);

@@ -396,7 +396,7 @@ export function reorderRequests(db: Database.Database, orderedIds: string[]): vo
 
 interface EnvironmentRow {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   name: string;
   variables_json: string;
 }
@@ -405,9 +405,11 @@ function toEnvironment(row: EnvironmentRow): Environment {
   return { id: row.id, workspaceId: row.workspace_id, name: row.name, variables: JSON.parse(row.variables_json) };
 }
 
-export function listEnvironments(db: Database.Database, workspaceId: string): Environment[] {
+/** A workspace's own environments, or with `null` the global ones (those any
+ * workspace can use), by name. */
+export function listEnvironments(db: Database.Database, workspaceId: string | null): Environment[] {
   const rows = db
-    .prepare('SELECT * FROM environments WHERE workspace_id = ? ORDER BY name ASC')
+    .prepare('SELECT * FROM environments WHERE workspace_id IS ? ORDER BY name ASC')
     .all(workspaceId) as EnvironmentRow[];
   return rows.map(toEnvironment);
 }
@@ -417,7 +419,8 @@ export function getEnvironment(db: Database.Database, id: string): Environment |
   return row ? toEnvironment(row) : undefined;
 }
 
-export function createEnvironment(db: Database.Database, workspaceId: string, name: string): Environment {
+/** Creates an environment in a workspace, or with `null` a global one. */
+export function createEnvironment(db: Database.Database, workspaceId: string | null, name: string): Environment {
   const environment: Environment = { id: randomUUID(), workspaceId, name, variables: {} };
   db.prepare('INSERT INTO environments (id, workspace_id, name, variables_json) VALUES (?, ?, ?, ?)').run(
     environment.id,

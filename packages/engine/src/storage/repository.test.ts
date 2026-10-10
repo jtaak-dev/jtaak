@@ -372,6 +372,23 @@ describe('environments', () => {
     expect(listEnvironments(db, wsA.id).map((e) => e.name)).toEqual(['A env']);
     expect(listEnvironments(db, wsB.id).map((e) => e.name)).toEqual(['B env']);
   });
+
+  it('keeps global environments apart from every workspace, and through deleting or clearing one', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const other = createWorkspace(db, 'Other workspace');
+    const global = createEnvironment(db, null, 'Shared');
+    createEnvironment(db, workspace.id, 'Local');
+
+    expect(global.workspaceId).toBeNull();
+    expect(getEnvironment(db, global.id)).toEqual(global);
+    expect(listEnvironments(db, null).map((e) => e.name)).toEqual(['Shared']);
+    expect(listEnvironments(db, workspace.id).map((e) => e.name)).toEqual(['Local']);
+
+    resetWorkspace(db, workspace.id);
+    deleteWorkspace(db, other.id);
+    expect(listEnvironments(db, null)).toEqual([global]);
+  });
 });
 
 describe('WebSocket connections', () => {

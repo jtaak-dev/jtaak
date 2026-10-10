@@ -415,6 +415,12 @@ environments, history, cookies, OAuth tokens and response examples:
 collection the first time), `renameWorkspace`, `deleteWorkspace` (with
 everything in it) and `resetWorkspace` (empty it, keeping its id).
 
+An environment belongs to one workspace, or to none: a global environment
+(`workspaceId: null`) is for any workspace to use, and stays when a workspace
+is deleted or emptied. `createEnvironment(db, null, name)` makes one and
+`listEnvironments(db, null)` lists them; `listEnvironments(db, workspaceId)`
+lists only the workspace's own.
+
 The schema is versioned: opening a database migrates it forward, and a database
 written by a newer version of the engine is refused with `DatabaseTooNewError`
 rather than modified.
