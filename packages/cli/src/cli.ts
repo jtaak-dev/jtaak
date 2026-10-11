@@ -15,6 +15,20 @@ import {
 } from '@jtaak/engine';
 import { run } from './run.js';
 
+// What a host builds its own runner on (a data-driven or load runner, say): reading a run's arguments and export
+// file as `run` does, its options, hiding secrets, and the network options.
+export {
+  HIDDEN,
+  RUN_OPTIONS,
+  UsageError,
+  hider,
+  networkSettings,
+  prepareRun,
+  runUsage,
+  type PreparedRun,
+  type PrepareRunOptions,
+} from './run.js';
+
 export interface CliOptions {
   /** The command name shown in usage and messages. Default `jt`. */
   command?: string;

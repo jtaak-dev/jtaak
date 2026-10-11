@@ -125,7 +125,11 @@ the profile's `exportFormat` and runs their scripts under its
 `--namespace` still override them. Two more options are for `run`:
 `secretVariables(name)`, variables whose values are never printed (as
 `--secret` names them), and `junitProperties`, properties its JUnit XML
-carries. `jtaak/cli` is a plain ES module, so a
+carries. For a runner of its own (data-driven, say), a host can read a
+run's arguments and export file as `run` does with `prepareRun(argv, { …,
+extraOptions })`: its options' values (the host's own too), the environment,
+the requests it can send (and those it can't), the network settings and a
+`hide` for the secrets; a `UsageError` says what's wrong. `jtaak/cli` is a plain ES module, so a
 CommonJS bin can `require('jtaak/cli')` on Node 22 and later.
 
 ## License

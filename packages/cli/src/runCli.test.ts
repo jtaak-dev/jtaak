@@ -8,7 +8,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '@jtaak/engine';
 import { runCli, usage } from './cli.js';
-import { hider, runUsage } from './run.js';
+import { hider, prepareRun, runUsage, UsageError } from './run.js';
 
 const PROFILE: EngineProfile = {
   productName: 'Other',
@@ -172,5 +172,53 @@ describe('runCli', () => {
   it('hides values of 4 or more characters, longest first, as written and as XML escapes them', () => {
     const hide = hider(['abc', 'abcd', 'abcdef', 'a&b<c']);
     expect(hide('abc abcd abcdef a&b<c a&amp;b&lt;c')).toBe('abc ••• ••• ••• •••');
+  });
+
+  it('prepares a run for a host’s own runner: its extra options, the environment, the requests and the secrets', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jt-prepare-'));
+    const file = path.join(dir, 'api.jt');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: DEFAULT_ENGINE_PROFILE.exportFormat,
+        version: 1,
+        scope: 'workspace',
+        exportedAt: '2026-10-11T00:00:00.000Z',
+        secretsStripped: false,
+        environments: [{ name: 'CI', variables: { base: baseUrl } }],
+        collections: [
+          {
+            name: 'Api',
+            category: 'api',
+            folders: [],
+            items: [
+              {
+                type: 'request',
+                name: 'Hello',
+                config: {
+                  method: 'GET',
+                  url: '{{base}}/hello',
+                  params: [],
+                  headers: [],
+                  body: { mode: 'none' },
+                  auth: { type: 'none' },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const prepared = await prepareRun(['-e', 'CI', '--var', 'vault.key=abcdef', '--data', 'rows.csv', '-k', file], {
+      secretVariables: (name) => name.startsWith('vault.'),
+      extraOptions: { data: { type: 'string' } },
+    });
+    expect(prepared.values.data).toBe('rows.csv');
+    expect(prepared.environment).toEqual({ base: baseUrl, 'vault.key': 'abcdef' });
+    expect(prepared.name).toBe('Api');
+    expect(prepared.requests.map((r) => [r.name, r.config.verifyTls])).toEqual([['Hello', false]]);
+    expect(prepared.hide('key abcdef')).toBe('key •••');
+    await expect(prepareRun(['--data', 'x', file])).rejects.toBeInstanceOf(UsageError);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
