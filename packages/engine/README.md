@@ -38,6 +38,9 @@ console.log(response.status, response.statusText, `${response.timings.durationMs
 console.log(response.body);
 ```
 
+`executeRequest(config, { signal })` aborts the request when the signal fires;
+`AbortSignal.timeout(10_000)` gives it a time limit.
+
 `response.timings.phases` breaks the time down: `dnsMs`, `connectMs`, `tlsMs`,
 `waitMs` (from the request being sent to the first byte of the response),
 `downloadMs`, and `reusedConnection` (a reused connection has no DNS, connect or

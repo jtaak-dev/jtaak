@@ -79,6 +79,7 @@ another way (a `{{variable}}` in a Bearer token, say).
 | `-e, --env <name>`    | Use one of the file's environments                                          |
 | `--env-file <file>`   | Variables from JSON: `{ "name": "value" }`, or an exported environment (native or Postman) |
 | `--var <name=value>`  | Set a variable; repeatable, and wins over the environment                   |
+| `--secret <name>`     | A variable whose value is never printed: `•••` in the output and the JUnit XML; repeatable |
 | `--folder <name>`     | Only one collection or folder: its name, or a path such as `Shop/Admin`    |
 | `--junit <file>`      | Also write the results as JUnit XML, which CI systems show as test results  |
 | `--bail`              | Stop after the first request that fails                                     |
@@ -121,7 +122,10 @@ name and resolves to the exit code; it never exits the process. The usage
 text and messages show `command` (default `jt`). `acme run` reads exports in
 the profile's `exportFormat` and runs their scripts under its
 `scriptNamespace` (default `DEFAULT_ENGINE_PROFILE`); `--format` and
-`--namespace` still override them. `jtaak/cli` is a plain ES module, so a
+`--namespace` still override them. Two more options are for `run`:
+`secretVariables(name)`, variables whose values are never printed (as
+`--secret` names them), and `junitProperties`, properties its JUnit XML
+carries. `jtaak/cli` is a plain ES module, so a
 CommonJS bin can `require('jtaak/cli')` on Node 22 and later.
 
 ## License

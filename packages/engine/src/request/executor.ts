@@ -125,6 +125,11 @@ export interface ExecuteOptions {
    * `useCookies: false`.
    */
   cookieJar?: CookieJar;
+  /**
+   * Aborts the request when it fires: `AbortSignal.timeout(ms)` gives it a time limit. The promise then rejects with
+   * the signal's reason.
+   */
+  signal?: AbortSignal;
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
@@ -159,13 +164,26 @@ function withJarCookies(headers: Record<string, string>, jar: CookieJar, url: st
 async function fetchWithJar(
   config: RequestConfig,
   jar: CookieJar,
-  first: { url: string; method: string; headers: Record<string, string>; body: BodyInit | undefined },
+  first: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: BodyInit | undefined;
+    signal?: AbortSignal;
+  },
 ): Promise<{ response: Response; setCookies: string[] }> {
   const send = fetchFor(config);
+  const { signal } = first;
   let { url, method, headers, body } = first;
   const setCookies: string[] = [];
   for (let hop = 0; ; hop++) {
-    const response = await send(url, { method, headers: withJarCookies(headers, jar, url), body, redirect: 'manual' });
+    const response = await send(url, {
+      method,
+      headers: withJarCookies(headers, jar, url),
+      body,
+      redirect: 'manual',
+      signal,
+    });
     const cookies = response.headers.getSetCookie();
     jar.store(url, cookies);
     setCookies.push(...cookies);
@@ -224,8 +242,8 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
       const url = buildUrl(config);
       const body = hasBody ? (protocol === 'graphql' ? buildGraphQlBody(config) : await buildBody(config)) : undefined;
       const send = async (sent: Record<string, string>): Promise<{ response: Response; setCookies: string[] }> => {
-        if (jar) return fetchWithJar(config, jar, { url, method, headers: sent, body });
-        const response = await fetchFor(config)(url, { method, headers: sent, body });
+        if (jar) return fetchWithJar(config, jar, { url, method, headers: sent, body, signal: options.signal });
+        const response = await fetchFor(config)(url, { method, headers: sent, body, signal: options.signal });
         return { response, setCookies: response.headers.getSetCookie() };
       };
       let sent = await send(headers);

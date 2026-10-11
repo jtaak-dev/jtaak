@@ -30,6 +30,8 @@ Options:
       --env-file <file>    variables from a JSON file: { "name": "value" }, or an
                            exported environment (native or Postman)
       --var <name=value>   set a variable (repeatable; wins over the environment)
+      --secret <name>      a variable whose value is never printed: shown as •••
+                           in the output and the JUnit XML (repeatable)
       --folder <name>      only this collection or folder (a name, or "Collection/Folder")
       --junit <file>       also write the results as JUnit XML, for CI
       --bail               stop after the first request that fails
@@ -125,6 +127,30 @@ export interface RunOptions {
   command?: string;
   /** The base profile; --format and --namespace override its exportFormat and scriptNamespace. */
   profile?: EngineProfile;
+  /**
+   * Variables whose values are never printed, besides those named with --secret: their values (of 4 or more
+   * characters) are shown as ••• in the output and the JUnit XML.
+   */
+  secretVariables?: (name: string) => boolean;
+  /** Properties the JUnit XML carries (who it's licensed to, the build), besides its own. */
+  junitProperties?: Record<string, string>;
+}
+
+/** What's printed in place of a secret's value. */
+export const HIDDEN = '•••';
+
+const xmlEscaped = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!,
+  );
+
+/** A function that shows each secret (of 4 or more characters) as •••, as written and as XML escapes it. */
+export function hider(secrets: readonly string[]): (text: string) => string {
+  const values = [...new Set(secrets.filter((value) => value.length >= 4).flatMap((v) => [v, xmlEscaped(v)]))].sort(
+    (a, b) => b.length - a.length,
+  );
+  return (text) => values.reduce((out, value) => out.split(value).join(HIDDEN), text);
 }
 
 export async function run(argv: string[], options: RunOptions = {}): Promise<number> {
@@ -140,6 +166,7 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
         env: { type: 'string', short: 'e' },
         'env-file': { type: 'string' },
         var: { type: 'string', multiple: true },
+        secret: { type: 'string', multiple: true },
         folder: { type: 'string' },
         junit: { type: 'string' },
         bail: { type: 'boolean' },
@@ -225,7 +252,14 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
       if (network) request.config.network = network;
     }
 
-    const reporter = createReporter(process.stdout, command);
+    // The secrets' values, never printed: --secret's names, and the host application's (secretVariables).
+    const hide = hider(
+      Object.entries(environment)
+        .filter(([name]) => values.secret?.includes(name) || options.secretVariables?.(name))
+        .map(([, value]) => value),
+    );
+    const out = { write: (text: string) => process.stdout.write(hide(text)), isTTY: process.stdout.isTTY };
+    const reporter = createReporter(out, command);
     reporter.start({ file, folder: values.folder, environment: environmentName, count: requests.length, skipped });
     const startedAt = new Date();
     const report = await runCollection(
@@ -246,8 +280,9 @@ export async function run(argv: string[], options: RunOptions = {}): Promise<num
         name: values.folder ?? doc.collections.find((c) => c.category === 'api')?.name ?? file,
         paths: Object.fromEntries(requests.map((r) => [r.id, r.path])),
         timestamp: startedAt,
+        ...(options.junitProperties && { properties: options.junitProperties }),
       });
-      await fs.writeFile(values.junit, xml, 'utf8');
+      await fs.writeFile(values.junit, hide(xml), 'utf8');
     }
     return report.failedAssertions > 0 || report.requestsFailedToSend > 0 ? 1 : 0;
   } catch (error) {

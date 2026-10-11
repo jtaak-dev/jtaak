@@ -8,7 +8,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '@jtaak/engine';
 import { runCli, usage } from './cli.js';
-import { runUsage } from './run.js';
+import { hider, runUsage } from './run.js';
 
 const PROFILE: EngineProfile = {
   productName: 'Other',
@@ -117,5 +117,60 @@ describe('runCli', () => {
     expect(plain.stderr).toContain("isn't an export jt can run");
     expect(plain.stderr).toContain('add --format other-export');
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('hides the host’s secret variables, and adds its JUnit properties', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jt-host-'));
+    const file = path.join(dir, 'api.jt');
+    const junit = path.join(dir, 'report.xml');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        format: DEFAULT_ENGINE_PROFILE.exportFormat,
+        version: 1,
+        scope: 'workspace',
+        exportedAt: '2026-09-30T00:00:00.000Z',
+        secretsStripped: false,
+        environments: [{ name: 'CI', variables: { 'vault.token': 'tok-1234<&>', plain: 'shown-value' } }],
+        collections: [
+          {
+            name: 'Api',
+            category: 'api',
+            folders: [],
+            items: [
+              {
+                type: 'request',
+                name: 'Hello',
+                config: {
+                  method: 'GET',
+                  url: `${baseUrl}/hello`,
+                  params: [],
+                  headers: [],
+                  body: { mode: 'none' },
+                  auth: { type: 'none' },
+                  testScript:
+                    'jt.test(jt.variables["vault.token"] + " " + jt.variables.plain, () => jt.expect(1).toBe(2));',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const { stdout } = await capture(['run', file, '-e', 'CI', '--junit', junit], {
+      secretVariables: (name) => name.startsWith('vault.'),
+      junitProperties: { 'licensed-to': 'Ada (CI key "Nightly")' },
+    });
+    expect(stdout).toContain('••• shown-value');
+    expect(stdout).not.toContain('tok-1234');
+    const xml = fs.readFileSync(junit, 'utf8');
+    expect(xml).not.toContain('tok-1234');
+    expect(xml).toContain('<property name="licensed-to" value="Ada (CI key &quot;Nightly&quot;)"/>');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('hides values of 4 or more characters, longest first, as written and as XML escapes them', () => {
+    const hide = hider(['abc', 'abcd', 'abcdef', 'a&b<c']);
+    expect(hide('abc abcd abcdef a&b<c a&amp;b&lt;c')).toBe('abc ••• ••• ••• •••');
   });
 });

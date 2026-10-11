@@ -24,6 +24,10 @@ export interface CliOptions {
    * override them). Default `DEFAULT_ENGINE_PROFILE`.
    */
   profile?: EngineProfile;
+  /** For `run`: variables whose values are never printed (as --secret names them). */
+  secretVariables?: (name: string) => boolean;
+  /** For `run`: properties its JUnit XML carries, besides its own. */
+  junitProperties?: Record<string, string>;
 }
 
 export function usage(command = 'jt'): string {
@@ -82,7 +86,13 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
   const command = options.command ?? 'jt';
   const profile = options.profile ?? DEFAULT_ENGINE_PROFILE;
   try {
-    if (argv[0] === 'run') return await run(argv.slice(1), { command, profile });
+    if (argv[0] === 'run')
+      return await run(argv.slice(1), {
+        command,
+        profile,
+        secretVariables: options.secretVariables,
+        junitProperties: options.junitProperties,
+      });
     if (argv[0] === '--help' || argv[0] === '-h') {
       console.log(usage(command));
       return 0;

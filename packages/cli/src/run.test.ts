@@ -157,6 +157,37 @@ describe('jt run', () => {
     expect(stdout).toContain('expected "from-file" to be "from-var"');
   });
 
+  it('never prints a --secret variable’s value, in the output or the JUnit XML', async () => {
+    const junit = path.join(dir, 'secret.xml');
+    const file = exportFile({
+      collections: [
+        {
+          name: 'One',
+          category: 'api',
+          folders: [],
+          items: [
+            request(
+              'Key',
+              '{{base}}/key',
+              'console.log("key is " + jt.variables.key); jt.test("key", () => jt.expect(jt.response.json().key).toBe("other"));',
+              { headers: [{ key: 'X-Key', value: '{{key}}', enabled: true }] },
+            ),
+          ],
+        },
+      ],
+    });
+    const run = (...extra: string[]) =>
+      jt('run', file, '-e', 'Local', '--var', 'key=s3cret-value', '--junit', junit, ...extra);
+    const shown = await run();
+    expect(shown.stdout).toContain('s3cret-value');
+    const { code, stdout } = await run('--secret', 'key');
+    expect(code).toBe(1);
+    expect(stdout).not.toContain('s3cret-value');
+    expect(stdout).toContain('key is •••');
+    expect(stdout).toContain('expected "•••" to be "other"');
+    expect(fs.readFileSync(junit, 'utf8')).not.toContain('s3cret-value');
+  });
+
   it('stops at the first failure with --bail', async () => {
     const file = exportFile({
       collections: [

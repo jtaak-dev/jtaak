@@ -12,6 +12,8 @@ beforeAll(async () => {
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
+      // A server that doesn't answer for a while.
+      if (req.url === '/slow') return void setTimeout(() => res.end('late'), 2_000);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ path: req.url, method: req.method, headers: req.headers, body }));
     });
@@ -71,6 +73,14 @@ describe('executeRequest', () => {
       }),
     );
     expect(JSON.parse(result.body).body).toBe('{"hello":"world"}');
+  });
+
+  it('is aborted by a signal: a time limit with AbortSignal.timeout', async () => {
+    const started = performance.now();
+    await expect(
+      executeRequest(baseConfig({ url: `${baseUrl}/slow` }), { signal: AbortSignal.timeout(100) }),
+    ).rejects.toThrow();
+    expect(performance.now() - started).toBeLessThan(1_500);
   });
 });
 
