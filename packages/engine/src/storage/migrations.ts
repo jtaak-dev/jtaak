@@ -259,6 +259,16 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // Environment variables can be marked secret (repository.ts's
+    // setEnvironmentSecrets): a workspace folder keeps their names and never
+    // their values. Migration 10's rebuilt table lacks the column.
+    version: 11,
+    name: 'secret environment variables',
+    up(db) {
+      ensureColumn(db, 'environments', 'secrets_json', "TEXT NOT NULL DEFAULT '[]'");
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

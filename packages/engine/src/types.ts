@@ -879,7 +879,84 @@ export interface Environment {
   workspaceId: string | null;
   name: string;
   variables: Record<string, string>;
+  /** The variables marked secret, by name: their values stay on this
+   * computer (a workspace folder and a native export without secrets leave
+   * them out). Absent when none is. */
+  secrets?: string[];
 }
+
+/**
+ * A workspace as a folder of files (storage/workspaceFolder.ts): each path
+ * (relative, with `/`) and its text. One file per collection, folder,
+ * request, connection, environment and response example, keyed by id, so
+ * edits to different items change different files.
+ */
+export type WorkspaceFolderFiles = Record<string, string>;
+
+/** What applying a workspace folder changed, as the folder's paths. */
+export interface WorkspaceFolderChanges {
+  added: string[];
+  updated: string[];
+  removed: string[];
+}
+
+/** A credential written as a literal value in a workspace folder file, rather
+ * than a `{{variable}}` reference or a variable marked secret. */
+export interface WorkspaceCredentialFinding {
+  /** The file's path in the folder. */
+  file: string;
+  /** Where in it, e.g. `headers.Authorization`, `auth.bearer.token` or `variables.apiKey`. */
+  field: string;
+}
+
+/** What a workspace folder file holds (storage/workspaceFolder.ts). */
+export type WorkspaceItemKind =
+  'workspace' | 'collection' | 'request' | 'websocket' | 'mcp' | 'messaging' | 'environment' | 'example';
+
+/** An item both sides of a merge changed differently (storage/workspaceMerge.ts):
+ * one side's version is chosen whole. `text` is that side's file. */
+export interface WorkspaceMergeConflict {
+  file: string;
+  kind: WorkspaceItemKind;
+  id: string;
+  ours: { name: string; text: string };
+  theirs: { name: string; text: string };
+}
+
+/**
+ * Something a merge decided by itself, for telling the user:
+ * - `keptEdit`: `side` deleted the item and the other side changed it; it's kept, changed.
+ * - `moved`: the folder it was in is gone, so it moved to its category's first collection.
+ * - `restored`: a collection brought back so an item had somewhere to go.
+ * - `dropped`: a response example whose request is gone.
+ */
+export interface WorkspaceMergeNote {
+  file: string;
+  kind: WorkspaceItemKind;
+  id: string;
+  name: string;
+  change: 'keptEdit' | 'moved' | 'restored' | 'dropped';
+  side?: 'ours' | 'theirs';
+}
+
+/**
+ * A three-way merge of workspace folders. Without conflicts, `files` is the
+ * merged folder. With them, `files` takes our side of each (still a folder
+ * that can be applied), and `resolveWorkspaceMerge` makes the final one from
+ * a choice per conflict, starting from `merged`: what was decided, without
+ * the conflicting files or the fix-ups. `collections` holds every side's
+ * collections, to bring one back from when an item has nowhere else to go.
+ */
+export interface WorkspaceMergeResult {
+  files: WorkspaceFolderFiles;
+  conflicts: WorkspaceMergeConflict[];
+  notes: WorkspaceMergeNote[];
+  merged: WorkspaceFolderFiles;
+  collections: WorkspaceFolderFiles;
+}
+
+/** For each conflict's file, the side to keep. */
+export type WorkspaceMergeChoices = Record<string, 'ours' | 'theirs'>;
 
 export interface AssertionResult {
   name: string;

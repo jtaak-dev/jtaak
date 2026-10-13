@@ -109,6 +109,14 @@ export type {
   NativeImportResult,
   EngineProfile,
   EnvironmentUpdates,
+  WorkspaceFolderFiles,
+  WorkspaceFolderChanges,
+  WorkspaceCredentialFinding,
+  WorkspaceItemKind,
+  WorkspaceMergeConflict,
+  WorkspaceMergeNote,
+  WorkspaceMergeResult,
+  WorkspaceMergeChoices,
 } from './types.js';
 export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION, MESSAGING_PROTOCOLS } from './types.js';
 
@@ -262,6 +270,7 @@ export {
   createEnvironment,
   renameEnvironment,
   updateEnvironmentVariables,
+  setEnvironmentSecrets,
   deleteEnvironment,
   getCollectionTree,
   getWebSocketTree,
@@ -293,3 +302,14 @@ export {
   reorderMessagingConnections,
   COLLECTION_CATEGORIES,
 } from './storage/repository.js';
+export {
+  WORKSPACE_FOLDER_VERSION,
+  WorkspaceFolderError,
+  workspaceFolderFiles,
+  applyWorkspaceFolder,
+  findWorkspaceCredentials,
+  readWorkspaceFolder,
+  writeWorkspaceFolder,
+  type WorkspaceFolderErrorReason,
+} from './storage/workspaceFolder.js';
+export { mergeWorkspaceFolders, resolveWorkspaceMerge } from './storage/workspaceMerge.js';
