@@ -517,6 +517,15 @@ kept), and a Postman collection's saved responses import as examples.
   (rather than `{{variables}}`), to move into secret variables before the files
   are shared. `readWorkspaceFolder(dir)` and `writeWorkspaceFolder(dir, files)`
   read and write the files on disk, leaving anything else in the folder alone.
+- `mergeWorkspaceFolders(base, ours, theirs)` merges two folders that grew
+  from a common one, item by item: a change made on one side is taken, an item
+  one side deleted and the other changed is kept (and noted), and an item both
+  changed differently is a conflict, for `resolveWorkspaceMerge(result,
+  choices)` to settle by keeping one side's version. The result is always a
+  folder `applyWorkspaceFolder` accepts: what was in a folder the other side
+  deleted moves to its category's first collection (bringing back a root
+  collection if none is left), folders moved into each other are separated,
+  and examples of a deleted request are dropped; `notes` lists each of these.
 - `generateSnippet(request, language)` produces cURL, `fetch`, axios, Python
   `requests` and Go code for a request.
 

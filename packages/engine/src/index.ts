@@ -112,6 +112,11 @@ export type {
   WorkspaceFolderFiles,
   WorkspaceFolderChanges,
   WorkspaceCredentialFinding,
+  WorkspaceItemKind,
+  WorkspaceMergeConflict,
+  WorkspaceMergeNote,
+  WorkspaceMergeResult,
+  WorkspaceMergeChoices,
 } from './types.js';
 export { emptyScopes, DEFAULT_ENGINE_PROFILE, NATIVE_EXPORT_VERSION, MESSAGING_PROTOCOLS } from './types.js';
 
@@ -307,3 +312,4 @@ export {
   writeWorkspaceFolder,
   type WorkspaceFolderErrorReason,
 } from './storage/workspaceFolder.js';
+export { mergeWorkspaceFolders, resolveWorkspaceMerge } from './storage/workspaceMerge.js';

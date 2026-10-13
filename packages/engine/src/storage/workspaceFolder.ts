@@ -72,7 +72,7 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MANAGED_DIRS = ['collections', 'requests', 'connections', 'environments', 'examples'];
 
 /** Which item a path holds, or undefined for a file the format doesn't use. */
-function classify(file: string): { kind: string; id: string } | undefined {
+export function classify(file: string): { kind: string; id: string } | undefined {
   if (file === 'workspace.json') return { kind: 'workspace', id: '' };
   const match =
     /^(collections|requests|environments|examples)\/([^/]+)\.json$/.exec(file) ??
@@ -97,7 +97,7 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-function serialize(value: unknown): string {
+export function serialize(value: unknown): string {
   return `${JSON.stringify(canonical(value), null, 2)}\n`;
 }
 
@@ -253,7 +253,7 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
 
 // ---- Reading and checking files ------------------------------------------------
 
-type Json = Record<string, unknown>;
+export type Json = Record<string, unknown>;
 
 interface ParsedFolder {
   workspace: { id: string; name: string };
@@ -265,7 +265,7 @@ function invalid(file: string, message: string): WorkspaceFolderError {
   return new WorkspaceFolderError('invalid', `${file}: ${message}`);
 }
 
-function parseObject(file: string, text: string): Json {
+export function parseObject(file: string, text: string): Json {
   let value: unknown;
   try {
     value = JSON.parse(text);
