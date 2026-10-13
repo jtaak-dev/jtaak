@@ -21,6 +21,7 @@ import type {
   WebSocketConnection,
   Workspace,
 } from '../types.js';
+import { reorderPositions } from './ordering.js';
 
 interface CollectionRow {
   id: string;
@@ -83,6 +84,21 @@ function nextSortOrder(
     .prepare(`SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM ${table} WHERE ${column} IS ?`)
     .get(id) as { maxOrder: number };
   return row.maxOrder + 1;
+}
+
+/** Puts sibling rows in the given order, changing only those that moved (see reorderPositions). */
+function reorderRows(db: Database.Database, table: 'collections' | 'requests' | ConnectionTable, ids: string[]): void {
+  const select = db.prepare(`SELECT sort_order AS sortOrder FROM ${table} WHERE id = ?`);
+  const update = db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`);
+  db.transaction(() => {
+    const present = ids.flatMap((id) => {
+      const row = select.get(id) as { sortOrder: number } | undefined;
+      return row ? [{ id, sortOrder: row.sortOrder }] : [];
+    });
+    reorderPositions(present.map((row) => row.sortOrder)).forEach((sortOrder, index) => {
+      if (sortOrder !== undefined) update.run(sortOrder, present[index].id);
+    });
+  })();
 }
 
 // ---- Workspaces ----------------------------------------------------------
@@ -288,12 +304,9 @@ export function moveCollectionNode(db: Database.Database, id: string, newParentF
   );
 }
 
-/** Rewrites sort_order (0..n-1) for a set of sibling folders/collections, in the given order. */
+/** Puts sibling folders/collections in the given order, changing only those that moved. */
 export function reorderCollectionNodes(db: Database.Database, orderedIds: string[]): void {
-  const update = db.prepare('UPDATE collections SET sort_order = ? WHERE id = ?');
-  db.transaction((ids: string[]) => {
-    ids.forEach((id, index) => update.run(index, id));
-  })(orderedIds);
+  reorderRows(db, 'collections', orderedIds);
 }
 
 // ---- Requests --------------------------------------------------------------
@@ -384,12 +397,9 @@ export function moveRequest(db: Database.Database, id: string, newCollectionId: 
   db.prepare('UPDATE requests SET collection_id = ?, sort_order = ? WHERE id = ?').run(newCollectionId, sortOrder, id);
 }
 
-/** Rewrites sort_order (0..n-1) for a set of sibling requests, in the given order. */
+/** Puts sibling requests in the given order, changing only those that moved. */
 export function reorderRequests(db: Database.Database, orderedIds: string[]): void {
-  const update = db.prepare('UPDATE requests SET sort_order = ? WHERE id = ?');
-  db.transaction((ids: string[]) => {
-    ids.forEach((id, index) => update.run(index, id));
-  })(orderedIds);
+  reorderRows(db, 'requests', orderedIds);
 }
 
 // ---- Environments --------------------------------------------------------
@@ -399,10 +409,18 @@ interface EnvironmentRow {
   workspace_id: string | null;
   name: string;
   variables_json: string;
+  secrets_json: string;
 }
 
 function toEnvironment(row: EnvironmentRow): Environment {
-  return { id: row.id, workspaceId: row.workspace_id, name: row.name, variables: JSON.parse(row.variables_json) };
+  const secrets = JSON.parse(row.secrets_json) as string[];
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    variables: JSON.parse(row.variables_json),
+    ...(secrets.length > 0 && { secrets }),
+  };
 }
 
 /** A workspace's own environments, or with `null` the global ones (those any
@@ -437,6 +455,14 @@ export function renameEnvironment(db: Database.Database, id: string, name: strin
 
 export function updateEnvironmentVariables(db: Database.Database, id: string, variables: Record<string, string>): void {
   db.prepare('UPDATE environments SET variables_json = ? WHERE id = ?').run(JSON.stringify(variables), id);
+}
+
+/** Marks which of an environment's variables are secret, by name (replacing the last list). */
+export function setEnvironmentSecrets(db: Database.Database, id: string, names: string[]): void {
+  db.prepare('UPDATE environments SET secrets_json = ? WHERE id = ?').run(
+    JSON.stringify([...new Set(names)].sort()),
+    id,
+  );
 }
 
 export function deleteEnvironment(db: Database.Database, id: string): void {
@@ -479,13 +505,6 @@ function assertCollectionCategory(
   if (!row) throw new Error(`Collection ${collectionId} does not exist.`);
   if (row.category !== expected) throw new Error(`Collection ${collectionId} is not a ${expected} collection.`);
   return { workspaceId: row.workspace_id };
-}
-
-function reorderConnectionRows(db: Database.Database, table: ConnectionTable, orderedIds: string[]): void {
-  const update = db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`);
-  db.transaction((ids: string[]) => {
-    ids.forEach((id, index) => update.run(index, id));
-  })(orderedIds);
 }
 
 interface WsConnectionRow {
@@ -625,9 +644,9 @@ export function moveWebSocketConnection(db: Database.Database, id: string, newCo
   );
 }
 
-/** Rewrites sort_order (0..n-1) for a set of sibling connections, in the given order. */
+/** Puts sibling connections in the given order, changing only those that moved. */
 export function reorderWebSocketConnections(db: Database.Database, orderedIds: string[]): void {
-  reorderConnectionRows(db, 'ws_connections', orderedIds);
+  reorderRows(db, 'ws_connections', orderedIds);
 }
 
 // ---- MCP server connections -----------------------------------------------
@@ -764,9 +783,9 @@ export function moveMcpServerConnection(db: Database.Database, id: string, newCo
   );
 }
 
-/** Rewrites sort_order (0..n-1) for a set of sibling servers, in the given order. */
+/** Puts sibling servers in the given order, changing only those that moved. */
 export function reorderMcpServerConnections(db: Database.Database, orderedIds: string[]): void {
-  reorderConnectionRows(db, 'mcp_connections', orderedIds);
+  reorderRows(db, 'mcp_connections', orderedIds);
 }
 
 // ---- Trees ---------------------------------------------------------------
@@ -979,9 +998,9 @@ export function moveMessagingConnection(db: Database.Database, id: string, newCo
   );
 }
 
-/** Rewrites sort_order (0..n-1) for a set of sibling connections, in the given order. */
+/** Puts sibling connections in the given order, changing only those that moved. */
 export function reorderMessagingConnections(db: Database.Database, orderedIds: string[]): void {
-  reorderConnectionRows(db, 'messaging_connections', orderedIds);
+  reorderRows(db, 'messaging_connections', orderedIds);
 }
 
 /** The 'messaging' category's collection/folder/connection tree. */

@@ -40,6 +40,8 @@ export type {
   GrpcServiceSummary,
   GrpcProtoSummary,
   EnvironmentUpdates,
+  WorkspaceFolderChanges,
+  WorkspaceCredentialFinding,
   MessagingProtocol,
   MessagingConnection,
   MessagingSubscription,

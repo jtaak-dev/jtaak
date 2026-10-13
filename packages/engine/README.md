@@ -422,7 +422,13 @@ An environment belongs to one workspace, or to none: a global environment
 (`workspaceId: null`) is for any workspace to use, and stays when a workspace
 is deleted or emptied. `createEnvironment(db, null, name)` makes one and
 `listEnvironments(db, null)` lists them; `listEnvironments(db, workspaceId)`
-lists only the workspace's own.
+lists only the workspace's own. `setEnvironmentSecrets(db, id, names)` marks
+variables secret (`Environment.secrets`): a workspace folder keeps their names
+and never their values, and a native export without secrets blanks them.
+
+Reordering (`reorderRequests`, `reorderCollectionNodes` and the connections')
+changes only the items that moved, giving a moved item a sort order between
+its new neighbours, a fraction where needed.
 
 The schema is versioned: opening a database migrates it forward, and a database
 written by a newer version of the engine is refused with `DatabaseTooNewError`
@@ -494,6 +500,23 @@ kept), and a Postman collection's saved responses import as examples.
   treating the file as untrusted input. Each file records which application
   wrote it in a `generator` block (`name`, an optional `version` from
   `NativeExportOptions.appVersion`, and the `scriptNamespace` its scripts use).
+- `workspaceFolderFiles(db, workspaceId)` writes a workspace as a folder of
+  files, for keeping in Git and sharing: `workspace.json`, then one file per
+  collection or folder, request, connection, environment and response example
+  (`collections/<id>.json`, `requests/<id>.json`,
+  `connections/<websocket|mcp|messaging>/<id>.json`, `environments/<id>.json`,
+  `examples/<id>.json`), keyed by id and in canonical JSON, so edits to
+  different items change different files. History, cookies, OAuth tokens,
+  global environments and the values of secret variables stay out.
+  `applyWorkspaceFolder(db, files)` makes the database match a folder, keeping
+  every id: it adds, updates and removes items, keeps this computer's values of
+  secret variables, and returns the paths it changed; a malformed folder, one
+  from a newer format, or one whose ids belong to another workspace is refused
+  (`WorkspaceFolderError`, with a `reason`) and changes nothing.
+  `findWorkspaceCredentials(files)` lists credentials written as literal values
+  (rather than `{{variables}}`), to move into secret variables before the files
+  are shared. `readWorkspaceFolder(dir)` and `writeWorkspaceFolder(dir, files)`
+  read and write the files on disk, leaving anything else in the folder alone.
 - `generateSnippet(request, language)` produces cURL, `fetch`, axios, Python
   `requests` and Go code for a request.
 

@@ -81,12 +81,13 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 
 -- workspace_id is NULL for a global environment, one any workspace can use
--- (migration 10).
+-- (migration 10). secrets_json names the variables marked secret (migration 11).
 CREATE TABLE IF NOT EXISTS environments (
   id TEXT PRIMARY KEY,
   workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  variables_json TEXT NOT NULL DEFAULT '{}'
+  variables_json TEXT NOT NULL DEFAULT '{}',
+  secrets_json TEXT NOT NULL DEFAULT '[]'
 );
 
 -- Saved WebSocket connections — deliberately its own table, not a row

@@ -11,6 +11,7 @@ import {
   getMcpTree,
   getOrCreateDefaultWorkspace,
   getWebSocketTree,
+  setEnvironmentSecrets,
   updateEnvironmentVariables,
   updateMcpServerConnection,
   updateWebSocketConnection,
@@ -298,6 +299,16 @@ describe('exportNative secrets', () => {
         password: '',
       },
     });
+  });
+
+  it('blanks variables marked secret, whatever their names', () => {
+    const db = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const env = createEnvironment(db, workspace.id, 'Prod');
+    updateEnvironmentVariables(db, env.id, { baseUrl: 'https://prod', tenant: 'acme-internal' });
+    setEnvironmentSecrets(db, env.id, ['tenant']);
+    const doc = exportNative(db, workspace.id, { scope: 'workspace' }, { includeSecrets: false, environmentIds: [] });
+    expect(doc.environments).toEqual([{ name: 'Prod', variables: { baseUrl: 'https://prod', tenant: '' } }]);
   });
 
   it('keeps everything when secrets are included', () => {

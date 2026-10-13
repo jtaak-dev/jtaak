@@ -121,12 +121,27 @@ describe('migrations', () => {
     const db = openDatabase(filePath);
     expect(schemaVersion(db)).toBe(LATEST);
     expect(db.prepare('SELECT * FROM environments').all()).toEqual([
-      { id: 'e1', workspace_id: 'w1', name: 'Staging', variables_json: '{"a":"1"}' },
+      { id: 'e1', workspace_id: 'w1', name: 'Staging', variables_json: '{"a":"1"}', secrets_json: '[]' },
     ]);
     db.prepare("INSERT INTO environments (id, workspace_id, name) VALUES ('g1', NULL, 'Global')").run();
     // Still deleted with its workspace.
     db.prepare("DELETE FROM workspaces WHERE id = 'w1'").run();
     expect(db.prepare('SELECT id FROM environments').all()).toEqual([{ id: 'g1' }]);
+    db.close();
+  });
+
+  it('v11: environment variables can be marked secret, none at first', () => {
+    const filePath = tempDbPath();
+    const v10 = openDatabase(filePath);
+    v10.exec('ALTER TABLE environments DROP COLUMN secrets_json');
+    v10.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 'Old', 0)").run();
+    v10.prepare("INSERT INTO environments (id, workspace_id, name) VALUES ('e1', 'w1', 'Staging')").run();
+    v10.pragma('user_version = 10');
+    v10.close();
+
+    const db = openDatabase(filePath);
+    expect(schemaVersion(db)).toBe(LATEST);
+    expect(db.prepare('SELECT secrets_json FROM environments').all()).toEqual([{ secrets_json: '[]' }]);
     db.close();
   });
 

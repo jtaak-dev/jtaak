@@ -46,15 +46,15 @@ export function isSecretName(name: string): boolean {
   return SECRET_NAME.test(name);
 }
 
-function blank(value: string): string {
+export function blank(value: string): string {
   return VARIABLE_REFERENCE.test(value) ? value : '';
 }
 
-function stripKeyValues(list: KeyValue[]): KeyValue[] {
+export function stripKeyValues(list: KeyValue[]): KeyValue[] {
   return list.map((kv) => (isSecretName(kv.key) ? { ...kv, value: blank(kv.value) } : kv));
 }
 
-function stripAuth(auth: AuthConfig): AuthConfig {
+export function stripAuth(auth: AuthConfig): AuthConfig {
   return {
     ...auth,
     ...(auth.basic && { basic: { ...auth.basic, password: blank(auth.basic.password) } }),
@@ -77,8 +77,11 @@ function stripOAuth2({
   };
 }
 
-function stripVariables(variables: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(Object.entries(variables).map(([k, v]) => [k, isSecretName(k) ? blank(v) : v]));
+/** Secret-named variables, and those marked secret, blanked. */
+function stripVariables(variables: Record<string, string>, secrets: string[] = []): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(variables).map(([k, v]) => [k, isSecretName(k) || secrets.includes(k) ? blank(v) : v]),
+  );
 }
 
 // ---- Tree → export shape ---------------------------------------------------
@@ -215,7 +218,7 @@ function messagingItem(c: MessagingConnection, includeSecrets: boolean): NativeE
 
 /** A protocol's settings, with secret-named fields blanked, including inside
  * a nested object such as Socket.IO's `auth` payload. */
-function stripSettings(settings: Record<string, unknown>): Record<string, unknown> {
+export function stripSettings(settings: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(settings).map(([key, value]) => {
       if (typeof value === 'string' && isSecretName(key)) return [key, blank(value)];
@@ -307,7 +310,10 @@ export function exportNative(
     target.scope === 'workspace'
       ? listEnvironments(db, workspaceId)
       : [...listEnvironments(db, workspaceId), ...listEnvironments(db, null)].filter((env) => wanted.has(env.id))
-  ).map((env) => ({ name: env.name, variables: includeSecrets ? env.variables : stripVariables(env.variables) }));
+  ).map((env) => ({
+    name: env.name,
+    variables: includeSecrets ? env.variables : stripVariables(env.variables, env.secrets),
+  }));
 
   return {
     format: profile.exportFormat,

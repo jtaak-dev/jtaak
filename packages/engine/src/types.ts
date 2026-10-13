@@ -879,6 +879,34 @@ export interface Environment {
   workspaceId: string | null;
   name: string;
   variables: Record<string, string>;
+  /** The variables marked secret, by name: their values stay on this
+   * computer (a workspace folder and a native export without secrets leave
+   * them out). Absent when none is. */
+  secrets?: string[];
+}
+
+/**
+ * A workspace as a folder of files (storage/workspaceFolder.ts): each path
+ * (relative, with `/`) and its text. One file per collection, folder,
+ * request, connection, environment and response example, keyed by id, so
+ * edits to different items change different files.
+ */
+export type WorkspaceFolderFiles = Record<string, string>;
+
+/** What applying a workspace folder changed, as the folder's paths. */
+export interface WorkspaceFolderChanges {
+  added: string[];
+  updated: string[];
+  removed: string[];
+}
+
+/** A credential written as a literal value in a workspace folder file, rather
+ * than a `{{variable}}` reference or a variable marked secret. */
+export interface WorkspaceCredentialFinding {
+  /** The file's path in the folder. */
+  file: string;
+  /** Where in it, e.g. `headers.Authorization`, `auth.bearer.token` or `variables.apiKey`. */
+  field: string;
 }
 
 export interface AssertionResult {

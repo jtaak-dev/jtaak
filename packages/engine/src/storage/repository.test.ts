@@ -24,6 +24,7 @@ import {
   getWorkspace,
   openWorkspace,
   renameWorkspace,
+  setEnvironmentSecrets,
   deleteWorkspace,
   resetWorkspace,
   DEFAULT_WORKSPACE_NAME,
@@ -284,6 +285,29 @@ describe('collection tree CRUD', () => {
     expect(getRequest(db, saved.id)).toBeUndefined();
   });
 
+  it('reordering changes only the items that moved', () => {
+    const db = freshDb();
+    const { apiCollectionId } = seededWorkspace(db);
+    const [a, b, c, d] = ['A', 'B', 'C', 'D'].map((name) =>
+      createRequest(db, { collectionId: apiCollectionId, name, config: baseConfig() }),
+    );
+    const sortOrder = (id: string) => getRequest(db, id)!.sortOrder;
+
+    reorderRequests(db, [d.id, a.id, b.id, c.id]);
+    expect([a, b, c].map((r) => sortOrder(r.id))).toEqual([0, 1, 2]);
+    expect(sortOrder(d.id)).toBeLessThan(0);
+
+    // Between two adjacent integers: a fraction (SQLite keeps it in the INTEGER column).
+    reorderRequests(db, [d.id, a.id, c.id, b.id]);
+    expect([d, a, b].map((r) => sortOrder(r.id))).toEqual([-1, 0, 1]);
+    expect(sortOrder(c.id)).toBe(0.5);
+
+    reorderRequests(db, [d.id, c.id, a.id, b.id]);
+    expect(sortOrder(c.id)).toBe(-0.5);
+    const tree = getCollectionTree(db, getOrCreateDefaultWorkspace(db).workspace.id);
+    expect(tree.find((n) => n.id === apiCollectionId)!.requests.map((r) => r.name)).toEqual(['D', 'C', 'A', 'B']);
+  });
+
   it('reorderCollectionNodes rewrites sibling order', () => {
     const db = freshDb();
     const { workspace } = getOrCreateDefaultWorkspace(db);
@@ -349,6 +373,18 @@ describe('environments', () => {
     const updated = getEnvironment(db, env.id)!;
     expect(updated.name).toBe('Staging v2');
     expect(updated.variables).toEqual({ baseUrl: 'https://staging.example.com', token: 'abc' });
+  });
+
+  it('marks variables secret, by name', () => {
+    const db = freshDb();
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const env = createEnvironment(db, workspace.id, 'Staging');
+    expect(getEnvironment(db, env.id)!.secrets).toBeUndefined();
+
+    setEnvironmentSecrets(db, env.id, ['token', 'apiKey', 'token']);
+    expect(getEnvironment(db, env.id)!.secrets).toEqual(['apiKey', 'token']);
+    setEnvironmentSecrets(db, env.id, []);
+    expect(getEnvironment(db, env.id)!.secrets).toBeUndefined();
   });
 
   it('deletes an environment', () => {
