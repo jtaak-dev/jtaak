@@ -104,6 +104,18 @@ export { adaptNativeExport } from './import/adaptNativeExport.js';
 export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
 export { exampleRequestFrom, defaultExampleMatch, exampleQueryNames } from './request/exampleRequest.js';
 export { SSE_CONTENT_TYPE, sseExampleBlocks, sseExampleBody } from './request/sseExample.js';
+export {
+  GRPC_STREAM_CONTENT_TYPE,
+  grpcStreamExampleBody,
+  grpcStreamRules,
+  isGrpcStreamExample,
+  readGrpcStreamExample,
+  withGrpcStreamRules,
+  type GrpcStreamExample,
+  type GrpcStreamKind,
+  type GrpcStreamRule,
+  type GrpcStreamStep,
+} from './request/grpcStreamExample.js';
 
 // protobufjs (unlike @grpc/grpc-js, which grpc.ts needs for the actual call)
 // is pure JS — parsing a pasted .proto file can happen locally in

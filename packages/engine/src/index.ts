@@ -251,6 +251,18 @@ export { adaptNativeExport } from './import/adaptNativeExport.js';
 export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
 export { exampleRequestFrom, defaultExampleMatch, exampleQueryNames } from './request/exampleRequest.js';
 export { SSE_CONTENT_TYPE, sseExampleBlocks, sseExampleBody } from './request/sseExample.js';
+export {
+  GRPC_STREAM_CONTENT_TYPE,
+  grpcStreamExampleBody,
+  grpcStreamRules,
+  isGrpcStreamExample,
+  readGrpcStreamExample,
+  withGrpcStreamRules,
+  type GrpcStreamExample,
+  type GrpcStreamKind,
+  type GrpcStreamRule,
+  type GrpcStreamStep,
+} from './request/grpcStreamExample.js';
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
