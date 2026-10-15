@@ -47,6 +47,7 @@ const KINDS: Record<string, WorkspaceItemKind> = {
   messaging: 'messaging',
   environments: 'environment',
   examples: 'example',
+  specs: 'spec',
 };
 
 const ITEM_CATEGORIES: Partial<Record<WorkspaceItemKind, CollectionCategory>> = {

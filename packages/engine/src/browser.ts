@@ -16,6 +16,8 @@ export type {
   ApiSpecKind,
   ApiSpecSummary,
   RequestSource,
+  WebSocketMock,
+  McpServerMock,
   ExampleRequest,
   ExampleMatch,
   NativeExportExample,

@@ -299,6 +299,16 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // What a mock server serves for a WebSocket connection (rules) or an MCP
+    // server (saved tool results and its contract), kept with the connection.
+    version: 14,
+    name: 'connection mocks',
+    up(db) {
+      ensureColumn(db, 'ws_connections', 'mock_json', 'TEXT');
+      ensureColumn(db, 'mcp_connections', 'mock_json', 'TEXT');
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

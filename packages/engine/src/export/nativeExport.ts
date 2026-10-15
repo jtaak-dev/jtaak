@@ -8,10 +8,13 @@ import {
   listEnvironments,
 } from '../storage/repository.js';
 import { listWorkspaceResponseExamplesFull } from '../storage/examples.js';
+import { listWorkspaceApiSpecs } from '../storage/specs.js';
 import {
   DEFAULT_ENGINE_PROFILE,
   NATIVE_EXPORT_VERSION,
   type ExampleRequest,
+  type ExportScope,
+  type NativeExportSpec,
   type NativeExportCollection,
   type NativeExportExample,
   type NativeExportDocument,
@@ -209,6 +212,7 @@ function wsItem(c: WebSocketConnection, includeSecrets: boolean): NativeExportIt
     // Only when the connection sets it: unset, it follows the importer's default.
     ...(c.verifyTls !== undefined && { verifyTls: c.verifyTls }),
     ...(c.testScript && { testScript: c.testScript }),
+    ...(c.mock && { mock: c.mock }),
   };
 }
 
@@ -222,6 +226,7 @@ function mcpItem(c: McpServerConnection, includeSecrets: boolean): NativeExportI
     env: includeSecrets ? c.env : stripKeyValues(c.env),
     headers: includeSecrets ? c.headers : stripKeyValues(c.headers),
     ...(c.verifyTls !== undefined && { verifyTls: c.verifyTls }),
+    ...(c.mock && { mock: c.mock }),
   };
 }
 
@@ -339,6 +344,8 @@ export function exportNative(
     variables: includeSecrets ? env.variables : stripVariables(env.variables, env.secrets),
   }));
 
+  const collections = roots.map((node) => toCollection(ctx, node));
+  const specs = exportedSpecs(db, workspaceId, target.scope, collections);
   return {
     format: profile.exportFormat,
     version: NATIVE_EXPORT_VERSION,
@@ -350,9 +357,43 @@ export function exportNative(
       ...(options.appVersion !== undefined && { version: options.appVersion }),
       scriptNamespace: profile.scriptNamespace,
     },
-    collections: roots.map((node) => toCollection(ctx, node)),
+    collections,
     environments,
+    ...(specs.length > 0 && { specs }),
   };
+}
+
+/** The spec ids an export's requests name (`config.source.specId`). */
+function specIdsIn(collections: NativeExportCollection[]): Set<string> {
+  const ids = new Set<string>();
+  const walk = (folder: NativeExportFolder) => {
+    for (const item of folder.items) {
+      if (item.type === 'request' && item.config.source?.specId) ids.add(item.config.source.specId);
+    }
+    folder.folders.forEach(walk);
+  };
+  collections.forEach(walk);
+  return ids;
+}
+
+/** The specs an export carries: those its requests were made from, and in a workspace export all of them. Keyed by id. */
+function exportedSpecs(
+  db: Database.Database,
+  workspaceId: string,
+  scope: ExportScope,
+  collections: NativeExportCollection[],
+): NativeExportSpec[] {
+  const named = specIdsIn(collections);
+  return [...listWorkspaceApiSpecs(db, workspaceId).values()]
+    .filter((spec) => scope === 'workspace' || named.has(spec.id))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    .map((spec) => ({
+      key: spec.id,
+      kind: spec.kind,
+      name: spec.name,
+      ...(spec.location && { location: spec.location }),
+      source: spec.source,
+    }));
 }
 
 /** Pretty-printed, newline-terminated — the on-disk form. */

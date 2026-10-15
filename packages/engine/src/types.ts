@@ -435,6 +435,8 @@ export interface WebSocketConnection {
   testScript?: string;
   createdAt: number;
   updatedAt: number;
+  /** What a mock server serves for it (its Mock tab). */
+  mock?: WebSocketMock;
 }
 
 /** What a messaging connection subscribes to. `channel` is the protocol's
@@ -827,6 +829,8 @@ export interface McpServerConnection {
   verifyTls?: boolean;
   createdAt: number;
   updatedAt: number;
+  /** What a mock server serves for it: saved tool results, and the contract it offers. */
+  mock?: McpServerMock;
 }
 
 /**
@@ -959,7 +963,7 @@ export interface WorkspaceCredentialFinding {
 
 /** What a workspace folder file holds (storage/workspaceFolder.ts). */
 export type WorkspaceItemKind =
-  'workspace' | 'collection' | 'request' | 'websocket' | 'mcp' | 'messaging' | 'environment' | 'example';
+  'workspace' | 'collection' | 'request' | 'websocket' | 'mcp' | 'messaging' | 'environment' | 'example' | 'spec';
 
 /** An item both sides of a merge changed differently (storage/workspaceMerge.ts):
  * one side's version is chosen whole. `text` is that side's file. */
@@ -1127,6 +1131,31 @@ export interface CollectionRunReport {
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */
+/** What a mock server serves for a WebSocket connection: messages sent on connect, and rules that reply. */
+export interface WebSocketMock {
+  onConnect: { message: string; delayMs: number }[];
+  /** The first rule whose `match` a message has (text, or a `/pattern/`; empty matches any) replies. */
+  rules: { match: string; reply: string; delayMs: number }[];
+}
+
+/**
+ * What a mock server serves for an MCP server: tool calls saved with their
+ * results, and the contract it offers (an MCP checks contract, kept as it is).
+ */
+export interface McpServerMock {
+  calls: { tool: string; arguments?: Record<string, unknown>; result: unknown }[];
+  contract?: Record<string, unknown>;
+}
+
+/** A spec in an export file: its `key` is what requests' `config.source.specId` name in the file. */
+export interface NativeExportSpec {
+  key: string;
+  kind: ApiSpecKind;
+  name: string;
+  location?: string;
+  source: string;
+}
+
 /** The kinds of API description a workspace keeps (storage/specs.ts). */
 export type ApiSpecKind = 'openapi' | 'wsdl' | 'graphql';
 
@@ -1234,6 +1263,7 @@ export type NativeExportItem =
       /** Written when the connection sets it (see `RequestConfig.verifyTls`); absent, it follows the importer's default. */
       verifyTls?: boolean;
       testScript?: string;
+      mock?: WebSocketMock;
     }
   | {
       type: 'mcp';
@@ -1245,6 +1275,7 @@ export type NativeExportItem =
       headers: KeyValue[];
       /** As for websocket items. */
       verifyTls?: boolean;
+      mock?: McpServerMock;
     }
   | {
       type: 'messaging';
@@ -1303,6 +1334,8 @@ export interface NativeExportDocument {
   generator?: NativeExportGenerator;
   collections: NativeExportCollection[];
   environments: NativeExportEnvironment[];
+  /** The specs its requests were made from (all the workspace's in a workspace export); additive. */
+  specs?: NativeExportSpec[];
 }
 
 /** What to export. A folder can be exported too — it becomes a collection

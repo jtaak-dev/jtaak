@@ -527,7 +527,13 @@ responses import as examples, with the request Postman kept for each.
   keeps, `openapi`, `wsdl` or `graphql` (an introspected schema), one per
   kind and location, deleted with the workspace. What a mock server can
   generate answers from; `openApiOperation` and `openApiResponseExamples`
-  read an OpenAPI one.
+  read an OpenAPI one. Native exports carry them (`specs`; a workspace
+  export all of them, a collection's those its requests name) and so do
+  workspace folders (`specs/<id>.json`).
+- **Connection mocks:** a WebSocket connection or MCP server can keep what a
+  mock server serves for it (`mock`; `setWebSocketMock`, `setMcpServerMock`):
+  opening messages and reply rules, or saved tool results and a contract.
+  Exports and workspace folders carry them.
 - `importWsdl(db, workspaceId, await loadWsdl(urlOrPath))` imports a SOAP
   service from its WSDL 1.1: a request per operation, with its endpoint, SOAP
   version (from the binding), `SOAPAction` and a starting envelope built from
