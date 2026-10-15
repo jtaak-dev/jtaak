@@ -500,6 +500,12 @@ A mock server can also run a request's `mockScript` with `runScript` and
 `statusText`, `headers` and `body`, or `setJson(value)`), and the result's
 `response` is what it ends as.
 
+`sseExampleBody(events)` keeps an SSE stream's messages as an example body
+(`text/event-stream`, each after a `:delay <ms>` comment), and `sseExampleBlocks`
+reads it back for replay. `grpcServerMethod(protocolConfig)` gives the method a
+gRPC request calls as a server answering it needs it (a `@grpc/grpc-js`
+ServiceDefinition entry and a default response).
+
 Native exports carry examples and their requests (`examples` on a request
 item, secret-named headers such as `Set-Cookie` and secret-named query
 parameters blanked unless secrets are kept), and a Postman collection's saved

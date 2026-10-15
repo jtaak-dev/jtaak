@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as grpc from '@grpc/grpc-js';
 import { Root, parse, type Type } from 'protobufjs';
-import { executeGrpcUnaryCall } from './grpc';
-import type { RequestConfig } from '../types';
+import { executeGrpcUnaryCall, grpcServerMethod } from './grpc';
+import type { GrpcProtocolConfig, RequestConfig } from '../types';
 
 const GREETER_PROTO = `
 syntax = "proto3";
@@ -106,6 +106,37 @@ afterEach(async () => {
     await new Promise<void>((resolve) => server!.tryShutdown(() => resolve()));
     server = undefined;
   }
+});
+
+describe('grpcServerMethod', () => {
+  it('gives a server what it needs to answer a request’s method', async () => {
+    const config = baseConfig();
+    const method = grpcServerMethod(config.protocolConfig as GrpcProtocolConfig);
+    expect(method).toMatchObject({ path: '/greeter.Greeter/SayHello', requestStream: false, responseStream: false });
+    expect(method.defaultResponse()).toEqual({ message: '' });
+    expect(
+      grpcServerMethod({ ...(config.protocolConfig as GrpcProtocolConfig), methodName: 'StreamGreetings' }),
+    ).toMatchObject({
+      responseStream: true,
+    });
+    expect(() => grpcServerMethod({ ...(config.protocolConfig as GrpcProtocolConfig), methodName: 'Nope' })).toThrow(
+      /Method "Nope" not found/,
+    );
+
+    server = new grpc.Server();
+    server.addService({ SayHello: method } as unknown as grpc.ServiceDefinition, {
+      SayHello: (call: grpc.ServerUnaryCall<Record<string, unknown>, unknown>, callback: grpc.sendUnaryData<unknown>) =>
+        callback(null, { ...method.defaultResponse(), message: `Hi ${String(call.request.name)}` }),
+    });
+    port = await new Promise<number>((resolve, reject) =>
+      server!.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, bound) =>
+        err ? reject(err) : resolve(bound),
+      ),
+    );
+    expect((await executeGrpcUnaryCall(baseConfig({ url: `127.0.0.1:${port}` }))).message).toEqual({
+      message: 'Hi World',
+    });
+  });
 });
 
 describe('executeGrpcUnaryCall', () => {

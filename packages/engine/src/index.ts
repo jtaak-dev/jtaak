@@ -135,7 +135,7 @@ export type { FetchGraphQlSchemaOptions } from './graphql/introspection.js';
 export { fetchGraphQlSchema, clearGraphQlSchemaCache } from './graphql/introspection.js';
 
 export { parseGrpcProto, clearGrpcProtoCache, summarizeGrpcSchema } from './request/grpcProto.js';
-export { executeGrpcUnaryCall } from './request/grpc.js';
+export { executeGrpcUnaryCall, grpcServerMethod, type GrpcServerMethod } from './request/grpc.js';
 export { reflectGrpcServer, type GrpcReflectionResult } from './request/grpcReflection.js';
 
 export { resolveVariables, resolveDeep, findVariables, type VariableReference } from './variables/resolver.js';
@@ -247,6 +247,7 @@ export { importNative, isNativeExport, previewNativeImport, validateNativeExport
 export { adaptNativeExport } from './import/adaptNativeExport.js';
 export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
 export { exampleRequestFrom, defaultExampleMatch, exampleQueryNames } from './request/exampleRequest.js';
+export { SSE_CONTENT_TYPE, sseExampleBlocks, sseExampleBody } from './request/sseExample.js';
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
