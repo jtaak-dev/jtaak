@@ -301,6 +301,22 @@ describe('importNative', () => {
     expect(listEnvironments(db, workspaceId)).toEqual([]);
   });
 
+  it('treats a mock response script as a script', () => {
+    const file = doc();
+    const item = file.collections[0].folders[0].items[0];
+    if (item.type === 'request') item.config.mockScript = 'jt.response.status = 201;';
+    const checked = validateNativeExport(JSON.parse(JSON.stringify(file)));
+    expect(previewNativeImport(checked).scriptRequestCount).toBeGreaterThan(0);
+    for (const includeScripts of [true, false]) {
+      const db = openDatabase(':memory:');
+      const workspaceId = workspace(db);
+      const result = importNative(db, workspaceId, checked, { includeScripts, includeEnvironments: false });
+      const api = getCollectionTree(db, workspaceId).find((c) => c.id === result.collections[0].id)!;
+      const upload = getRequest(db, api.children[0].requests[0].id)!;
+      expect(upload.config.mockScript).toBe(includeScripts ? 'jt.response.status = 201;' : undefined);
+    }
+  });
+
   it('always adds a copy, suffixing names that are taken', () => {
     const db = openDatabase(':memory:');
     const workspaceId = workspace(db);

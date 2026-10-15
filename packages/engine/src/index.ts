@@ -186,7 +186,13 @@ export {
 } from './storage/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
-export type { ScriptContext, ScriptCookie, ScriptStreamMessage } from './scripting/sandbox.js';
+export type {
+  ScriptContext,
+  ScriptCookie,
+  ScriptStreamMessage,
+  ScriptResponse,
+  ScriptRunResult,
+} from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
 export { unsupportedPostmanCalls, SUPPORTED_PM_API } from './scripting/postman.js';

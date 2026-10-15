@@ -29,6 +29,22 @@ export interface ScriptContext {
   messages?: ScriptStreamMessage[];
   /** The run's pass, read as `<namespace>.iteration`; a single send is pass 0 of 1, with no data. */
   iteration?: ScriptIteration;
+  /**
+   * The script may set the response: `<namespace>.response`'s `status`,
+   * `statusText`, `headers` and `body` can be changed (and
+   * `setJson(value)` sets a JSON body), starting from `response` (or an
+   * empty 200), and the result's `response` is what they end as. For a mock
+   * server's response script.
+   */
+  respond?: boolean;
+}
+
+/** A response a script set (`ScriptContext.respond`). */
+export interface ScriptResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
 }
 
 /** A message a connection sent or received, as a connection's test script reads it. */
@@ -64,6 +80,8 @@ export interface ScriptConsoleEntry {
 export interface ScriptRunResult {
   results: AssertionResult[];
   logs: ScriptConsoleEntry[];
+  /** The response as the script left it, when it could set one (`ScriptContext.respond`). */
+  response?: ScriptResponse;
 }
 
 export interface ScriptLimits {
@@ -188,10 +206,17 @@ const PRELUDE = String.raw`
         },
       })
     : variables;
-  const response = input.response
-    ? Object.assign({}, input.response, {
+  // A response script (input.respond) starts from the answer so far, or an empty 200, and may change it.
+  const start = input.response || (input.respond ? { status: 200, statusText: 'OK', headers: {}, body: '' } : undefined);
+  const response = start
+    ? Object.assign({}, start, { headers: Object.assign({}, start.headers) }, {
         json() {
-          return JSON.parse(input.response.body);
+          return JSON.parse(this.body);
+        },
+        setJson(value) {
+          this.body = JSON.stringify(value, null, 2);
+          const has = Object.keys(this.headers).some((name) => name.toLowerCase() === 'content-type');
+          if (!has) this.headers['Content-Type'] = 'application/json';
         },
       })
     : undefined;
@@ -454,7 +479,27 @@ const PRELUDE = String.raw`
   );
   globalThis.pm = pm;
 
-  globalThis.__output = () => JSON.stringify({ results, logs, variables, environment: environmentValues });
+  function responseOut() {
+    if (!input.respond || !response) return undefined;
+    const headers = {};
+    for (const [name, value] of Object.entries(response.headers || {})) {
+      if (value !== undefined && value !== null) headers[String(name)] = String(value);
+    }
+    const status = Math.trunc(Number(response.status));
+    return {
+      status: status >= 100 && status <= 999 ? status : 500,
+      statusText: response.statusText === undefined || response.statusText === null ? '' : String(response.statusText),
+      headers,
+      body:
+        response.body === undefined || response.body === null
+          ? ''
+          : typeof response.body === 'string'
+            ? response.body
+            : JSON.stringify(response.body),
+    };
+  }
+  globalThis.__output = () =>
+    JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
 })();
 `;
 
@@ -576,6 +621,7 @@ export async function runScript(
           cookies: context.cookies,
           messages: context.messages,
           iteration: context.iteration ?? { index: 0, count: 1, data: {} },
+          respond: context.respond === true,
         }),
       );
       ctx.setProp(ctx.global, '__input', input);
@@ -622,5 +668,5 @@ export async function runScript(
   writeBack(context.variables, output.variables);
   if (context.environment && output.environment) writeBack(context.environment, output.environment);
 
-  return { results: output.results, logs: output.logs };
+  return { results: output.results, logs: output.logs, ...(output.response && { response: output.response }) };
 }

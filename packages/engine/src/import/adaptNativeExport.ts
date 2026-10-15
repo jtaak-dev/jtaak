@@ -29,14 +29,15 @@ export function adaptNativeExport(
 
   const adaptItem = (item: NativeExportItem): NativeExportItem => {
     if (item.type === 'request') {
-      const { preRequestScript, testScript } = item.config;
-      if (preRequestScript === undefined && testScript === undefined) return item;
+      const { preRequestScript, testScript, mockScript } = item.config;
+      if (preRequestScript === undefined && testScript === undefined && mockScript === undefined) return item;
       return {
         ...item,
         config: {
           ...item.config,
           ...(preRequestScript !== undefined && { preRequestScript: rewrite(preRequestScript) }),
           ...(testScript !== undefined && { testScript: rewrite(testScript) }),
+          ...(mockScript !== undefined && { mockScript: rewrite(mockScript) }),
         },
       };
     }

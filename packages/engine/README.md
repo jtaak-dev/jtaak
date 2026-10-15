@@ -495,6 +495,11 @@ import { createResponseExample, exampleRequestFrom } from '@jtaak/engine';
 createResponseExample(db, requestId, { ...response, name: 'Found', request: exampleRequestFrom(config) });
 ```
 
+A mock server can also run a request's `mockScript` with `runScript` and
+`respond: true`: the script may then change `<namespace>.response` (its `status`,
+`statusText`, `headers` and `body`, or `setJson(value)`), and the result's
+`response` is what it ends as.
+
 Native exports carry examples and their requests (`examples` on a request
 item, secret-named headers such as `Set-Cookie` and secret-named query
 parameters blanked unless secrets are kept), and a Postman collection's saved

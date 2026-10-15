@@ -270,6 +270,8 @@ function requestConfig(value: unknown, path: string): Omit<RequestConfig, 'id' |
   if (pre !== undefined) out.preRequestScript = pre;
   const test = optStr(c.testScript, `${path}.testScript`);
   if (test !== undefined) out.testScript = test;
+  const mock = optStr(c.mockScript, `${path}.mockScript`);
+  if (mock !== undefined) out.mockScript = mock;
   const verifyTls = optBool(c.verifyTls, `${path}.verifyTls`);
   if (verifyTls !== undefined) out.verifyTls = verifyTls;
   const useCookies = optBool(c.useCookies, `${path}.useCookies`);
@@ -483,7 +485,9 @@ export function previewNativeImport(doc: NativeExportDocument): NativeImportPrev
   const mcpStdioCommands: string[] = [];
   const visit = (i: NativeExportItem) => {
     if (i.type === 'request') {
-      if (i.config.preRequestScript?.trim() || i.config.testScript?.trim()) scriptRequestCount++;
+      if (i.config.preRequestScript?.trim() || i.config.testScript?.trim() || i.config.mockScript?.trim()) {
+        scriptRequestCount++;
+      }
       if (sendsLocalFile(i.config.body)) localFileRequestCount++;
     } else if ((i.type === 'websocket' || i.type === 'messaging') && i.testScript?.trim()) {
       scriptRequestCount++;
@@ -529,12 +533,12 @@ export function importNative(
 
   function insertItem(collectionId: string, i: NativeExportItem) {
     if (i.type === 'request') {
-      const { preRequestScript, testScript, ...rest } = i.config;
+      const { preRequestScript, testScript, mockScript, ...rest } = i.config;
       const config: RequestConfig = {
         id: '',
         name: i.name,
         ...rest,
-        ...(options.includeScripts && { preRequestScript, testScript }),
+        ...(options.includeScripts && { preRequestScript, testScript, mockScript }),
       };
       const request = createRequest(db, { collectionId, name: i.name, config });
       for (const e of i.examples ?? []) createResponseExample(db, request.id, e);

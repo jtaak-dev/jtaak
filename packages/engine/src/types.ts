@@ -224,6 +224,14 @@ export interface RequestConfig {
   auth: AuthConfig;
   preRequestScript?: string;
   testScript?: string;
+  /**
+   * A script a mock server serving this request runs to make or change its
+   * answer: `runScript` with `respond`, the incoming request as
+   * `<namespace>.request` and the answer chosen so far as
+   * `<namespace>.response`, which it may change. Kept and imported like the
+   * other scripts.
+   */
+  mockScript?: string;
   /** Check the server's TLS certificate. On unless set to `false`, which
    * accepts expired, self-signed and wrong-host certificates: for testing a
    * server you control (the connection is still encrypted, but not
