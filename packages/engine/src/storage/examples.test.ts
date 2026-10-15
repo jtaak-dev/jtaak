@@ -169,6 +169,7 @@ describe('response examples', () => {
     expect(listWorkspaceResponseExamples(db, workspaceId).map((e) => e.isDefault ?? false)).toEqual([false, true]);
     expect(listWorkspaceResponseExamplesFull(db, workspaceId).get(requestId)?.[1].request?.match).toEqual({});
     expect(updateResponseExample(db, first.id, { request: null })).not.toHaveProperty('request');
+    expect(updateResponseExample(db, first.id, { body: '{"changed": true}' })?.body).toBe('{"changed": true}');
     expect(updateResponseExample(db, 'nope', { name: 'x' })).toBeUndefined();
   });
 

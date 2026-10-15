@@ -42,6 +42,8 @@ export type ResponseExampleInput = Pick<
 /** What can change in a saved example. `request: null` drops the request it keeps. */
 export interface ResponseExampleChanges {
   name?: string;
+  /** Its body, replaced (a stream example's reply rules, say). */
+  body?: string;
   request?: ExampleRequest | null;
   isDefault?: boolean;
 }
@@ -173,6 +175,8 @@ export function updateResponseExample(
       { request_id: string } | undefined;
     if (!row) return undefined;
     if (changes.name !== undefined) renameResponseExample(db, id, changes.name);
+    if (changes.body !== undefined)
+      db.prepare('UPDATE response_examples SET body = ? WHERE id = ?').run(changes.body, id);
     if (changes.request !== undefined) {
       db.prepare('UPDATE response_examples SET request_json = ? WHERE id = ?').run(
         changes.request ? JSON.stringify(changes.request) : null,
