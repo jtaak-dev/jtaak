@@ -269,6 +269,16 @@ export const MIGRATIONS: Migration[] = [
       ensureColumn(db, 'environments', 'secrets_json', "TEXT NOT NULL DEFAULT '[]'");
     },
   },
+  {
+    // A response example keeps the request it answers and can be its
+    // request's default (storage/examples.ts): what a mock server matches.
+    version: 12,
+    name: 'response examples keep their request',
+    up(db) {
+      ensureColumn(db, 'response_examples', 'request_json', 'TEXT');
+      ensureColumn(db, 'response_examples', 'is_default', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {

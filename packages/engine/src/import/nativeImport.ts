@@ -34,6 +34,7 @@ import {
   type HttpMethod,
   type FormField,
   type KeyValue,
+  type ExampleRequest,
   type NativeExportExample,
   type Protocol,
   type RequestBody,
@@ -119,12 +120,34 @@ function example(value: unknown, path: string): NativeExportExample {
   if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 999) {
     fail(`${path}.status`, 'expected an HTTP status code');
   }
+  const isDefault = optBool(e.isDefault, `${path}.isDefault`);
   return {
     name: name(e.name, `${path}.name`),
     status,
     statusText: str(e.statusText ?? '', `${path}.statusText`),
     headers: e.headers === undefined ? {} : stringRecord(e.headers, `${path}.headers`),
     body: str(e.body ?? '', `${path}.body`),
+    ...(e.request !== undefined && { request: exampleRequest(e.request, `${path}.request`) }),
+    ...(isDefault && { isDefault }),
+  };
+}
+
+function exampleRequest(value: unknown, path: string): ExampleRequest {
+  const r = obj(value, path);
+  const match = r.match === undefined ? undefined : obj(r.match, `${path}.match`);
+  const body = optBool(match?.body, `${path}.match.body`);
+  return {
+    method: str(r.method, `${path}.method`),
+    url: str(r.url, `${path}.url`),
+    headers: r.headers === undefined ? {} : stringRecord(r.headers, `${path}.headers`),
+    ...(r.body !== undefined && { body: str(r.body, `${path}.body`) }),
+    ...(match && {
+      match: {
+        ...(match.query !== undefined && { query: strList(match.query, `${path}.match.query`) }),
+        ...(match.headers !== undefined && { headers: strList(match.headers, `${path}.match.headers`) }),
+        ...(body !== undefined && { body }),
+      },
+    }),
   };
 }
 

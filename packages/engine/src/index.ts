@@ -11,6 +11,8 @@ export type {
   ScriptIteration,
   ResponseExample,
   ResponseExampleSummary,
+  ExampleRequest,
+  ExampleMatch,
   NativeExportExample,
   AuthConfig,
   OAuth2Config,
@@ -220,6 +222,7 @@ export { exportNative, serializeNativeExport, isSecretName } from './export/nati
 export { importNative, isNativeExport, previewNativeImport, validateNativeExport } from './import/nativeImport.js';
 export { adaptNativeExport } from './import/adaptNativeExport.js';
 export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
+export { exampleRequestFrom, defaultExampleMatch, exampleQueryNames } from './request/exampleRequest.js';
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
@@ -236,10 +239,13 @@ export {
   createResponseExample,
   listResponseExamples,
   listWorkspaceResponseExamples,
+  listWorkspaceResponseExamplesFull,
   getResponseExample,
   renameResponseExample,
+  updateResponseExample,
   deleteResponseExample,
   type ResponseExampleInput,
+  type ResponseExampleChanges,
 } from './storage/examples.js';
 
 export {

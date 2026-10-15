@@ -476,10 +476,28 @@ listResponseExamples(db, requestId); // in the order saved
 listWorkspaceResponseExamples(db, workspace.id); // every one, without headers and bodies
 ```
 
-`renameResponseExample` and `deleteResponseExample` change them, and they're
-deleted with their request. Native exports carry them (`examples` on a request
-item, secret-named headers such as `Set-Cookie` blanked unless secrets are
-kept), and a Postman collection's saved responses import as examples.
+`renameResponseExample`, `updateResponseExample` and `deleteResponseExample`
+change them, and they're deleted with their request.
+
+An example can keep the request it answers, for a mock server to match
+incoming requests against: `exampleRequestFrom(config)` gives it as written
+(`{{variables}}` unresolved, no auth) in its HTTP form, a GraphQL or SOAP
+request as the POST it is, with a `match` saying what must agree besides the
+method and path (by default its query parameters and its body; headers by
+name when chosen). One example of a request can be its default
+(`isDefault`). `listWorkspaceResponseExamplesFull` returns every example of
+a workspace, whole, by request.
+
+```ts
+import { createResponseExample, exampleRequestFrom } from '@jtaak/engine';
+
+createResponseExample(db, requestId, { ...response, name: 'Found', request: exampleRequestFrom(config) });
+```
+
+Native exports carry examples and their requests (`examples` on a request
+item, secret-named headers such as `Set-Cookie` and secret-named query
+parameters blanked unless secrets are kept), and a Postman collection's saved
+responses import as examples, with the request Postman kept for each.
 
 ## Import and export
 

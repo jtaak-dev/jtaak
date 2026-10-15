@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { createCollectionNode, createRequest } from '../storage/repository.js';
 import { createResponseExample } from '../storage/examples.js';
+import { exampleRequestFrom } from '../request/exampleRequest.js';
 import { unsupportedPostmanCalls } from '../scripting/postman.js';
 import type {
   AuthConfig,
@@ -62,6 +63,8 @@ interface PostmanResponse {
   status?: string;
   header?: PostmanKeyValue[] | null;
   body?: string | null;
+  /** The request it answers, as Postman saved it with the example. */
+  originalRequest?: PostmanRequest;
 }
 interface PostmanItem {
   name?: string;
@@ -239,6 +242,9 @@ function importItems(
           statusText: example.status ?? '',
           headers: Object.fromEntries((example.header ?? []).map((h) => [h.key ?? '', h.value ?? ''])),
           body: example.body ?? '',
+          ...(example.originalRequest && {
+            request: exampleRequestFrom(convertRequest({ ...item, request: example.originalRequest })),
+          }),
         });
       }
       const calls = unsupportedPostmanCalls(`${config.preRequestScript ?? ''}\n${config.testScript ?? ''}`);

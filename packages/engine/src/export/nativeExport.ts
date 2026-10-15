@@ -7,9 +7,11 @@ import {
   getWebSocketTree,
   listEnvironments,
 } from '../storage/repository.js';
+import { listWorkspaceResponseExamplesFull } from '../storage/examples.js';
 import {
   DEFAULT_ENGINE_PROFILE,
   NATIVE_EXPORT_VERSION,
+  type ExampleRequest,
   type NativeExportCollection,
   type NativeExportExample,
   type NativeExportDocument,
@@ -102,45 +104,67 @@ interface ExportContext {
 }
 
 function loadExamples(db: Database.Database, workspaceId: string): Map<string, NativeExportExample[]> {
-  const rows = db
-    .prepare(
-      `SELECT e.request_id, e.name, e.status, e.status_text, e.headers_json, e.body
-       FROM response_examples e
-       JOIN requests r ON r.id = e.request_id
-       JOIN collections c ON c.id = r.collection_id
-       WHERE c.workspace_id = ?
-       ORDER BY e.request_id, e.sort_order`,
-    )
-    .all(workspaceId) as {
-    request_id: string;
-    name: string;
-    status: number;
-    status_text: string;
-    headers_json: string;
-    body: string;
-  }[];
   const byRequest = new Map<string, NativeExportExample[]>();
-  for (const row of rows) {
-    const list = byRequest.get(row.request_id) ?? [];
-    list.push({
-      name: row.name,
-      status: row.status,
-      statusText: row.status_text,
-      headers: JSON.parse(row.headers_json) as Record<string, string>,
-      body: row.body,
-    });
-    byRequest.set(row.request_id, list);
+  for (const [requestId, examples] of listWorkspaceResponseExamplesFull(db, workspaceId)) {
+    byRequest.set(
+      requestId,
+      examples.map(({ name, status, statusText, headers, body, request, isDefault }) => ({
+        name,
+        status,
+        statusText,
+        headers,
+        body,
+        ...(request && { request }),
+        ...(isDefault && { isDefault }),
+      })),
+    );
   }
   return byRequest;
 }
 
-/** An example's headers with the secret-named ones (Set-Cookie, say) blanked. */
+function stripHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [name, isSecretName(name) ? blank(value) : value]),
+  );
+}
+
+function decodeOrKeep(text: string): string {
+  try {
+    return decodeURIComponent(text.replace(/\+/g, ' '));
+  } catch {
+    return text;
+  }
+}
+
+/** A URL with its secret-named query parameters' values blanked; not parsed, since it may hold variables. */
+function stripUrl(url: string): string {
+  const hash = url.indexOf('#');
+  const [base, fragment] = hash >= 0 ? [url.slice(0, hash), url.slice(hash)] : [url, ''];
+  const at = base.indexOf('?');
+  if (at < 0) return url;
+  const query = base
+    .slice(at + 1)
+    .split('&')
+    .map((part) => {
+      const eq = part.indexOf('=');
+      if (eq < 0 || !isSecretName(decodeOrKeep(part.slice(0, eq)))) return part;
+      return `${part.slice(0, eq)}=${blank(decodeOrKeep(part.slice(eq + 1)))}`;
+    })
+    .join('&');
+  return `${base.slice(0, at)}?${query}${fragment}`;
+}
+
+/** The request an example keeps, with its secret-named headers and query parameters blanked. */
+export function stripExampleRequest(request: ExampleRequest): ExampleRequest {
+  return { ...request, url: stripUrl(request.url), headers: stripHeaders(request.headers) };
+}
+
+/** An example with its secret-named headers (Set-Cookie, say) blanked, and its request's. */
 function stripExample(example: NativeExportExample): NativeExportExample {
   return {
     ...example,
-    headers: Object.fromEntries(
-      Object.entries(example.headers).map(([name, value]) => [name, isSecretName(name) ? blank(value) : value]),
-    ),
+    headers: stripHeaders(example.headers),
+    ...(example.request && { request: stripExampleRequest(example.request) }),
   };
 }
 

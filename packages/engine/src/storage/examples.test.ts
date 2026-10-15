@@ -8,12 +8,15 @@ import {
   listResponseExamples,
   listWorkspaceResponseExamples,
   renameResponseExample,
+  listWorkspaceResponseExamplesFull,
+  updateResponseExample,
 } from './examples';
+import { workspaceFolderFiles, applyWorkspaceFolder } from './workspaceFolder';
 import { createRequest, deleteRequest, getCollectionTree, getOrCreateDefaultWorkspace } from './repository';
 import { exportNative } from '../export/nativeExport';
 import { importNative, validateNativeExport } from '../import/nativeImport';
 import { importPostmanCollection } from '../import/postmanCollection';
-import type { RequestConfig } from '../types';
+import type { ExampleRequest, RequestConfig } from '../types';
 
 function setup(): { db: Database.Database; workspaceId: string; requestId: string } {
   const db = openDatabase(':memory:');
@@ -143,5 +146,101 @@ describe('response examples', () => {
       { name: 'Found', status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' }, body: '{}' },
       { name: '404 Not Found', status: 404, statusText: 'Not Found', headers: {}, body: '' },
     ]);
+  });
+
+  it('keep the request they answer, and one of a request can be its default', () => {
+    const { db, workspaceId, requestId } = setup();
+    const request: ExampleRequest = {
+      method: 'GET',
+      url: '{{baseUrl}}/users/1?view=full',
+      headers: { Accept: 'application/json' },
+      match: { query: ['view'] },
+    };
+    const first = createResponseExample(db, requestId, { ...ok, request, isDefault: true });
+    expect(getResponseExample(db, first.id)).toMatchObject({ request, isDefault: true });
+    const second = createResponseExample(db, requestId, { ...ok, name: 'Other' });
+    expect(getResponseExample(db, second.id)).not.toHaveProperty('request');
+
+    updateResponseExample(db, second.id, { isDefault: true, request: { ...request, match: {} } });
+    expect(listResponseExamples(db, requestId).map((e) => [e.name, e.isDefault ?? false])).toEqual([
+      ['Found', false],
+      ['Other', true],
+    ]);
+    expect(listWorkspaceResponseExamples(db, workspaceId).map((e) => e.isDefault ?? false)).toEqual([false, true]);
+    expect(listWorkspaceResponseExamplesFull(db, workspaceId).get(requestId)?.[1].request?.match).toEqual({});
+    expect(updateResponseExample(db, first.id, { request: null })).not.toHaveProperty('request');
+    expect(updateResponseExample(db, 'nope', { name: 'x' })).toBeUndefined();
+  });
+
+  it('travel with their request in exports and workspace folders, secret-named parts blanked', () => {
+    const { db, workspaceId, requestId } = setup();
+    const request: ExampleRequest = {
+      method: 'GET',
+      url: 'https://api.test/users/1?api_key=k123&view=full&token={{token}}',
+      headers: { Authorization: 'Bearer abc', Accept: 'application/json' },
+      match: { query: ['view'] },
+    };
+    createResponseExample(db, requestId, { ...ok, request, isDefault: true });
+    const doc = exportNative(db, workspaceId, { scope: 'workspace' }, { includeSecrets: false, environmentIds: [] });
+    const [item] = doc.collections[0].items;
+    const stripped = item.type === 'request' ? item.examples?.[0] : undefined;
+    expect(stripped?.isDefault).toBe(true);
+    expect(stripped?.request).toEqual({
+      ...request,
+      url: 'https://api.test/users/1?api_key=&view=full&token={{token}}',
+      headers: { Authorization: '', Accept: 'application/json' },
+    });
+
+    const target = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(target);
+    const result = importNative(target, workspace.id, validateNativeExport(JSON.parse(JSON.stringify(doc))), {
+      includeScripts: false,
+      includeEnvironments: false,
+    });
+    const imported = getCollectionTree(target, workspace.id).find((c) => c.id === result.collections[0].id)!;
+    expect(listResponseExamples(target, imported.requests[0].id)[0]).toMatchObject({
+      isDefault: true,
+      request: stripped?.request,
+    });
+
+    const files = workspaceFolderFiles(db, workspaceId);
+    const exampleFile = Object.entries(files).find(([path]) => path.startsWith('examples/'))!;
+    expect(JSON.parse(exampleFile[1])).toMatchObject({ isDefault: true, request: stripped?.request });
+    const copy = openDatabase(':memory:');
+    applyWorkspaceFolder(copy, files);
+    expect(listWorkspaceResponseExamplesFull(copy, workspaceId).get(requestId)?.[0]).toMatchObject({
+      isDefault: true,
+      request: stripped?.request,
+    });
+  });
+
+  it("keep a Postman example's original request", () => {
+    const { db, workspaceId } = setup();
+    const result = importPostmanCollection(db, workspaceId, {
+      info: { name: 'API' },
+      item: [
+        {
+          name: 'Search',
+          request: { method: 'GET', url: 'https://api.test/search?q=x' },
+          response: [
+            {
+              name: 'Cats',
+              code: 200,
+              body: '[]',
+              originalRequest: {
+                method: 'GET',
+                url: { raw: 'https://api.test/search?q=cats', query: [{ key: 'q', value: 'cats' }] },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const [request] = getCollectionTree(db, workspaceId).find((c) => c.id === result.collectionId)!.requests;
+    expect(listResponseExamples(db, request.id)[0].request).toMatchObject({
+      method: 'GET',
+      url: expect.stringContaining('q=cats'),
+      match: { query: ['q'] },
+    });
   });
 });

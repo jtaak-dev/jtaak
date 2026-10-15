@@ -1,12 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { blank, isSecretName, stripAuth, stripKeyValues, stripSettings } from '../export/nativeExport.js';
+import {
+  blank,
+  isSecretName,
+  stripAuth,
+  stripExampleRequest,
+  stripKeyValues,
+  stripSettings,
+} from '../export/nativeExport.js';
 import {
   MESSAGING_PROTOCOLS,
   type AuthConfig,
   type CollectionCategory,
   type CollectionNodeKind,
+  type ExampleRequest,
   type KeyValue,
   type RequestConfig,
   type WorkspaceCredentialFinding,
@@ -135,6 +143,9 @@ interface ExampleFile {
   statusText: string;
   headers: { name: string; value: string }[];
   body: string;
+  /** The request it answers (secret-named headers and query parameters blanked). */
+  request?: ExampleRequest;
+  isDefault?: true;
 }
 
 /**
@@ -215,7 +226,8 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
 
   const examples = db
     .prepare(
-      `SELECT e.id, e.request_id, e.name, e.sort_order, e.status, e.status_text, e.headers_json, e.body
+      `SELECT e.id, e.request_id, e.name, e.sort_order, e.status, e.status_text, e.headers_json, e.body,
+         e.request_json, e.is_default
        FROM response_examples e
        JOIN requests r ON r.id = e.request_id
        JOIN collections c ON c.id = r.collection_id
@@ -230,6 +242,8 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
     status_text: string;
     headers_json: string;
     body: string;
+    request_json: string | null;
+    is_default: number;
   }[];
   for (const row of examples) {
     const headers = JSON.parse(row.headers_json) as Record<string, string>;
@@ -245,6 +259,8 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
         value: isSecretName(name) ? blank(value) : value,
       })),
       body: row.body,
+      ...(row.request_json && { request: stripExampleRequest(JSON.parse(row.request_json) as ExampleRequest) }),
+      ...(row.is_default === 1 && { isDefault: true as const }),
     };
     files[`examples/${row.id}.json`] = serialize(file);
   }
@@ -367,6 +383,13 @@ function parseFolder(files: WorkspaceFolderFiles): ParsedFolder {
         need(file, value, 'statusText', 'string');
         need(file, value, 'headers', 'array');
         need(file, value, 'body', 'string');
+        if (value.request !== undefined) {
+          need(file, value, 'request', 'object');
+          const request = value.request as Json;
+          need(`${file} (request)`, request, 'method', 'string');
+          need(`${file} (request)`, request, 'url', 'string');
+          need(`${file} (request)`, request, 'headers', 'object');
+        }
         break;
       default: {
         const kind = place.kind as ConnectionKind;
@@ -638,12 +661,25 @@ function upsertConnection(
 function upsertExample(db: Database.Database, v: Json, now: number): void {
   const headers = Object.fromEntries((v.headers as { name: string; value: string }[]).map((h) => [h.name, h.value]));
   db.prepare(
-    `INSERT INTO response_examples (id, request_id, name, status, status_text, headers_json, body, sort_order, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO response_examples
+       (id, request_id, name, status, status_text, headers_json, body, request_json, is_default, sort_order, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET request_id = excluded.request_id, name = excluded.name, status = excluded.status,
        status_text = excluded.status_text, headers_json = excluded.headers_json, body = excluded.body,
-       sort_order = excluded.sort_order`,
-  ).run(v.id, v.requestId, v.name, v.status, v.statusText, JSON.stringify(headers), v.body, v.order, now);
+       request_json = excluded.request_json, is_default = excluded.is_default, sort_order = excluded.sort_order`,
+  ).run(
+    v.id,
+    v.requestId,
+    v.name,
+    v.status,
+    v.statusText,
+    JSON.stringify(headers),
+    v.body,
+    v.request ? JSON.stringify(v.request) : null,
+    v.isDefault === true ? 1 : 0,
+    v.order,
+    now,
+  );
 }
 
 // ---- Credentials -----------------------------------------------------------------

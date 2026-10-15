@@ -167,14 +167,48 @@ export interface ResponseExample {
   statusText: string;
   headers: Record<string, string>;
   body: string;
+  /** The request it answers, when it was saved with one (request/exampleRequest.ts). */
+  request?: ExampleRequest;
+  /** The example a mock server serves for its request when no other matches more closely. */
+  isDefault?: boolean;
   createdAt: number;
 }
 
-/** A response example without its headers and body, for listing. */
-export type ResponseExampleSummary = Omit<ResponseExample, 'headers' | 'body'>;
+/**
+ * The request a response example answers, as written when it was saved
+ * (variables unresolved), in the HTTP form it's sent in: a GraphQL or SOAP
+ * request as the POST it is, no auth. What a mock server matches incoming
+ * requests against; a `{{variable}}` left in it can stand for anything.
+ */
+export interface ExampleRequest {
+  method: string;
+  /** The URL with the request's enabled query parameters. */
+  url: string;
+  headers: Record<string, string>;
+  /** The body as text; absent when there's none, or it's form-data or a file. */
+  body?: string;
+  /** What must match besides the method and path. Absent: nothing more. */
+  match?: ExampleMatch;
+}
+
+/** The parts of an example's request a mock server compares, besides the method and path. */
+export interface ExampleMatch {
+  /** Query parameters, by name, that must have the example's values. */
+  query?: string[];
+  /** Headers, by name (any case), that must have the example's values. */
+  headers?: string[];
+  /** The body must match: as JSON, the example's fields must be in it; otherwise, the same text. */
+  body?: boolean;
+}
+
+/** A response example without its headers, body and request, for listing. */
+export type ResponseExampleSummary = Omit<ResponseExample, 'headers' | 'body' | 'request'>;
 
 /** A response example in an export file (secret-named headers blanked unless secrets are kept). */
-export type NativeExportExample = Pick<ResponseExample, 'name' | 'status' | 'statusText' | 'headers' | 'body'>;
+export type NativeExportExample = Pick<
+  ResponseExample,
+  'name' | 'status' | 'statusText' | 'headers' | 'body' | 'request' | 'isDefault'
+>;
 
 export interface RequestConfig {
   id: string;
