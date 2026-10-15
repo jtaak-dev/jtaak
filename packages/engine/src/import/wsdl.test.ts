@@ -5,6 +5,8 @@ import { openDatabase } from '../storage/db';
 import { getCollectionTree, getOrCreateDefaultWorkspace, getRequest } from '../storage/repository';
 import { executeRequest } from '../request/executor';
 import { importWsdl, loadWsdl, resolveLocation, wsdlRequests } from './wsdl';
+import { getApiSpec } from '../storage/specs';
+import { listResponseExamples } from '../storage/examples';
 import type { SoapProtocolConfig } from '../types';
 
 // A document/literal service in the shape of the common public calculator:
@@ -246,6 +248,65 @@ describe('importWsdl', () => {
       ['CalculatorSoap12 (SOAP 1.2)', ['Add']],
     ]);
     expect(getRequest(db, collection.children[0].requests[0].id)!.config.protocol).toBe('soap');
+  });
+
+  it('keeps the WSDL, links each request to its operation, and makes the output message its example', () => {
+    const db = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const result = importWsdl(db, workspace.id, {
+      location: 'http://calc.test/?wsdl',
+      documents: { 'http://calc.test/?wsdl': CALCULATOR },
+    });
+    expect(result).toMatchObject({ exampleCount: 2 });
+    expect(getApiSpec(db, result.specId!)).toMatchObject({
+      kind: 'wsdl',
+      name: 'Calculator',
+      location: 'http://calc.test/?wsdl',
+      source: CALCULATOR,
+    });
+    const collection = getCollectionTree(db, workspace.id).find((c) => c.id === result.collectionId)!;
+    const [add, place] = collection.children[0].requests;
+    expect(getRequest(db, add.id)!.config.source).toEqual({ specId: result.specId, operation: 'CalculatorSoap/Add' });
+    const [example] = listResponseExamples(db, add.id);
+    expect(example).toMatchObject({
+      name: 'Sample response',
+      status: 200,
+      isDefault: true,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+      request: { method: 'POST', headers: { SOAPAction: '"http://tempuri.org/Add"' } },
+    });
+    expect(example.body).toContain('<tns:AddResponse>');
+    expect(example.body).toContain('<tns:AddResult>0</tns:AddResult>');
+    // A one-way operation has no response.
+    expect(listResponseExamples(db, place.id)).toEqual([]);
+    const [add12] = collection.children[1].requests;
+    expect(listResponseExamples(db, add12.id)[0].headers).toEqual({
+      'Content-Type': 'application/soap+xml; charset=utf-8',
+    });
+  });
+
+  it('wraps an rpc response in <operation>Response', () => {
+    const rpc = `<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:stock" targetNamespace="urn:stock">
+  <message name="GetQuote"><part name="symbol" type="xsd:string"/></message>
+  <message name="Quote"><part name="price" type="xsd:decimal"/></message>
+  <portType name="Stock">
+    <operation name="GetQuote"><input message="tns:GetQuote"/><output message="tns:Quote"/></operation>
+  </portType>
+  <binding name="StockBinding" type="tns:Stock">
+    <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetQuote">
+      <soap:operation soapAction=""/>
+      <input><soap:body use="literal" namespace="urn:stock:ops"/></input>
+      <output><soap:body use="literal" namespace="urn:stock:ops"/></output>
+    </operation>
+  </binding>
+  <service name="StockService"><port name="StockPort" binding="tns:StockBinding"><soap:address location="https://stock.test/soap"/></port></service>
+</definitions>`;
+    const [response] = wsdlRequests(rpc).services[0].ports[0].responses;
+    expect(response).toContain(`    <ns1:GetQuoteResponse>
+      <price>0.0</price>
+    </ns1:GetQuoteResponse>`);
   });
 });
 

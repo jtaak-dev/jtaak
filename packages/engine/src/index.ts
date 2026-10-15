@@ -11,6 +11,10 @@ export type {
   ScriptIteration,
   ResponseExample,
   ResponseExampleSummary,
+  ApiSpec,
+  ApiSpecKind,
+  ApiSpecSummary,
+  RequestSource,
   ExampleRequest,
   ExampleMatch,
   NativeExportExample,
@@ -208,7 +212,21 @@ export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';
 export { parseCurlCommand } from './import/curl.js';
 export { importPostmanCollection } from './import/postmanCollection.js';
 export { importPostmanEnvironment } from './import/postmanEnvironment.js';
-export { importOpenApi } from './import/openApi.js';
+export {
+  importOpenApi,
+  parseOpenApiText,
+  resolveOpenApiRefs,
+  openApiOperation,
+  openApiResponseExamples,
+  openApiStatus,
+  reasonPhrase,
+  type ImportOpenApiOptions,
+  type OpenApiDocument,
+  type OpenApiOperation,
+  type OpenApiResponse,
+  type OpenApiMediaType,
+  type OpenApiSchema,
+} from './import/openApi.js';
 export {
   importWsdl,
   loadWsdl,
@@ -248,6 +266,15 @@ export {
   type ResponseExampleInput,
   type ResponseExampleChanges,
 } from './storage/examples.js';
+export {
+  saveApiSpec,
+  listApiSpecs,
+  listWorkspaceApiSpecs,
+  getApiSpec,
+  findApiSpec,
+  deleteApiSpec,
+  type ApiSpecInput,
+} from './storage/specs.js';
 
 export {
   listWorkspaces,

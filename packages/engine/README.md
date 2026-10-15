@@ -504,11 +504,26 @@ responses import as examples, with the request Postman kept for each.
 
 - `importPostmanCollection`, `importPostmanEnvironment`, `importOpenApi` and
   `parseCurlCommand` bring in existing work.
+- `importOpenApi(db, workspaceId, spec, { location })` takes an OpenAPI 3.x
+  document (or a Swagger 2.0 one's paths) as text, JSON or YAML, or parsed:
+  local `$ref`s are resolved (`resolveOpenApiRefs`), path-level parameters
+  and server variables apply, the spec's response examples become each
+  request's examples (the first 2xx one the default), the document is kept as
+  the workspace's spec, and each request names its operation
+  (`config.source`: `{ specId, operation: 'GET /users/{id}' }`).
+- **Specs** (`saveApiSpec`, `listApiSpecs`, `getApiSpec`, `findApiSpec`,
+  `listWorkspaceApiSpecs`, `deleteApiSpec`): API descriptions a workspace
+  keeps, `openapi`, `wsdl` or `graphql` (an introspected schema), one per
+  kind and location, deleted with the workspace. What a mock server can
+  generate answers from; `openApiOperation` and `openApiResponseExamples`
+  read an OpenAPI one.
 - `importWsdl(db, workspaceId, await loadWsdl(urlOrPath))` imports a SOAP
   service from its WSDL 1.1: a request per operation, with its endpoint, SOAP
   version (from the binding), `SOAPAction` and a starting envelope built from
   the input message's schema types (`?` and sample values, with optional and
-  repeated elements marked). `loadWsdl` fetches or reads the WSDL and the
+  repeated elements marked); the WSDL is kept as the workspace's spec, and
+  each output message makes a sample response envelope, the request's default
+  example. `loadWsdl` fetches or reads the WSDL and the
   WSDLs and schemas it imports or includes (an unreadable import is a warning);
   `wsdlRequests` returns the requests without storing them. Document and rpc
   styles are covered; HTTP bindings and WSDL 2.0 aren't.

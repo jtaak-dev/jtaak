@@ -239,6 +239,8 @@ export interface RequestConfig {
    * send its cookies and keep what the response sets. On unless set to
    * `false`. */
   useCookies?: boolean;
+  /** The spec operation it was imported from (OpenAPI, WSDL), for a mock server to generate answers from. */
+  source?: RequestSource;
   /** Payload specific to `protocol` (e.g. a GraphQL query/variables, gRPC
    * service/method) — shape is owned by each protocol; `http`
    * doesn't use it since `method`/`url`/`body`/`auth` above already cover it.
@@ -290,6 +292,10 @@ export interface GraphQlTypeSummary {
   kind: string;
   description?: string;
   fields: GraphQlFieldSummary[];
+  /** An enum's values. */
+  enumValues?: string[];
+  /** The object types a union or interface can be. */
+  possibleTypes?: string[];
 }
 
 /** Normalized result of introspecting a GraphQL endpoint (see
@@ -1113,10 +1119,44 @@ export interface CollectionRunReport {
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */
+/** The kinds of API description a workspace keeps (storage/specs.ts). */
+export type ApiSpecKind = 'openapi' | 'wsdl' | 'graphql';
+
+/**
+ * An API description kept in a workspace: an imported OpenAPI or WSDL
+ * document, or a GraphQL endpoint's introspected schema. What a mock server
+ * generates answers from, for requests linked to it (`RequestConfig.source`).
+ */
+export interface ApiSpec {
+  id: string;
+  workspaceId: string;
+  kind: ApiSpecKind;
+  name: string;
+  /** Where it came from (a URL or a file path), when known; one spec per kind and location. */
+  location: string | null;
+  /** The document as text (OpenAPI as given, JSON or YAML; WSDL's XML; GraphQL's schema as JSON). */
+  source: string;
+  importedAt: number;
+}
+
+/** A spec without its text, for listing. */
+export type ApiSpecSummary = Omit<ApiSpec, 'source'>;
+
+/** The spec operation a request was made from. */
+export interface RequestSource {
+  specId: string;
+  /** OpenAPI: `GET /users/{id}`; WSDL: `<port>/<operation>`; GraphQL: the endpoint's URL. */
+  operation: string;
+}
+
 export interface ImportResult {
   collectionId: string;
   folderCount: number;
   requestCount: number;
+  /** The spec the import kept (OpenAPI, WSDL). */
+  specId?: string;
+  /** Response examples made from the spec's examples. */
+  exampleCount?: number;
   /** Postman imports: each request whose scripts call parts of Postman's API the sandbox doesn't have. */
   scriptWarnings?: { requestName: string; calls: string[] }[];
   /** What was left out (WSDL imports: an import that couldn't be read, a port that isn't SOAP). */

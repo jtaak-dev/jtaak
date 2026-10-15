@@ -2,10 +2,10 @@ import type { GraphQlFieldSummary, GraphQlSchemaSummary, GraphQlTypeSummary, Net
 import { fetchFor } from '../request/tls.js';
 
 // Standard GraphQL introspection query (per the GraphQL spec), trimmed to
-// just what a schema browser/autocomplete UI needs: type names/kinds/
-// descriptions and each field's name + type. Four levels of `ofType` covers
-// realistic wrapper nesting (e.g. `[User!]!`) without introspecting args,
-// enums, or interfaces, which no caller needs yet.
+// to what a schema browser, autocomplete and a mock server need: type
+// names/kinds/descriptions, each field's name + type, enums' values and the
+// types a union or interface can be. Four levels of `ofType` covers
+// realistic wrapper nesting (e.g. `[User!]!`) without introspecting args.
 const INTROSPECTION_QUERY = `
   query IntrospectionSchema {
     __schema {
@@ -21,6 +21,8 @@ const INTROSPECTION_QUERY = `
           description
           type { ...TypeRef }
         }
+        enumValues(includeDeprecated: true) { name }
+        possibleTypes { name }
       }
     }
   }
@@ -59,6 +61,8 @@ interface RawSchemaType {
   name: string;
   description: string | null;
   fields: RawField[] | null;
+  enumValues?: { name: string }[] | null;
+  possibleTypes?: { name: string }[] | null;
 }
 
 interface RawSchema {
@@ -84,6 +88,8 @@ function toTypeSummary(type: RawSchemaType): GraphQlTypeSummary {
     kind: type.kind,
     description: type.description ?? undefined,
     fields: (type.fields ?? []).map(toFieldSummary),
+    ...(type.enumValues?.length && { enumValues: type.enumValues.map((v) => v.name) }),
+    ...(type.possibleTypes?.length && { possibleTypes: type.possibleTypes.map((t) => t.name) }),
   };
 }
 
