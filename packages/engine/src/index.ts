@@ -234,6 +234,7 @@ export {
   deleteHistoryEntry,
   clearHistory,
   pruneHistory,
+  latestHistoryResponses,
 } from './storage/history.js';
 export {
   createResponseExample,

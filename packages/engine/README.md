@@ -463,7 +463,8 @@ It stores the `config` it's given, so pass the request as written if resolved
 `{{variables}}` could hold secrets. `addHistoryEntry(db, input, { storeResponse:
 false })` keeps only the response's status, duration and size. Response bodies over 256 kB are cut
 (`responseTruncated`); `sizeBytes` keeps the full size. `deleteHistoryEntry` and
-`clearHistory` delete entries, and deleting a workspace deletes its history.
+`clearHistory` delete entries, and deleting a workspace deletes its history. `latestHistoryResponses(db, workspaceId)`
+gives each saved request's most recent response kept whole, by request id.
 
 A request can keep responses as named examples of what it returns (what a
 mock server would serve):
