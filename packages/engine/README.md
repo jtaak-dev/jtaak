@@ -48,6 +48,13 @@ TLS time). The phases come from the diagnostics-channel events Node's `fetch`
 publishes; they don't add up to `durationMs`, which also covers building the
 request and any redirects.
 
+`response.tls`, for an HTTPS response, is the TLS connection it came over:
+`protocol` (`TLSv1.3`), `cipher`, `alpnProtocol`, `authorized` (false only with
+`verifyTls: false`) and `authorizationError`, and the server's `certificate`
+(`subject`, `issuer`, `subjectAltNames`, `validFrom`, `validTo`,
+`fingerprint256`, `serialNumber`, `selfSigned`). A reused connection or a
+resumed TLS session reports the certificate its endpoint last showed.
+
 `body.mode` is `none`, `raw`, `json`, `urlencoded`, `form-data` or `binary`. A
 `binary` body sends the file at `body.binaryPath`, read and streamed when the
 request is sent, with a `Content-Type` from its extension unless a header sets

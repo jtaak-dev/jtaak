@@ -337,6 +337,41 @@ export interface RequestTimingPhases {
   reusedConnection: boolean;
 }
 
+/** A certificate a server presented (`ConnectionTls.certificate`). */
+export interface TlsCertificateSummary {
+  /** The subject, as `CN=api.example.com, O=Example`. */
+  subject: string;
+  issuer: string;
+  /** The names it's valid for (`subjectAltName`), as `DNS:api.example.com` or `IP Address:10.0.0.1`. */
+  subjectAltNames: string[];
+  /** ISO times. */
+  validFrom: string;
+  validTo: string;
+  /** SHA-256, colon-separated hex. */
+  fingerprint256: string;
+  serialNumber: string;
+  /** Whether it signed itself (issuer and subject are the same). */
+  selfSigned: boolean;
+}
+
+/**
+ * The TLS connection a response came over (request/timing.ts): taken at the
+ * handshake, for a new or a reused connection the engine opened.
+ */
+export interface ConnectionTls {
+  /** `TLSv1.3`, `TLSv1.2`… */
+  protocol: string | null;
+  /** The cipher suite's standard name. */
+  cipher?: string;
+  /** The application protocol agreed on (`h2`, `http/1.1`), when one was. */
+  alpnProtocol?: string;
+  /** Whether the certificate was trusted. False only where the check was off (`verifyTls: false`). */
+  authorized: boolean;
+  /** Why it wasn't trusted (Node's code, such as `DEPTH_ZERO_SELF_SIGNED_CERT`). */
+  authorizationError?: string;
+  certificate?: TlsCertificateSummary;
+}
+
 export interface ExecutedResponse {
   status: number;
   statusText: string;
@@ -356,6 +391,9 @@ export interface ExecutedResponse {
    * reads one. With a cookie jar, redirects' cookies are here too, in the
    * order they came. Absent on responses stored before it existed. */
   setCookies?: string[];
+  /** The TLS connection it came over: absent for plain HTTP, or where the
+   * runtime gave no connection events. Absent on responses stored before it existed. */
+  tls?: ConnectionTls;
 }
 
 /** One event pushed by an open protocol connection (`openStream` in
