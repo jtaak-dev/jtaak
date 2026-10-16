@@ -55,6 +55,12 @@ request and any redirects.
 `fingerprint256`, `serialNumber`, `selfSigned`). A reused connection or a
 resumed TLS session reports the certificate its endpoint last showed.
 
+For other connections (a WebSocket, a broker, a gRPC server),
+`probeTls(config, host, port)` makes a TLS handshake of its own with the
+config's `network` settings and resolves the same details, an untrusted
+certificate described (`authorized: false`) rather than refused. It sends
+nothing after the handshake and doesn't use a proxy.
+
 `body.mode` is `none`, `raw`, `json`, `urlencoded`, `form-data` or `binary`. A
 `binary` body sends the file at `body.binaryPath`, read and streamed when the
 request is sent, with a `Content-Type` from its extension unless a header sets

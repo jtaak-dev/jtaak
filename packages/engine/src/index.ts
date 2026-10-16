@@ -142,6 +142,7 @@ export { fetchGraphQlSchema, clearGraphQlSchemaCache } from './graphql/introspec
 export { parseGrpcProto, clearGrpcProtoCache, summarizeGrpcSchema } from './request/grpcProto.js';
 export { executeGrpcUnaryCall, grpcServerMethod, type GrpcServerMethod } from './request/grpc.js';
 export { reflectGrpcServer, type GrpcReflectionResult } from './request/grpcReflection.js';
+export { probeTls, type ProbeTlsOptions } from './request/tlsProbe.js';
 
 export { resolveVariables, resolveDeep, findVariables, type VariableReference } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
