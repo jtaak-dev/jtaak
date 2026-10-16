@@ -50,7 +50,7 @@ function runCliWith(
   });
 }
 
-describe('jt CLI', () => {
+describe('jtaak CLI', () => {
   it('sends through the proxy in HTTPS_PROXY', async () => {
     const seen: string[] = [];
     const proxy = http.createServer((req, res) => {
@@ -105,7 +105,7 @@ describe('jt CLI', () => {
   it('prints usage and exits 1 without arguments', async () => {
     const { code, stderr } = await runCli();
     expect(code).toBe(1);
-    expect(stderr).toContain('Usage: jt [-k|--insecure] <METHOD> <URL>');
+    expect(stderr).toContain('Usage: jtaak [-k|--insecure] <METHOD> <URL>');
   });
 
   it('exits 1 when the server is unreachable', async () => {

@@ -10,7 +10,7 @@ to the APIs you send requests to.
 | Package | What it is |
 |---|---|
 | [`@jtaak/engine`](packages/engine) | The engine, as a library for Node.js. Embed it in your own tools. |
-| [`jtaak`](packages/cli) | The command-line client, `jt`. |
+| [`jtaak`](packages/cli) | The command-line client, `jtaak`. |
 
 ```bash
 npx jtaak GET https://api.example.com/users
@@ -35,7 +35,7 @@ pnpm lint
 pnpm format        # CI runs pnpm format:check
 pnpm build
 pnpm check:pack    # publint and arethetypeswrong on the packed packages
-pnpm check:install # installs the packed packages with npm and runs `jt` (needs network)
+pnpm check:install # installs the packed packages with npm and runs `jtaak` (needs network)
 ```
 
 Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). To report a

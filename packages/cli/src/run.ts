@@ -1,4 +1,4 @@
-// `jt run`: runs an export file's requests with their scripts, in order,
+// `jtaak run`: runs an export file's requests with their scripts, in order,
 // reports them in the terminal (and as JUnit XML for CI), and exits non-zero
 // when anything failed. The same engine calls a host application makes.
 import fs from 'node:fs/promises';
@@ -21,7 +21,7 @@ import {
 import { createReporter } from './report.js';
 
 /** `run`'s help text, for the command name and the profile whose format and namespace are the defaults. */
-export function runUsage(command = 'jt', profile: EngineProfile = DEFAULT_ENGINE_PROFILE): string {
+export function runUsage(command = 'jtaak', profile: EngineProfile = DEFAULT_ENGINE_PROFILE): string {
   return `Usage: ${command} run <export file> [options]
 
 Runs the file's requests with their scripts and tests, in order.
@@ -125,7 +125,7 @@ export function networkSettings(
 }
 
 export interface RunOptions {
-  /** The command name, for the help text and messages. Default `jt`. */
+  /** The command name, for the help text and messages. Default `jtaak`. */
   command?: string;
   /** The base profile; --format and --namespace override its exportFormat and scriptNamespace. */
   profile?: EngineProfile;
@@ -203,7 +203,7 @@ export interface PreparedRun {
 
 /** Reads a run's arguments and its export file; a UsageError says what's wrong. `--help` isn't handled here. */
 export async function prepareRun(argv: string[], options: PrepareRunOptions = {}): Promise<PreparedRun> {
-  const command = options.command ?? 'jt';
+  const command = options.command ?? 'jtaak';
   const baseProfile = options.profile ?? DEFAULT_ENGINE_PROFILE;
   let parsed;
   try {
@@ -310,7 +310,7 @@ export async function prepareRun(argv: string[], options: PrepareRunOptions = {}
 }
 
 export async function run(argv: string[], options: RunOptions = {}): Promise<number> {
-  const command = options.command ?? 'jt';
+  const command = options.command ?? 'jtaak';
   const usage = () => runUsage(command, options.profile ?? DEFAULT_ENGINE_PROFILE);
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(usage());

@@ -1,4 +1,4 @@
-// What `jt run` prints as it goes: each request as it finishes, under its
+// What `jtaak run` prints as it goes: each request as it finishes, under its
 // folder, with its tests and script output, then a summary.
 import type { CollectionRunItemResult, CollectionRunReport, ExportedRequest } from '@jtaak/engine';
 
@@ -16,7 +16,7 @@ function palette(out: Output) {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function createReporter(out: Output, command = 'jt') {
+export function createReporter(out: Output, command = 'jtaak') {
   const c = palette(out);
   const line = (text = '') => out.write(`${text}\n`);
   let lastPath = '';

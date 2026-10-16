@@ -49,5 +49,5 @@ jobs:
       # Both packages as they will be published: layout and type resolution.
       - run: pnpm check:pack
       # Installs the packed engine and CLI with npm into an empty folder and
-      # runs the installed `jt` command.
+      # runs the installed `jtaak` command.
       - run: pnpm check:install
