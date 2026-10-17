@@ -123,8 +123,13 @@ function stringRecord(value: unknown, path: string): Record<string, string> {
 function example(value: unknown, path: string): NativeExportExample {
   const e = obj(value, path);
   const status = e.status;
-  if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 999) {
-    fail(`${path}.status`, 'expected an HTTP status code');
+  // An HTTP status, or a gRPC example's status code (0, OK, to 16, UNAUTHENTICATED).
+  if (
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    !(status <= 16 ? status >= 0 : status >= 100 && status <= 999)
+  ) {
+    fail(`${path}.status`, 'expected an HTTP or gRPC status code');
   }
   const isDefault = optBool(e.isDefault, `${path}.isDefault`);
   return {
