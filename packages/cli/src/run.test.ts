@@ -108,7 +108,16 @@ describe('jtaak run', () => {
 
   it('runs only a folder with --folder, and writes JUnit XML with --junit', async () => {
     const junit = path.join(dir, 'report.xml');
-    const { code, stdout } = await jtaak('run', exportFile(), '-e', 'Local', '--folder', 'Shop/Admin', '--junit', junit);
+    const { code, stdout } = await jtaak(
+      'run',
+      exportFile(),
+      '-e',
+      'Local',
+      '--folder',
+      'Shop/Admin',
+      '--junit',
+      junit,
+    );
     expect(code).toBe(1);
     expect(stdout).toContain('"Shop/Admin" in');
     expect(stdout).not.toContain('Log in');

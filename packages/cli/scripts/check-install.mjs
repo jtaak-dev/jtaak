@@ -123,7 +123,11 @@ try {
     }),
   );
   console.log('Running a collection with the installed CLI: jtaak run check.jt --junit check.xml');
-  const runResult = await runInShell('npx', ['--no-install', 'jtaak', 'run', exportFile, '--junit', junitFile], project);
+  const runResult = await runInShell(
+    'npx',
+    ['--no-install', 'jtaak', 'run', exportFile, '--junit', junitFile],
+    project,
+  );
   if (runResult.code !== 0 || !runResult.stdout.includes('✓ path') || !fs.existsSync(junitFile)) {
     fail(`unexpected output from jtaak run (exit ${runResult.code}):\n${runResult.stdout}\n${runResult.stderr}`);
   }
