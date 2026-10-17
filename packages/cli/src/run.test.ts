@@ -1,4 +1,4 @@
-// `jt run`, as a user runs it: a child process on an export file written for
+// `jtaak run`, as a user runs it: a child process on an export file written for
 // each test, against a local HTTP server.
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -80,12 +80,12 @@ function exportFile(overrides: Partial<NativeExportDocument> = {}, name = 'api.j
   return file;
 }
 
-// No proxy from the machine running the tests: jt would send through it.
+// No proxy from the machine running the tests: jtaak would send through it.
 const HERMETIC_ENV = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !/^(https?|no)_proxy$/i.test(name)),
 );
 
-function jt(...args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+function jtaak(...args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [TSX_CLI, ENTRY, ...args], { env: HERMETIC_ENV }, (error, stdout, stderr) => {
       resolve({ code: error ? ((error as { code?: number }).code ?? 1) : 0, stdout, stderr });
@@ -93,11 +93,11 @@ function jt(...args: string[]): Promise<{ code: number; stdout: string; stderr: 
   });
 }
 
-describe('jt run', () => {
+describe('jtaak run', () => {
   it('runs every request with its tests, keeps cookies, and exits 1 when a test fails', async () => {
-    const { code, stdout } = await jt('run', exportFile(), '--env', 'Local');
+    const { code, stdout } = await jtaak('run', exportFile(), '--env', 'Local');
     expect(code).toBe(1);
-    expect(stdout).toContain('jt run');
+    expect(stdout).toContain('jtaak run');
     expect(stdout).toContain('environment "Local": 3 requests');
     expect(stdout).toMatch(/Shop\n {2}✓ Log in GET \{\{base\}\}\/login → 200 OK, \d+ ms\n {6}✓ status is 200/);
     expect(stdout).toContain('✓ has the session');
@@ -108,7 +108,16 @@ describe('jt run', () => {
 
   it('runs only a folder with --folder, and writes JUnit XML with --junit', async () => {
     const junit = path.join(dir, 'report.xml');
-    const { code, stdout } = await jt('run', exportFile(), '-e', 'Local', '--folder', 'Shop/Admin', '--junit', junit);
+    const { code, stdout } = await jtaak(
+      'run',
+      exportFile(),
+      '-e',
+      'Local',
+      '--folder',
+      'Shop/Admin',
+      '--junit',
+      junit,
+    );
     expect(code).toBe(1);
     expect(stdout).toContain('"Shop/Admin" in');
     expect(stdout).not.toContain('Log in');
@@ -149,10 +158,10 @@ describe('jt run', () => {
         },
       ],
     });
-    const passing = await jt('run', file, '--env-file', envFile, '--var', 'key=from-var');
+    const passing = await jtaak('run', file, '--env-file', envFile, '--var', 'key=from-var');
     expect(passing.code).toBe(0);
     expect(passing.stdout).toContain('environment "postman.json"');
-    const { code, stdout } = await jt('run', file, '--env-file', envFile);
+    const { code, stdout } = await jtaak('run', file, '--env-file', envFile);
     expect(code).toBe(1);
     expect(stdout).toContain('expected "from-file" to be "from-var"');
   });
@@ -177,7 +186,7 @@ describe('jt run', () => {
       ],
     });
     const run = (...extra: string[]) =>
-      jt('run', file, '-e', 'Local', '--var', 'key=s3cret-value', '--junit', junit, ...extra);
+      jtaak('run', file, '-e', 'Local', '--var', 'key=s3cret-value', '--junit', junit, ...extra);
     const shown = await run();
     expect(shown.stdout).toContain('s3cret-value');
     const { code, stdout } = await run('--secret', 'key');
@@ -199,7 +208,7 @@ describe('jt run', () => {
         },
       ],
     });
-    const { code, stdout } = await jt('run', file, '-e', 'Local', '--bail');
+    const { code, stdout } = await jtaak('run', file, '-e', 'Local', '--bail');
     expect(code).toBe(1);
     expect(stdout).not.toContain('Never');
     expect(stdout).toContain('Stopped after the first failure (--bail): 1 request not run.');
@@ -219,32 +228,32 @@ describe('jt run', () => {
         },
       ],
     });
-    const { code, stdout } = await jt('run', file, '-e', 'Local');
+    const { code, stdout } = await jtaak('run', file, '-e', 'Local');
     expect(code).toBe(1);
-    expect(stdout).toContain("Skipping 1 request jt run can't send: Events (SSE)");
+    expect(stdout).toContain("Skipping 1 request jtaak run can't send: Events (SSE)");
     expect(stdout).toMatch(/✗ Down GET http:\/\/127\.0\.0\.1:1\/\n {6}fetch failed/);
     expect(stdout).toContain('1 request (1 failed to send), 0 tests');
   });
 
   it('exits 2 for a missing file, an unknown environment or folder, or a bad option', async () => {
     const file = exportFile();
-    const missing = await jt('run', path.join(dir, 'nope.jt'));
+    const missing = await jtaak('run', path.join(dir, 'nope.jt'));
     expect([missing.code, missing.stderr]).toEqual([2, expect.stringContaining("Can't read the export file")]);
-    const env = await jt('run', file, '--env', 'Prod');
+    const env = await jtaak('run', file, '--env', 'Prod');
     expect([env.code, env.stderr]).toEqual([2, expect.stringContaining('No environment "Prod" in') as string]);
     expect(env.stderr).toContain('it has "Local"');
-    const folder = await jt('run', file, '--folder', 'Nope');
+    const folder = await jtaak('run', file, '--folder', 'Nope');
     expect([folder.code, folder.stderr]).toEqual([2, expect.stringContaining('No collection or folder named "Nope"')]);
-    expect((await jt('run', file, '--nope')).code).toBe(2);
-    expect((await jt('run')).code).toBe(2);
+    expect((await jtaak('run', file, '--nope')).code).toBe(2);
+    expect((await jtaak('run')).code).toBe(2);
   });
 
   it('says how to run an export from another app built on jtaak', async () => {
     const file = exportFile({ format: 'other-export' }, 'other.json');
-    const { code, stderr } = await jt('run', file, '-e', 'Local');
+    const { code, stderr } = await jtaak('run', file, '-e', 'Local');
     expect(code).toBe(2);
     expect(stderr).toContain('add --format other-export');
-    const withFormat = await jt('run', file, '-e', 'Local', '--format', 'other-export', '--folder', 'Admin');
+    const withFormat = await jtaak('run', file, '-e', 'Local', '--format', 'other-export', '--folder', 'Admin');
     expect(withFormat.stdout).toContain('Missing');
   });
 
@@ -260,16 +269,16 @@ describe('jt run', () => {
     });
     await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
     const proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
-    const { code } = await jt('run', exportFile(), '-e', 'Local', '--folder', 'Shop', '--proxy', proxyUrl);
+    const { code } = await jtaak('run', exportFile(), '-e', 'Local', '--folder', 'Shop', '--proxy', proxyUrl);
     proxy.close();
     expect(code).toBe(1); // the Admin folder's request is a 404
     expect(seen).toEqual([`${baseUrl}/login`, `${baseUrl}/me`, `${baseUrl}/missing`]);
   });
 
   it('prints its usage with --help', async () => {
-    const { code, stdout } = await jt('run', '--help');
+    const { code, stdout } = await jtaak('run', '--help');
     expect(code).toBe(0);
-    expect(stdout).toContain('Usage: jt run <export file> [options]');
+    expect(stdout).toContain('Usage: jtaak run <export file> [options]');
   });
 });
 

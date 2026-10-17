@@ -1,5 +1,5 @@
 // Installs the packed engine and CLI with npm into an empty folder, the way a
-// user would, then runs the installed `jt` command against a local server and
+// user would, then runs the installed `jtaak` command against a local server and
 // opens a database through the installed engine. It catches what the source
 // tests can't: a wrong `files` list or bin, the workspace: dependency not being
 // rewritten, a native module compiling on install. Run it with
@@ -78,11 +78,11 @@ try {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}/hello`;
 
-  console.log(`Running the installed CLI: jt GET ${url}`);
-  const cli = await runInShell('npx', ['--no-install', 'jt', 'GET', url], project);
+  console.log(`Running the installed CLI: jtaak GET ${url}`);
+  const cli = await runInShell('npx', ['--no-install', 'jtaak', 'GET', url], project);
   const [statusLine = '', body = ''] = cli.stdout.trim().split(/\r?\n/);
   if (cli.code !== 0 || !statusLine.startsWith('200 OK') || !body.includes('"/hello"')) {
-    fail(`unexpected output from jt (exit ${cli.code}):\n${cli.stdout}\n${cli.stderr}`);
+    fail(`unexpected output from jtaak (exit ${cli.code}):\n${cli.stdout}\n${cli.stderr}`);
   }
   console.log(`  ${statusLine}`);
 
@@ -122,10 +122,14 @@ try {
       ],
     }),
   );
-  console.log('Running a collection with the installed CLI: jt run check.jt --junit check.xml');
-  const runResult = await runInShell('npx', ['--no-install', 'jt', 'run', exportFile, '--junit', junitFile], project);
+  console.log('Running a collection with the installed CLI: jtaak run check.jt --junit check.xml');
+  const runResult = await runInShell(
+    'npx',
+    ['--no-install', 'jtaak', 'run', exportFile, '--junit', junitFile],
+    project,
+  );
   if (runResult.code !== 0 || !runResult.stdout.includes('✓ path') || !fs.existsSync(junitFile)) {
-    fail(`unexpected output from jt run (exit ${runResult.code}):\n${runResult.stdout}\n${runResult.stderr}`);
+    fail(`unexpected output from jtaak run (exit ${runResult.code}):\n${runResult.stdout}\n${runResult.stderr}`);
   }
   console.log(`  ${runResult.stdout.trim().split(/\r?\n/).at(-1)}`);
 

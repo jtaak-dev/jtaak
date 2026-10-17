@@ -53,6 +53,14 @@ const CANNED_SCHEMA_RESPONSE = {
         },
         { kind: 'SCALAR', name: 'ID', description: null, fields: null },
         { kind: 'SCALAR', name: 'String', description: null, fields: null },
+        {
+          kind: 'ENUM',
+          name: 'Role',
+          description: null,
+          fields: null,
+          enumValues: [{ name: 'ADMIN' }, { name: 'USER' }],
+        },
+        { kind: 'UNION', name: 'Result', description: null, fields: null, possibleTypes: [{ name: 'User' }] },
         { kind: 'OBJECT', name: '__Type', description: null, fields: [] },
       ],
     },
@@ -89,7 +97,10 @@ describe('fetchGraphQlSchema', () => {
 
     expect(schema.queryType).toBe('Query');
     expect(schema.mutationType).toBeUndefined();
-    expect(schema.types.map((t) => t.name).sort()).toEqual(['ID', 'Query', 'String', 'User']);
+    expect(schema.types.map((t) => t.name).sort()).toEqual(['ID', 'Query', 'Result', 'Role', 'String', 'User']);
+    expect(schema.types.find((t) => t.name === 'Role')!.enumValues).toEqual(['ADMIN', 'USER']);
+    expect(schema.types.find((t) => t.name === 'Result')!.possibleTypes).toEqual(['User']);
+    expect(schema.types.find((t) => t.name === 'User')).not.toHaveProperty('enumValues');
 
     const user = schema.types.find((t) => t.name === 'User')!;
     expect(user.fields.find((f) => f.name === 'id')!.typeName).toBe('ID!');

@@ -90,6 +90,9 @@ importers:
       ws:
         specifier: ^8.21.3
         version: 8.21.3
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@arethetypeswrong/cli':
         specifier: ^0.18.5

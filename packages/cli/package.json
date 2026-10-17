@@ -1,7 +1,7 @@
 {
   "name": "jtaak",
-  "version": "0.14.0",
-  "description": "Command-line API client on the jtaak engine: send HTTP requests from the terminal with `jt`.",
+  "version": "0.15.0",
+  "description": "Command-line API client on the jtaak engine: send HTTP requests from the terminal with `jtaak`.",
   "keywords": [
     "api",
     "http",
@@ -22,7 +22,7 @@
   },
   "type": "module",
   "bin": {
-    "jt": "./dist/index.js"
+    "jtaak": "./dist/index.js"
   },
   "exports": {
     "./cli": {

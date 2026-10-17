@@ -105,6 +105,18 @@ describe('HTTP', () => {
     expect(response.body).toBe('ok');
     expect(response.timings.phases?.tlsMs).toBeGreaterThanOrEqual(0);
   });
+
+  it('describes the TLS connection, on a new and on a reused connection', async () => {
+    const first = await executeRequest(config({ verifyTls: false }));
+    expect(first.tls).toMatchObject({ protocol: 'TLSv1.3', authorized: false });
+    expect(first.tls?.authorizationError).toMatch(/SELF_SIGNED|self-signed/i);
+    expect(first.tls?.cipher).toMatch(/^TLS_/);
+    expect(first.tls?.certificate).toMatchObject({ subject: 'CN=localhost', issuer: 'CN=localhost', selfSigned: true });
+    expect(Date.parse(first.tls!.certificate!.validTo)).toBeGreaterThan(Date.now());
+    expect(first.tls?.certificate?.fingerprint256).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    const second = await executeRequest(config({ verifyTls: false }));
+    expect(second.tls?.certificate?.fingerprint256).toBe(first.tls?.certificate?.fingerprint256);
+  });
 });
 
 describe('SSE', () => {

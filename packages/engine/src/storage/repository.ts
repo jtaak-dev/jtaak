@@ -10,6 +10,7 @@ import type {
   Environment,
   KeyValue,
   McpServerConnection,
+  McpServerMock,
   McpTransportKind,
   MessagingConnection,
   MessagingProtocol,
@@ -19,6 +20,7 @@ import type {
   SavedRequest,
   SavedRequestSummary,
   WebSocketConnection,
+  WebSocketMock,
   Workspace,
 } from '../types.js';
 import { reorderPositions } from './ordering.js';
@@ -519,6 +521,7 @@ interface WsConnectionRow {
   auth_json: string;
   verify_tls: number | null;
   test_script: string | null;
+  mock_json: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -536,6 +539,7 @@ function toWebSocketConnection(row: WsConnectionRow): WebSocketConnection {
     auth: JSON.parse(row.auth_json) as AuthConfig,
     ...(row.verify_tls !== null && { verifyTls: row.verify_tls !== 0 }),
     ...(row.test_script && { testScript: row.test_script }),
+    ...(row.mock_json && { mock: JSON.parse(row.mock_json) as WebSocketMock }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -663,6 +667,7 @@ interface McpConnectionRow {
   env_json: string;
   headers_json: string;
   verify_tls: number | null;
+  mock_json: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -680,9 +685,20 @@ function toMcpServerConnection(row: McpConnectionRow): McpServerConnection {
     env: JSON.parse(row.env_json) as KeyValue[],
     headers: JSON.parse(row.headers_json) as KeyValue[],
     ...(row.verify_tls !== null && { verifyTls: row.verify_tls !== 0 }),
+    ...(row.mock_json && { mock: JSON.parse(row.mock_json) as McpServerMock }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Sets (or, with null, removes) what a mock server serves for a WebSocket connection. */
+export function setWebSocketMock(db: Database.Database, id: string, mock: WebSocketMock | null): void {
+  db.prepare('UPDATE ws_connections SET mock_json = ? WHERE id = ?').run(mock ? JSON.stringify(mock) : null, id);
+}
+
+/** Sets (or, with null, removes) what a mock server serves for an MCP server. */
+export function setMcpServerMock(db: Database.Database, id: string, mock: McpServerMock | null): void {
+  db.prepare('UPDATE mcp_connections SET mock_json = ? WHERE id = ?').run(mock ? JSON.stringify(mock) : null, id);
 }
 
 export function listMcpServerConnections(db: Database.Database, workspaceId: string): McpServerConnection[] {

@@ -6,7 +6,7 @@ send requests to.
 
 ```bash
 npm install -g jtaak
-jt GET https://api.example.com/users
+jtaak GET https://api.example.com/users
 ```
 
 Or without installing:
@@ -20,8 +20,8 @@ Requires Node.js 22.22 or later.
 ## Usage
 
 ```
-jt <METHOD> <URL>
-jt <URL>            (GET)
+jtaak <METHOD> <URL>
+jtaak <URL>            (GET)
 ```
 
 Add `-k` (or `--insecure`), as in curl, to skip checking the server's TLS
@@ -41,17 +41,17 @@ response body:
 
 The exit code is non-zero if the request can't be sent.
 
-## Running a collection: `jt run`
+## Running a collection: `jtaak run`
 
-`jt run` runs the requests in an export file (`.jt`), in order, with their
+`jtaak run` runs the requests in an export file (`.jt`), in order, with their
 pre-request and test scripts, and reports each one as it finishes:
 
 ```bash
-jt run shop.jt --env Staging --junit results.xml
+jtaak run shop.jt --env Staging --junit results.xml
 ```
 
 ```
-jt run shop.jt, environment "Staging": 3 requests
+jtaak run shop.jt, environment "Staging": 3 requests
 
 Shop
   ✓ Log in POST {{base}}/login → 200 OK, 88 ms
@@ -119,7 +119,7 @@ process.exitCode = await runCli(process.argv.slice(2), { command: 'acme', profil
 
 `runCli(argv, { command, profile })` takes the arguments after the command
 name and resolves to the exit code; it never exits the process. The usage
-text and messages show `command` (default `jt`). `acme run` reads exports in
+text and messages show `command` (default `jtaak`). `acme run` reads exports in
 the profile's `exportFormat` and runs their scripts under its
 `scriptNamespace` (default `DEFAULT_ENGINE_PROFILE`); `--format` and
 `--namespace` still override them. Two more options are for `run`:

@@ -48,6 +48,19 @@ TLS time). The phases come from the diagnostics-channel events Node's `fetch`
 publishes; they don't add up to `durationMs`, which also covers building the
 request and any redirects.
 
+`response.tls`, for an HTTPS response, is the TLS connection it came over:
+`protocol` (`TLSv1.3`), `cipher`, `alpnProtocol`, `authorized` (false only with
+`verifyTls: false`) and `authorizationError`, and the server's `certificate`
+(`subject`, `issuer`, `subjectAltNames`, `validFrom`, `validTo`,
+`fingerprint256`, `serialNumber`, `selfSigned`). A reused connection or a
+resumed TLS session reports the certificate its endpoint last showed.
+
+For other connections (a WebSocket, a broker, a gRPC server),
+`probeTls(config, host, port)` makes a TLS handshake of its own with the
+config's `network` settings and resolves the same details, an untrusted
+certificate described (`authorized: false`) rather than refused. It sends
+nothing after the handshake and doesn't use a proxy.
+
 `body.mode` is `none`, `raw`, `json`, `urlencoded`, `form-data` or `binary`. A
 `binary` body sends the file at `body.binaryPath`, read and streamed when the
 request is sent, with a `Content-Type` from its extension unless a header sets
@@ -463,7 +476,8 @@ It stores the `config` it's given, so pass the request as written if resolved
 `{{variables}}` could hold secrets. `addHistoryEntry(db, input, { storeResponse:
 false })` keeps only the response's status, duration and size. Response bodies over 256 kB are cut
 (`responseTruncated`); `sizeBytes` keeps the full size. `deleteHistoryEntry` and
-`clearHistory` delete entries, and deleting a workspace deletes its history.
+`clearHistory` delete entries, and deleting a workspace deletes its history. `latestHistoryResponses(db, workspaceId)`
+gives each saved request's most recent response kept whole, by request id.
 
 A request can keep responses as named examples of what it returns (what a
 mock server would serve):
@@ -476,20 +490,70 @@ listResponseExamples(db, requestId); // in the order saved
 listWorkspaceResponseExamples(db, workspace.id); // every one, without headers and bodies
 ```
 
-`renameResponseExample` and `deleteResponseExample` change them, and they're
-deleted with their request. Native exports carry them (`examples` on a request
-item, secret-named headers such as `Set-Cookie` blanked unless secrets are
-kept), and a Postman collection's saved responses import as examples.
+`renameResponseExample`, `updateResponseExample` and `deleteResponseExample`
+change them, and they're deleted with their request.
+
+An example can keep the request it answers, for a mock server to match
+incoming requests against: `exampleRequestFrom(config)` gives it as written
+(`{{variables}}` unresolved, no auth) in its HTTP form, a GraphQL or SOAP
+request as the POST it is, with a `match` saying what must agree besides the
+method and path (by default its query parameters and its body; headers by
+name when chosen). One example of a request can be its default
+(`isDefault`). `listWorkspaceResponseExamplesFull` returns every example of
+a workspace, whole, by request.
+
+```ts
+import { createResponseExample, exampleRequestFrom } from '@jtaak/engine';
+
+createResponseExample(db, requestId, { ...response, name: 'Found', request: exampleRequestFrom(config) });
+```
+
+A mock server can also run a request's `mockScript` with `runScript` and
+`respond: true`: the script may then change `<namespace>.response` (its `status`,
+`statusText`, `headers` and `body`, or `setJson(value)`), and the result's
+`response` is what it ends as.
+
+`sseExampleBody(events)` keeps an SSE stream's messages as an example body
+(`text/event-stream`, each after a `:delay <ms>` comment), and `sseExampleBlocks`
+reads it back for replay. `grpcServerMethod(protocolConfig)` gives the method a
+gRPC request calls as a server answering it needs it (a `@grpc/grpc-js`
+ServiceDefinition entry and a default response).
+
+Native exports carry examples and their requests (`examples` on a request
+item, secret-named headers such as `Set-Cookie` and secret-named query
+parameters blanked unless secrets are kept), and a Postman collection's saved
+responses import as examples, with the request Postman kept for each.
 
 ## Import and export
 
 - `importPostmanCollection`, `importPostmanEnvironment`, `importOpenApi` and
   `parseCurlCommand` bring in existing work.
+- `importOpenApi(db, workspaceId, spec, { location })` takes an OpenAPI 3.x
+  document (or a Swagger 2.0 one's paths) as text, JSON or YAML, or parsed:
+  local `$ref`s are resolved (`resolveOpenApiRefs`), path-level parameters
+  and server variables apply, the spec's response examples become each
+  request's examples (the first 2xx one the default), the document is kept as
+  the workspace's spec, and each request names its operation
+  (`config.source`: `{ specId, operation: 'GET /users/{id}' }`).
+- **Specs** (`saveApiSpec`, `listApiSpecs`, `getApiSpec`, `findApiSpec`,
+  `listWorkspaceApiSpecs`, `deleteApiSpec`): API descriptions a workspace
+  keeps, `openapi`, `wsdl` or `graphql` (an introspected schema), one per
+  kind and location, deleted with the workspace. What a mock server can
+  generate answers from; `openApiOperation` and `openApiResponseExamples`
+  read an OpenAPI one. Native exports carry them (`specs`; a workspace
+  export all of them, a collection's those its requests name) and so do
+  workspace folders (`specs/<id>.json`).
+- **Connection mocks:** a WebSocket connection or MCP server can keep what a
+  mock server serves for it (`mock`; `setWebSocketMock`, `setMcpServerMock`):
+  opening messages and reply rules, or saved tool results and a contract.
+  Exports and workspace folders carry them.
 - `importWsdl(db, workspaceId, await loadWsdl(urlOrPath))` imports a SOAP
   service from its WSDL 1.1: a request per operation, with its endpoint, SOAP
   version (from the binding), `SOAPAction` and a starting envelope built from
   the input message's schema types (`?` and sample values, with optional and
-  repeated elements marked). `loadWsdl` fetches or reads the WSDL and the
+  repeated elements marked); the WSDL is kept as the workspace's spec, and
+  each output message makes a sample response envelope, the request's default
+  example. `loadWsdl` fetches or reads the WSDL and the
   WSDLs and schemas it imports or includes (an unreadable import is a warning);
   `wsdlRequests` returns the requests without storing them. Document and rpc
   styles are covered; HTTP bindings and WSDL 2.0 aren't.

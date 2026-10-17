@@ -107,6 +107,52 @@ export function prepareGrpcCall(config: RequestConfig) {
   };
 }
 
+/** A method of a request's proto as a gRPC server sees it (grpcServerMethod). */
+export interface GrpcServerMethod {
+  /** `/package.Service/Method`. */
+  path: string;
+  requestStream: boolean;
+  responseStream: boolean;
+  requestSerialize: (value: Record<string, unknown>) => Buffer;
+  requestDeserialize: (value: Buffer) => Record<string, unknown>;
+  responseSerialize: (value: Record<string, unknown>) => Buffer;
+  responseDeserialize: (value: Buffer) => Record<string, unknown>;
+  /** The response message with every field at its default: an answer to start from. */
+  defaultResponse: () => Record<string, unknown>;
+}
+
+/**
+ * The method a gRPC request calls, as a server answering it needs it (a
+ * `@grpc/grpc-js` ServiceDefinition entry, plus a default response): for a
+ * mock server, say. From the request's `.proto` or reflected schema.
+ */
+export function grpcServerMethod(
+  protocolConfig: Pick<
+    GrpcProtocolConfig,
+    'protoFile' | 'source' | 'reflectedSchema' | 'serviceFullName' | 'methodName'
+  >,
+): GrpcServerMethod {
+  const root = grpcRoot(protocolConfig);
+  const service = root.lookupService(protocolConfig.serviceFullName);
+  const method = service.methods[protocolConfig.methodName];
+  if (!method) {
+    throw new Error(`Method "${protocolConfig.methodName}" not found on service "${protocolConfig.serviceFullName}".`);
+  }
+  const requestType = method.resolvedRequestType!;
+  const responseType = method.resolvedResponseType!;
+  const options = { longs: String, enums: String, defaults: true };
+  return {
+    path: `/${service.fullName.replace(/^\./, '')}/${method.name}`,
+    requestStream: method.requestStream === true,
+    responseStream: method.responseStream === true,
+    requestSerialize: (value) => Buffer.from(requestType.encode(requestType.fromObject(value)).finish()),
+    requestDeserialize: (value) => requestType.toObject(requestType.decode(value), options),
+    responseSerialize: (value) => Buffer.from(responseType.encode(responseType.fromObject(value)).finish()),
+    responseDeserialize: (value) => responseType.toObject(responseType.decode(value), options),
+    defaultResponse: () => responseType.toObject(responseType.create({}), options),
+  };
+}
+
 /**
  * Executes a unary gRPC call. Streaming methods (`requestStream`/
  * `responseStream`) are rejected here; `openStream` (streamExecutor.ts) is where they'll eventually route,

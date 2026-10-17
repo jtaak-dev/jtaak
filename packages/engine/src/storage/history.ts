@@ -184,3 +184,23 @@ export function pruneHistory(db: Database.Database, workspaceId: string, keep: n
     )
     .run(workspaceId, workspaceId, Math.max(0, Math.floor(keep))).changes;
 }
+
+/**
+ * Each saved request's most recent response kept whole in a workspace's
+ * history (not cut to the size limit), by request id: what a request last
+ * answered, for a mock server with no example to serve.
+ */
+export function latestHistoryResponses(db: Database.Database, workspaceId: string): Map<string, ExecutedResponse> {
+  const rows = db
+    .prepare(
+      `SELECT request_id, response_json FROM request_history
+       WHERE workspace_id = ? AND request_id IS NOT NULL AND response_json IS NOT NULL AND response_truncated = 0
+       ORDER BY executed_at DESC, rowid DESC`,
+    )
+    .all(workspaceId) as { request_id: string; response_json: string }[];
+  const latest = new Map<string, ExecutedResponse>();
+  for (const row of rows) {
+    if (!latest.has(row.request_id)) latest.set(row.request_id, JSON.parse(row.response_json) as ExecutedResponse);
+  }
+  return latest;
+}

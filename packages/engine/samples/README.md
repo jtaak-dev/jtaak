@@ -37,7 +37,7 @@ for that reason.
 - JSON, raw text, urlencoded and multipart bodies
 - **Files:** a binary body, and a multipart form with a file field, both
   sending [`sample-upload.txt`](./sample-upload.txt). The path is relative,
-  so run the sample from this folder (`jt run jtaak-sample-workspace.jt`
+  so run the sample from this folder (`jtaak run jtaak-sample-workspace.jt`
   from `samples/`)
 - **Response examples:** **REST CRUD → Get one post** keeps two, *Found*
   and *Not found*, as examples of what it returns
@@ -90,7 +90,7 @@ for that reason.
 - streaming an answer from OpenAI's chat completions and from Anthropic's
   Messages API: an SSE request that POSTs a JSON body, with tests that
   pass once the stream has ended (`aiStreamText` puts the answer together, `aiUsage` reads the tokens)
-- the same OpenAI request, not streamed, as a plain HTTP request (`jt run` sends it; streams are skipped there)
+- the same OpenAI request, not streamed, as a plain HTTP request (`jtaak run` sends it; streams are skipped there)
 - a local model through Ollama's OpenAI-compatible API, which needs no key
   (`ollama run llama3.2` first)
 
@@ -144,7 +144,7 @@ to a different server.
   run it with the certificate:
 
   ```
-  jt run jtaak-sample-workspace.jt -e "Sample — httpbin" --folder "Sample — HTTP/Authentication" \
+  jtaak run jtaak-sample-workspace.jt -e "Sample — httpbin" --folder "Sample — HTTP/Authentication" \
     --cert badssl.com-client.pem --key badssl.com-client.pem --pass badssl.com
   ```
 
@@ -154,7 +154,7 @@ to a different server.
   **Sample — SOAP** calculator's requests (and Subtract and Divide) from
   the service's own description, with an envelope for each operation.
 - **A proxy:** set `HTTPS_PROXY` (and `NO_PROXY`), or pass `--proxy`, and
-  `jt run` sends everything through it.
+  `jtaak run` sends everything through it.
 
 ### Good to know
 

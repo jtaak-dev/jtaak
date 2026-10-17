@@ -1,12 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { blank, isSecretName, stripAuth, stripKeyValues, stripSettings } from '../export/nativeExport.js';
+import {
+  blank,
+  isSecretName,
+  stripAuth,
+  stripExampleRequest,
+  stripKeyValues,
+  stripSettings,
+} from '../export/nativeExport.js';
 import {
   MESSAGING_PROTOCOLS,
   type AuthConfig,
   type CollectionCategory,
   type CollectionNodeKind,
+  type ExampleRequest,
   type KeyValue,
   type RequestConfig,
   type WorkspaceCredentialFinding,
@@ -22,6 +30,7 @@ import {
   listWebSocketConnections,
   storableConfig,
 } from './repository.js';
+import { listWorkspaceApiSpecs } from './specs.js';
 
 // A workspace as a folder of files, for keeping it in version control and
 // sharing it: one file per item, keyed by its id, so edits to different items
@@ -33,6 +42,7 @@ import {
 //   connections/<websocket|mcp|messaging>/<id>.json
 //   environments/<id>.json               the workspace's own (not global) ones
 //   examples/<id>.json                   a request's response examples
+//   specs/<id>.json                      an API spec (OpenAPI, WSDL, GraphQL schema)
 //
 // Each file is canonical JSON: keys sorted, two-space indent, a final newline,
 // no timestamps, so the same data always writes the same bytes. What belongs
@@ -69,13 +79,13 @@ const CONNECTION_TABLES: Record<ConnectionKind, string> = {
 };
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
-const MANAGED_DIRS = ['collections', 'requests', 'connections', 'environments', 'examples'];
+const MANAGED_DIRS = ['collections', 'requests', 'connections', 'environments', 'examples', 'specs'];
 
 /** Which item a path holds, or undefined for a file the format doesn't use. */
 export function classify(file: string): { kind: string; id: string } | undefined {
   if (file === 'workspace.json') return { kind: 'workspace', id: '' };
   const match =
-    /^(collections|requests|environments|examples)\/([^/]+)\.json$/.exec(file) ??
+    /^(collections|requests|environments|examples|specs)\/([^/]+)\.json$/.exec(file) ??
     /^connections\/(websocket|mcp|messaging)\/([^/]+)\.json$/.exec(file);
   if (!match || !ID.test(match[2])) return undefined;
   return { kind: match[1], id: match[2] };
@@ -135,6 +145,17 @@ interface ExampleFile {
   statusText: string;
   headers: { name: string; value: string }[];
   body: string;
+  /** The request it answers (secret-named headers and query parameters blanked). */
+  request?: ExampleRequest;
+  isDefault?: true;
+}
+
+interface SpecFile {
+  id: string;
+  kind: string;
+  name: string;
+  location: string | null;
+  source: string;
 }
 
 /**
@@ -215,7 +236,8 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
 
   const examples = db
     .prepare(
-      `SELECT e.id, e.request_id, e.name, e.sort_order, e.status, e.status_text, e.headers_json, e.body
+      `SELECT e.id, e.request_id, e.name, e.sort_order, e.status, e.status_text, e.headers_json, e.body,
+         e.request_json, e.is_default
        FROM response_examples e
        JOIN requests r ON r.id = e.request_id
        JOIN collections c ON c.id = r.collection_id
@@ -230,6 +252,8 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
     status_text: string;
     headers_json: string;
     body: string;
+    request_json: string | null;
+    is_default: number;
   }[];
   for (const row of examples) {
     const headers = JSON.parse(row.headers_json) as Record<string, string>;
@@ -245,8 +269,21 @@ export function workspaceFolderFiles(db: Database.Database, workspaceId: string)
         value: isSecretName(name) ? blank(value) : value,
       })),
       body: row.body,
+      ...(row.request_json && { request: stripExampleRequest(JSON.parse(row.request_json) as ExampleRequest) }),
+      ...(row.is_default === 1 && { isDefault: true as const }),
     };
     files[`examples/${row.id}.json`] = serialize(file);
+  }
+
+  for (const spec of listWorkspaceApiSpecs(db, workspaceId).values()) {
+    const file: SpecFile = {
+      id: spec.id,
+      kind: spec.kind,
+      name: spec.name,
+      location: spec.location,
+      source: spec.source,
+    };
+    files[`specs/${spec.id}.json`] = serialize(file);
   }
   return files;
 }
@@ -367,6 +404,19 @@ function parseFolder(files: WorkspaceFolderFiles): ParsedFolder {
         need(file, value, 'statusText', 'string');
         need(file, value, 'headers', 'array');
         need(file, value, 'body', 'string');
+        if (value.request !== undefined) {
+          need(file, value, 'request', 'object');
+          const request = value.request as Json;
+          need(`${file} (request)`, request, 'method', 'string');
+          need(`${file} (request)`, request, 'url', 'string');
+          need(`${file} (request)`, request, 'headers', 'object');
+        }
+        break;
+      case 'specs':
+        need(file, value, 'name', 'string');
+        need(file, value, 'source', 'string');
+        oneOf(file, value, 'kind', ['openapi', 'wsdl', 'graphql']);
+        if (value.location !== null && value.location !== undefined) need(file, value, 'location', 'string');
         break;
       default: {
         const kind = place.kind as ConnectionKind;
@@ -374,6 +424,7 @@ function parseFolder(files: WorkspaceFolderFiles): ParsedFolder {
         need(file, value, 'order', 'number');
         for (const [key, type] of CONNECTION_FIELDS[kind]) need(file, value, key, type);
         if (kind === 'mcp') oneOf(file, value, 'transport', ['stdio', 'http']);
+        if (value.mock !== undefined && kind !== 'messaging') need(file, value, 'mock', 'object');
         if (kind === 'messaging') oneOf(file, value, 'protocol', MESSAGING_PROTOCOLS);
       }
     }
@@ -470,20 +521,23 @@ export function applyWorkspaceFolder(db: Database.Database, files: WorkspaceFold
       }
     }
     for (const [, item] of changed) if (item.kind === 'examples') upsertExample(db, item.value, now);
+    for (const [, item] of changed) if (item.kind === 'specs') upsertSpec(db, workspaceId, item.value, now);
 
     // Removals, after the moves above, so deleting a collection only takes
     // with it what the folder removes too.
     const removed = Object.keys(current).filter((file) => file !== 'workspace.json' && !folder.items.has(file));
-    const order = ['examples', 'requests', 'websocket', 'mcp', 'messaging', 'environments', 'collections'];
+    const order = ['examples', 'requests', 'websocket', 'mcp', 'messaging', 'environments', 'specs', 'collections'];
     removed.sort((a, b) => order.indexOf(classify(a)!.kind) - order.indexOf(classify(b)!.kind));
     for (const file of removed) {
       const { kind, id } = classify(file)!;
       const table =
         kind === 'examples'
           ? 'response_examples'
-          : kind in CONNECTION_TABLES
-            ? CONNECTION_TABLES[kind as ConnectionKind]
-            : kind;
+          : kind === 'specs'
+            ? 'api_specs'
+            : kind in CONNECTION_TABLES
+              ? CONNECTION_TABLES[kind as ConnectionKind]
+              : kind;
       db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
       changes.removed.push(file);
     }
@@ -504,6 +558,7 @@ function assertOwnIds(db: Database.Database, workspaceId: string, folder: Parsed
     websocket: 'SELECT workspace_id AS owner FROM ws_connections WHERE id = ?',
     mcp: 'SELECT workspace_id AS owner FROM mcp_connections WHERE id = ?',
     messaging: 'SELECT workspace_id AS owner FROM messaging_connections WHERE id = ?',
+    specs: 'SELECT workspace_id AS owner FROM api_specs WHERE id = ?',
   };
   for (const [file, item] of folder.items) {
     const row = db.prepare(owner[item.kind]).get(item.id) as { owner: string } | undefined;
@@ -580,6 +635,18 @@ function testScriptColumn(v: Json): string | null {
   return typeof v.testScript === 'string' && v.testScript ? v.testScript : null;
 }
 
+function mockColumn(v: Json): string | null {
+  return v.mock && typeof v.mock === 'object' ? JSON.stringify(v.mock) : null;
+}
+
+function upsertSpec(db: Database.Database, workspaceId: string, v: Json, now: number): void {
+  db.prepare(
+    `INSERT INTO api_specs (id, workspace_id, kind, name, location, source, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name, location = excluded.location,
+       source = excluded.source, imported_at = excluded.imported_at`,
+  ).run(v.id, workspaceId, v.kind, v.name, typeof v.location === 'string' ? v.location : null, v.source, now);
+}
+
 function upsertConnection(
   db: Database.Database,
   kind: ConnectionKind,
@@ -597,6 +664,7 @@ function upsertConnection(
           auth_json: json('auth'),
           verify_tls: verifyTlsColumn(v),
           test_script: testScriptColumn(v),
+          mock_json: mockColumn(v),
         }
       : kind === 'mcp'
         ? {
@@ -606,6 +674,7 @@ function upsertConnection(
             env_json: json('env'),
             headers_json: json('headers'),
             verify_tls: verifyTlsColumn(v),
+            mock_json: mockColumn(v),
           }
         : {
             protocol: v.protocol,
@@ -638,12 +707,25 @@ function upsertConnection(
 function upsertExample(db: Database.Database, v: Json, now: number): void {
   const headers = Object.fromEntries((v.headers as { name: string; value: string }[]).map((h) => [h.name, h.value]));
   db.prepare(
-    `INSERT INTO response_examples (id, request_id, name, status, status_text, headers_json, body, sort_order, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO response_examples
+       (id, request_id, name, status, status_text, headers_json, body, request_json, is_default, sort_order, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET request_id = excluded.request_id, name = excluded.name, status = excluded.status,
        status_text = excluded.status_text, headers_json = excluded.headers_json, body = excluded.body,
-       sort_order = excluded.sort_order`,
-  ).run(v.id, v.requestId, v.name, v.status, v.statusText, JSON.stringify(headers), v.body, v.order, now);
+       request_json = excluded.request_json, is_default = excluded.is_default, sort_order = excluded.sort_order`,
+  ).run(
+    v.id,
+    v.requestId,
+    v.name,
+    v.status,
+    v.statusText,
+    JSON.stringify(headers),
+    v.body,
+    v.request ? JSON.stringify(v.request) : null,
+    v.isDefault === true ? 1 : 0,
+    v.order,
+    now,
+  );
 }
 
 // ---- Credentials -----------------------------------------------------------------

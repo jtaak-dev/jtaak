@@ -46,7 +46,8 @@ const SLACK = 15;
 describe('timing phases', () => {
   it('splits a request into connect, wait and download', async () => {
     // localhost, so there's a DNS lookup.
-    const { timings } = await executeRequest(request(`http://localhost:${port}/fresh?headers=80&body=60`));
+    const { timings, tls } = await executeRequest(request(`http://localhost:${port}/fresh?headers=80&body=60`));
+    expect(tls).toBeUndefined();
     const phases = timings.phases!;
     expect(phases).toBeDefined();
     expect(phases.reusedConnection).toBe(false);

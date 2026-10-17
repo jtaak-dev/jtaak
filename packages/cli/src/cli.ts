@@ -1,4 +1,4 @@
-// The CLI as a function: `runCli(argv)` does what the `jt` command does and
+// The CLI as a function: `runCli(argv)` does what the `jtaak` command does and
 // returns its exit code. index.ts is the bin that calls it. An application
 // built on the engine can ship the same CLI under its own command name and
 // EngineProfile (export format, script namespace, product name) by calling
@@ -30,7 +30,7 @@ export {
 } from './run.js';
 
 export interface CliOptions {
-  /** The command name shown in usage and messages. Default `jt`. */
+  /** The command name shown in usage and messages. Default `jtaak`. */
   command?: string;
   /**
    * The names users see: `run` reads exports of its `exportFormat` and runs
@@ -44,7 +44,7 @@ export interface CliOptions {
   junitProperties?: Record<string, string>;
 }
 
-export function usage(command = 'jt'): string {
+export function usage(command = 'jtaak'): string {
   return (
     `Usage: ${command} [-k|--insecure] <METHOD> <URL>\n  e.g. ${command} GET https://api.example.com/users\n` +
     "  -k, --insecure  don't check the server's TLS certificate (for testing only)\n" +
@@ -97,7 +97,7 @@ async function send(argv: string[], command: string): Promise<number> {
  * process itself; an unexpected error is printed and gives 1.
  */
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<number> {
-  const command = options.command ?? 'jt';
+  const command = options.command ?? 'jtaak';
   const profile = options.profile ?? DEFAULT_ENGINE_PROFILE;
   try {
     if (argv[0] === 'run')

@@ -3,6 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Database from 'better-sqlite3';
 import { createCollectionNode, createRequest } from '../storage/repository.js';
+import { createResponseExample } from '../storage/examples.js';
+import { saveApiSpec } from '../storage/specs.js';
+import { exampleRequestFrom } from '../request/exampleRequest.js';
 import { SOAP_ENVELOPE_NAMESPACES } from '../request/soap.js';
 import { fetchFor } from '../request/tls.js';
 import type { ImportResult, NetworkSettings, RequestConfig, SoapProtocolConfig } from '../types.js';
@@ -11,7 +14,8 @@ import { childrenNamed, escapeXml, parseXml, resolveQName, XmlError, type XmlEle
 // WSDL 1.1 import: a service's operations as SOAP requests, each with its
 // endpoint, SOAP version (from its binding), SOAPAction and a starting
 // envelope built from the operation's input message and the XML Schema
-// types it uses.
+// types it uses. Its output message makes a sample response envelope, kept
+// as the request's example, and the WSDL is kept as the workspace's spec.
 
 const WSDL = 'http://schemas.xmlsoap.org/wsdl/';
 const SOAP11 = 'http://schemas.xmlsoap.org/wsdl/soap/';
@@ -30,7 +34,15 @@ export interface WsdlSource {
 /** A WSDL's requests: its services, each with a folder of requests per SOAP port (unnamed when there's one). */
 export interface WsdlImport {
   name: string;
-  services: { name: string; ports: { name?: string; requests: RequestConfig[] }[] }[];
+  services: {
+    name: string;
+    ports: {
+      name?: string;
+      requests: RequestConfig[];
+      /** Each request's sample response envelope (from its output message), by position; none for one-way operations. */
+      responses: (string | undefined)[];
+    }[];
+  }[];
   warnings: string[];
 }
 
@@ -510,25 +522,31 @@ function partLines(
   return writer.element(decl, { ...noSchema, elementsQualified: !unqualified }, indent, []);
 }
 
+/**
+ * An operation's sample envelope: of its input message (the request), or of
+ * its output message (a response; rpc style wraps it in `<operation>Response`).
+ */
 function envelopeFor(
   model: Model,
   binding: SoapBinding,
   bindingOperation: XmlElement,
   operation: XmlElement,
   definitionsNs: string,
+  direction: 'input' | 'output' = 'input',
 ): string {
   const writer = new SampleWriter(model);
   const soapOperation = bindingOperation.children.find((c) => c.ns === binding.ns && c.local === 'operation');
   const style = soapOperation?.attrs.style ?? binding.style;
-  const input = childrenNamed(bindingOperation, WSDL, 'input')[0];
+  const input = childrenNamed(bindingOperation, WSDL, direction)[0];
   const soapBody = input?.children.find((c) => c.ns === binding.ns && c.local === 'body');
-  const inputMessage = childrenNamed(operation, WSDL, 'input')[0];
+  const inputMessage = childrenNamed(operation, WSDL, direction)[0];
   const parts = messageParts(model, inputMessage ?? operation, inputMessage?.attrs.message, soapBody?.attrs.parts);
 
   const body: string[] = [];
   if (style === 'rpc') {
     const ns = soapBody?.attrs.namespace ?? definitionsNs;
-    const tag = ns ? `${writer.prefixFor(ns)}:${operation.attrs.name}` : (operation.attrs.name ?? 'operation');
+    const wrapper = `${operation.attrs.name ?? 'operation'}${direction === 'output' ? 'Response' : ''}`;
+    const tag = ns ? `${writer.prefixFor(ns)}:${wrapper}` : wrapper;
     const children = parts.flatMap((part) => partLines(writer, model, part, '      ', true));
     body.push(...(children.length > 0 ? [`    <${tag}>`, ...children, `    </${tag}>`] : [`    <${tag}/>`]));
   } else {
@@ -591,6 +609,7 @@ export function wsdlRequests(source: WsdlSource | string): WsdlImport {
         childrenNamed(binding.portType, WSDL, 'operation').map((operation) => [operation.attrs.name, operation]),
       );
       const requests: RequestConfig[] = [];
+      const responses: (string | undefined)[] = [];
       for (const bindingOperation of childrenNamed(binding.element, WSDL, 'operation')) {
         const name = bindingOperation.attrs.name ?? 'operation';
         const operation = operations.get(name);
@@ -607,14 +626,20 @@ export function wsdlRequests(source: WsdlSource | string): WsdlImport {
           body: { mode: 'raw', raw: envelopeFor(model, binding, bindingOperation, operation, definitionsNs) },
           auth: { type: 'none' },
           protocolConfig: { version: binding.version, action: soapOperation?.attrs.soapAction ?? '' },
+          source: { specId: '', operation: `${port.attrs.name ?? 'Port'}/${name}` },
         });
+        responses.push(
+          childrenNamed(operation, WSDL, 'output').length > 0
+            ? envelopeFor(model, binding, bindingOperation, operation, definitionsNs, 'output')
+            : undefined,
+        );
       }
-      ports.push({ name: `${port.attrs.name ?? 'Port'} (SOAP ${binding.version})`, requests });
+      ports.push({ name: `${port.attrs.name ?? 'Port'} (SOAP ${binding.version})`, requests, responses });
     }
     if (ports.length === 0) continue;
     services.push({
       name: service.attrs.name ?? 'Service',
-      ports: ports.length === 1 ? [{ requests: ports[0].requests }] : ports,
+      ports: ports.length === 1 ? [{ requests: ports[0].requests, responses: ports[0].responses }] : ports,
     });
   }
   if (services.length === 0) throw new Error('The WSDL has no SOAP services to import.');
@@ -625,17 +650,31 @@ export function wsdlRequests(source: WsdlSource | string): WsdlImport {
   };
 }
 
+const SOAP_CONTENT_TYPES = { '1.1': 'text/xml; charset=utf-8', '1.2': 'application/soap+xml; charset=utf-8' };
+
 /**
  * Imports a WSDL (see `loadWsdl` for one with imports) as a new collection
  * of SOAP requests, one per operation: named after the service (or the WSDL,
  * with a folder per service when it has several), with a folder per SOAP
- * port when a service has more than one.
+ * port when a service has more than one. The WSDL is kept as the workspace's
+ * spec (one per location), each request names its operation, and its output
+ * message's sample envelope is its default example.
  */
 export function importWsdl(db: Database.Database, workspaceId: string, source: WsdlSource | string): ImportResult {
   const parsed = wsdlRequests(source);
+  const src: WsdlSource = typeof source === 'string' ? { location: '', documents: { '': source } } : source;
   let folderCount = 0;
   let requestCount = 0;
+  let exampleCount = 0;
+  let specId = '';
   const collectionId = db.transaction(() => {
+    specId = saveApiSpec(db, {
+      workspaceId,
+      kind: 'wsdl',
+      name: parsed.name,
+      location: src.location || null,
+      source: src.documents[src.location] ?? '',
+    }).id;
     const collection = createCollectionNode(db, {
       workspaceId,
       parentFolderId: null,
@@ -650,13 +689,37 @@ export function importWsdl(db: Database.Database, workspaceId: string, source: W
       const serviceId = parsed.services.length > 1 ? folder(collection.id, service.name) : collection.id;
       for (const port of service.ports) {
         const portId = port.name ? folder(serviceId, port.name) : serviceId;
-        for (const config of port.requests) {
+        port.requests.forEach((generated, i) => {
           requestCount++;
-          createRequest(db, { collectionId: portId, name: config.name, config });
-        }
+          const config: RequestConfig = {
+            ...generated,
+            ...(generated.source && { source: { ...generated.source, specId } }),
+          };
+          const request = createRequest(db, { collectionId: portId, name: config.name, config });
+          const envelope = port.responses[i];
+          if (envelope === undefined) return;
+          exampleCount++;
+          const version = (config.protocolConfig as SoapProtocolConfig | undefined)?.version ?? '1.1';
+          createResponseExample(db, request.id, {
+            name: 'Sample response',
+            status: 200,
+            statusText: 'OK',
+            headers: { 'Content-Type': SOAP_CONTENT_TYPES[version] },
+            body: envelope,
+            request: exampleRequestFrom(config, {}),
+            isDefault: true,
+          });
+        });
       }
     }
     return collection.id;
   })();
-  return { collectionId, folderCount, requestCount, ...(parsed.warnings.length > 0 && { warnings: parsed.warnings }) };
+  return {
+    collectionId,
+    folderCount,
+    requestCount,
+    specId,
+    exampleCount,
+    ...(parsed.warnings.length > 0 && { warnings: parsed.warnings }),
+  };
 }

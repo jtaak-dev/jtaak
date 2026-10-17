@@ -71,6 +71,55 @@ describe('runScript', () => {
   });
 });
 
+describe('a script that sets the response (respond)', () => {
+  it('changes the answer it starts from', async () => {
+    const { response } = await runScript(
+      `const user = jt.response.json();
+       user.name = jt.request.url.split('/').pop();
+       jt.response.setJson(user);
+       jt.response.status = '201';
+       jt.response.statusText = 'Created';
+       jt.response.headers['X-Count'] = 3;`,
+      { request: { ...baseRequest, url: '/users/ann' }, response: baseResponse, variables: {}, respond: true },
+    );
+    expect(response).toEqual({
+      status: 201,
+      statusText: 'Created',
+      headers: { 'content-type': 'application/json', 'X-Count': '3' },
+      body: JSON.stringify({ id: 1, name: 'ann', tags: ['fast', 'local'] }, null, 2),
+    });
+  });
+
+  it('starts from an empty 200 without one, and sets a JSON body’s type', async () => {
+    const { response } = await runScript('jt.response.setJson({ ok: jt.variables.id === "7" });', {
+      request: baseRequest,
+      variables: { id: '7' },
+      respond: true,
+    });
+    expect(response).toEqual({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{\n  "ok": true\n}',
+    });
+  });
+
+  it('keeps the status in range, makes the body text, and returns nothing without respond', async () => {
+    const { response } = await runScript('jt.response.status = 42; jt.response.body = { a: 1 };', {
+      request: baseRequest,
+      variables: {},
+      respond: true,
+    });
+    expect(response).toMatchObject({ status: 500, body: '{"a":1}' });
+    const plain = await runScript('jt.response.status = 201;', {
+      request: baseRequest,
+      response: baseResponse,
+      variables: {},
+    });
+    expect(plain).not.toHaveProperty('response');
+  });
+});
+
 describe('script namespace', () => {
   const acme = { ...DEFAULT_ENGINE_PROFILE, scriptNamespace: 'acme' };
 

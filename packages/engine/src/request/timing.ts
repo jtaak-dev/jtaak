@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import diagnosticsChannel from 'node:diagnostics_channel';
 import type { Socket } from 'node:net';
+import type { PeerCertificate, TLSSocket } from 'node:tls';
 import { performance } from 'node:perf_hooks';
-import type { RequestTimingPhases } from '../types.js';
+import type { ConnectionTls, RequestTimingPhases, TlsCertificateSummary } from '../types.js';
 
 /**
  * Where a request's time goes: DNS, connecting, TLS, waiting for the first
@@ -34,11 +35,42 @@ export interface TimingMarks {
   requestSent?: number;
   /** The response's headers arrived. */
   firstByte?: number;
+  /** The TLS connection the last request went out on (a new or a reused one; after a redirect, the final one). */
+  tls?: ConnectionTls;
 }
 
 const current = new AsyncLocalStorage<TimingMarks>();
 const byRequest = new WeakMap<object, TimingMarks>();
 const bySocket = new WeakMap<object, ConnectionMarks>();
+// Each TLS socket's details, read once: by the time a request goes out on it,
+// the handshake is done, whoever opened it.
+const tlsBySocket = new WeakMap<object, ConnectionTls | undefined>();
+
+// A resumed TLS session shows no certificate, so the last one each endpoint
+// showed is kept for it (a few hundred endpoints at most).
+const certificateByEndpoint = new Map<string, TlsCertificateSummary>();
+const MAX_ENDPOINTS = 256;
+
+function tlsOf(socket: object): ConnectionTls | undefined {
+  if (!(socket as { encrypted?: boolean }).encrypted) return undefined;
+  if (!tlsBySocket.has(socket)) {
+    const tls = socket as TLSSocket;
+    const details = connectionTls(tls);
+    const endpoint = `${(tls as { servername?: string }).servername || tls.remoteAddress}:${tls.remotePort}`;
+    if (details?.certificate) {
+      certificateByEndpoint.delete(endpoint);
+      certificateByEndpoint.set(endpoint, details.certificate);
+      if (certificateByEndpoint.size > MAX_ENDPOINTS) {
+        certificateByEndpoint.delete(certificateByEndpoint.keys().next().value!);
+      }
+    } else if (details && tls.isSessionReused?.()) {
+      const known = certificateByEndpoint.get(endpoint);
+      if (known) details.certificate = known;
+    }
+    tlsBySocket.set(socket, details);
+  }
+  return tlsBySocket.get(socket);
+}
 let subscribed = false;
 
 function now(): number {
@@ -76,6 +108,7 @@ function subscribe(): void {
   diagnosticsChannel.subscribe('undici:client:sendHeaders', (message) => {
     const marks = marksOf(message);
     const socket = (message as { socket?: object }).socket;
+    if (marks && socket) marks.tls = tlsOf(socket);
     const connection = socket ? bySocket.get(socket) : undefined;
     if (!marks || !connection || connection.claimed) return;
     connection.claimed = true;
@@ -90,6 +123,49 @@ function subscribe(): void {
     const marks = marksOf(message);
     if (marks) marks.firstByte = now();
   });
+}
+
+/** What a TLS socket agreed on, and the certificate it was shown. */
+export function connectionTls(socket: TLSSocket): ConnectionTls | undefined {
+  if (typeof socket.getProtocol !== 'function') return undefined;
+  const cipher = socket.getCipher?.();
+  const certificate = socket.getPeerCertificate?.();
+  const error = socket.authorizationError;
+  return {
+    protocol: socket.getProtocol(),
+    ...(cipher ? { cipher: cipher.standardName ?? cipher.name } : {}),
+    ...(typeof socket.alpnProtocol === 'string' ? { alpnProtocol: socket.alpnProtocol } : {}),
+    authorized: socket.authorized === true,
+    ...(error ? { authorizationError: typeof error === 'string' ? error : (error as Error).message } : {}),
+    ...(certificate && certificate.subject ? { certificate: certificateSummary(certificate) } : {}),
+  };
+}
+
+function distinguishedName(name: Record<string, string | string[]> | undefined): string {
+  if (!name) return '';
+  return Object.entries(name)
+    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join('+') : value}`)
+    .join(', ');
+}
+
+function isoTime(value: string): string {
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? value : time.toISOString();
+}
+
+function certificateSummary(certificate: PeerCertificate): TlsCertificateSummary {
+  const subject = distinguishedName(certificate.subject as unknown as Record<string, string>);
+  const issuer = distinguishedName(certificate.issuer as unknown as Record<string, string>);
+  return {
+    subject,
+    issuer,
+    subjectAltNames: certificate.subjectaltname ? certificate.subjectaltname.split(/,\s*/) : [],
+    validFrom: isoTime(certificate.valid_from),
+    validTo: isoTime(certificate.valid_to),
+    fingerprint256: certificate.fingerprint256,
+    serialNumber: certificate.serialNumber,
+    selfSigned: subject === issuer,
+  };
 }
 
 /** Runs `send` with fresh timing marks, and returns them with its result. */

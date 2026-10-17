@@ -167,14 +167,48 @@ export interface ResponseExample {
   statusText: string;
   headers: Record<string, string>;
   body: string;
+  /** The request it answers, when it was saved with one (request/exampleRequest.ts). */
+  request?: ExampleRequest;
+  /** The example a mock server serves for its request when no other matches more closely. */
+  isDefault?: boolean;
   createdAt: number;
 }
 
-/** A response example without its headers and body, for listing. */
-export type ResponseExampleSummary = Omit<ResponseExample, 'headers' | 'body'>;
+/**
+ * The request a response example answers, as written when it was saved
+ * (variables unresolved), in the HTTP form it's sent in: a GraphQL or SOAP
+ * request as the POST it is, no auth. What a mock server matches incoming
+ * requests against; a `{{variable}}` left in it can stand for anything.
+ */
+export interface ExampleRequest {
+  method: string;
+  /** The URL with the request's enabled query parameters. */
+  url: string;
+  headers: Record<string, string>;
+  /** The body as text; absent when there's none, or it's form-data or a file. */
+  body?: string;
+  /** What must match besides the method and path. Absent: nothing more. */
+  match?: ExampleMatch;
+}
+
+/** The parts of an example's request a mock server compares, besides the method and path. */
+export interface ExampleMatch {
+  /** Query parameters, by name, that must have the example's values. */
+  query?: string[];
+  /** Headers, by name (any case), that must have the example's values. */
+  headers?: string[];
+  /** The body must match: as JSON, the example's fields must be in it; otherwise, the same text. */
+  body?: boolean;
+}
+
+/** A response example without its headers, body and request, for listing. */
+export type ResponseExampleSummary = Omit<ResponseExample, 'headers' | 'body' | 'request'>;
 
 /** A response example in an export file (secret-named headers blanked unless secrets are kept). */
-export type NativeExportExample = Pick<ResponseExample, 'name' | 'status' | 'statusText' | 'headers' | 'body'>;
+export type NativeExportExample = Pick<
+  ResponseExample,
+  'name' | 'status' | 'statusText' | 'headers' | 'body' | 'request' | 'isDefault'
+>;
 
 export interface RequestConfig {
   id: string;
@@ -190,6 +224,14 @@ export interface RequestConfig {
   auth: AuthConfig;
   preRequestScript?: string;
   testScript?: string;
+  /**
+   * A script a mock server serving this request runs to make or change its
+   * answer: `runScript` with `respond`, the incoming request as
+   * `<namespace>.request` and the answer chosen so far as
+   * `<namespace>.response`, which it may change. Kept and imported like the
+   * other scripts.
+   */
+  mockScript?: string;
   /** Check the server's TLS certificate. On unless set to `false`, which
    * accepts expired, self-signed and wrong-host certificates: for testing a
    * server you control (the connection is still encrypted, but not
@@ -205,6 +247,8 @@ export interface RequestConfig {
    * send its cookies and keep what the response sets. On unless set to
    * `false`. */
   useCookies?: boolean;
+  /** The spec operation it was imported from (OpenAPI, WSDL), for a mock server to generate answers from. */
+  source?: RequestSource;
   /** Payload specific to `protocol` (e.g. a GraphQL query/variables, gRPC
    * service/method) — shape is owned by each protocol; `http`
    * doesn't use it since `method`/`url`/`body`/`auth` above already cover it.
@@ -256,6 +300,10 @@ export interface GraphQlTypeSummary {
   kind: string;
   description?: string;
   fields: GraphQlFieldSummary[];
+  /** An enum's values. */
+  enumValues?: string[];
+  /** The object types a union or interface can be. */
+  possibleTypes?: string[];
 }
 
 /** Normalized result of introspecting a GraphQL endpoint (see
@@ -289,6 +337,41 @@ export interface RequestTimingPhases {
   reusedConnection: boolean;
 }
 
+/** A certificate a server presented (`ConnectionTls.certificate`). */
+export interface TlsCertificateSummary {
+  /** The subject, as `CN=api.example.com, O=Example`. */
+  subject: string;
+  issuer: string;
+  /** The names it's valid for (`subjectAltName`), as `DNS:api.example.com` or `IP Address:10.0.0.1`. */
+  subjectAltNames: string[];
+  /** ISO times. */
+  validFrom: string;
+  validTo: string;
+  /** SHA-256, colon-separated hex. */
+  fingerprint256: string;
+  serialNumber: string;
+  /** Whether it signed itself (issuer and subject are the same). */
+  selfSigned: boolean;
+}
+
+/**
+ * The TLS connection a response came over (request/timing.ts): taken at the
+ * handshake, for a new or a reused connection the engine opened.
+ */
+export interface ConnectionTls {
+  /** `TLSv1.3`, `TLSv1.2`… */
+  protocol: string | null;
+  /** The cipher suite's standard name. */
+  cipher?: string;
+  /** The application protocol agreed on (`h2`, `http/1.1`), when one was. */
+  alpnProtocol?: string;
+  /** Whether the certificate was trusted. False only where the check was off (`verifyTls: false`). */
+  authorized: boolean;
+  /** Why it wasn't trusted (Node's code, such as `DEPTH_ZERO_SELF_SIGNED_CERT`). */
+  authorizationError?: string;
+  certificate?: TlsCertificateSummary;
+}
+
 export interface ExecutedResponse {
   status: number;
   statusText: string;
@@ -308,6 +391,9 @@ export interface ExecutedResponse {
    * reads one. With a cookie jar, redirects' cookies are here too, in the
    * order they came. Absent on responses stored before it existed. */
   setCookies?: string[];
+  /** The TLS connection it came over: absent for plain HTTP, or where the
+   * runtime gave no connection events. Absent on responses stored before it existed. */
+  tls?: ConnectionTls;
 }
 
 /** One event pushed by an open protocol connection (`openStream` in
@@ -387,6 +473,8 @@ export interface WebSocketConnection {
   testScript?: string;
   createdAt: number;
   updatedAt: number;
+  /** What a mock server serves for it (its Mock tab). */
+  mock?: WebSocketMock;
 }
 
 /** What a messaging connection subscribes to. `channel` is the protocol's
@@ -779,6 +867,8 @@ export interface McpServerConnection {
   verifyTls?: boolean;
   createdAt: number;
   updatedAt: number;
+  /** What a mock server serves for it: saved tool results, and the contract it offers. */
+  mock?: McpServerMock;
 }
 
 /**
@@ -911,7 +1001,7 @@ export interface WorkspaceCredentialFinding {
 
 /** What a workspace folder file holds (storage/workspaceFolder.ts). */
 export type WorkspaceItemKind =
-  'workspace' | 'collection' | 'request' | 'websocket' | 'mcp' | 'messaging' | 'environment' | 'example';
+  'workspace' | 'collection' | 'request' | 'websocket' | 'mcp' | 'messaging' | 'environment' | 'example' | 'spec';
 
 /** An item both sides of a merge changed differently (storage/workspaceMerge.ts):
  * one side's version is chosen whole. `text` is that side's file. */
@@ -1079,10 +1169,69 @@ export interface CollectionRunReport {
 }
 
 /** Result of importing a Postman collection or OpenAPI spec into a workspace. */
+/** What a mock server serves for a WebSocket connection: messages sent on connect, and rules that reply. */
+export interface WebSocketMock {
+  onConnect: { message: string; delayMs: number }[];
+  /** The first rule whose `match` a message has (text, or a `/pattern/`; empty matches any) replies. */
+  rules: { match: string; reply: string; delayMs: number }[];
+}
+
+/**
+ * What a mock server serves for an MCP server: tool calls saved with their
+ * results, and the contract it offers (an MCP checks contract, kept as it is).
+ */
+export interface McpServerMock {
+  calls: { tool: string; arguments?: Record<string, unknown>; result: unknown }[];
+  contract?: Record<string, unknown>;
+}
+
+/** A spec in an export file: its `key` is what requests' `config.source.specId` name in the file. */
+export interface NativeExportSpec {
+  key: string;
+  kind: ApiSpecKind;
+  name: string;
+  location?: string;
+  source: string;
+}
+
+/** The kinds of API description a workspace keeps (storage/specs.ts). */
+export type ApiSpecKind = 'openapi' | 'wsdl' | 'graphql';
+
+/**
+ * An API description kept in a workspace: an imported OpenAPI or WSDL
+ * document, or a GraphQL endpoint's introspected schema. What a mock server
+ * generates answers from, for requests linked to it (`RequestConfig.source`).
+ */
+export interface ApiSpec {
+  id: string;
+  workspaceId: string;
+  kind: ApiSpecKind;
+  name: string;
+  /** Where it came from (a URL or a file path), when known; one spec per kind and location. */
+  location: string | null;
+  /** The document as text (OpenAPI as given, JSON or YAML; WSDL's XML; GraphQL's schema as JSON). */
+  source: string;
+  importedAt: number;
+}
+
+/** A spec without its text, for listing. */
+export type ApiSpecSummary = Omit<ApiSpec, 'source'>;
+
+/** The spec operation a request was made from. */
+export interface RequestSource {
+  specId: string;
+  /** OpenAPI: `GET /users/{id}`; WSDL: `<port>/<operation>`; GraphQL: the endpoint's URL. */
+  operation: string;
+}
+
 export interface ImportResult {
   collectionId: string;
   folderCount: number;
   requestCount: number;
+  /** The spec the import kept (OpenAPI, WSDL). */
+  specId?: string;
+  /** Response examples made from the spec's examples. */
+  exampleCount?: number;
   /** Postman imports: each request whose scripts call parts of Postman's API the sandbox doesn't have. */
   scriptWarnings?: { requestName: string; calls: string[] }[];
   /** What was left out (WSDL imports: an import that couldn't be read, a port that isn't SOAP). */
@@ -1152,6 +1301,7 @@ export type NativeExportItem =
       /** Written when the connection sets it (see `RequestConfig.verifyTls`); absent, it follows the importer's default. */
       verifyTls?: boolean;
       testScript?: string;
+      mock?: WebSocketMock;
     }
   | {
       type: 'mcp';
@@ -1163,6 +1313,7 @@ export type NativeExportItem =
       headers: KeyValue[];
       /** As for websocket items. */
       verifyTls?: boolean;
+      mock?: McpServerMock;
     }
   | {
       type: 'messaging';
@@ -1221,6 +1372,8 @@ export interface NativeExportDocument {
   generator?: NativeExportGenerator;
   collections: NativeExportCollection[];
   environments: NativeExportEnvironment[];
+  /** The specs its requests were made from (all the workspace's in a workspace export); additive. */
+  specs?: NativeExportSpec[];
 }
 
 /** What to export. A folder can be exported too — it becomes a collection

@@ -42,10 +42,10 @@ async function capture(argv: string[], options?: Parameters<typeof runCli>[1]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('runCli', () => {
-  it("keeps jt's usage text for the default command and profile", () => {
-    expect(usage()).toMatch(/^Usage: jt \[-k\|--insecure\] <METHOD> <URL>\n {2}e\.g\. jt GET /);
-    expect(usage()).toContain('jt run <export file> [options]   run a collection with its tests (jt run --help)');
-    expect(runUsage()).toMatch(/^Usage: jt run <export file> \[options\]/);
+  it("keeps jtaak's usage text for the default command and profile", () => {
+    expect(usage()).toMatch(/^Usage: jtaak \[-k\|--insecure\] <METHOD> <URL>\n {2}e\.g\. jtaak GET /);
+    expect(usage()).toContain('jtaak run <export file> [options]   run a collection with its tests (jtaak run --help)');
+    expect(runUsage()).toMatch(/^Usage: jtaak run <export file> \[options\]/);
     expect(runUsage()).toContain(`(default ${DEFAULT_ENGINE_PROFILE.exportFormat})`);
     expect(runUsage()).toContain(`(default ${DEFAULT_ENGINE_PROFILE.scriptNamespace})`);
   });
@@ -114,7 +114,7 @@ describe('runCli', () => {
     // The default profile doesn't read it, and says how to.
     const plain = await capture(['run', file]);
     expect(plain.code).toBe(2);
-    expect(plain.stderr).toContain("isn't an export jt can run");
+    expect(plain.stderr).toContain("isn't an export jtaak can run");
     expect(plain.stderr).toContain('add --format other-export');
     fs.rmSync(dir, { recursive: true, force: true });
   });

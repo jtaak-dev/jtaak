@@ -286,5 +286,6 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
     timings: { start, end, durationMs: end - start, phases: timingPhases(marks, end) },
     sizeBytes: Buffer.byteLength(bodyText, 'utf-8'),
     setCookies,
+    ...(marks.tls ? { tls: marks.tls } : {}),
   };
 }

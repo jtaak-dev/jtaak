@@ -11,6 +11,15 @@ export type {
   ScriptIteration,
   ResponseExample,
   ResponseExampleSummary,
+  ApiSpec,
+  NativeExportSpec,
+  WebSocketMock,
+  McpServerMock,
+  ApiSpecKind,
+  ApiSpecSummary,
+  RequestSource,
+  ExampleRequest,
+  ExampleMatch,
   NativeExportExample,
   AuthConfig,
   OAuth2Config,
@@ -20,7 +29,9 @@ export type {
   NetworkSettings,
   ProxyConfig,
   RequestConfig,
+  ConnectionTls,
   ExecutedResponse,
+  TlsCertificateSummary,
   RequestTimingPhases,
   Protocol,
   StreamingProtocol,
@@ -129,8 +140,9 @@ export type { FetchGraphQlSchemaOptions } from './graphql/introspection.js';
 export { fetchGraphQlSchema, clearGraphQlSchemaCache } from './graphql/introspection.js';
 
 export { parseGrpcProto, clearGrpcProtoCache, summarizeGrpcSchema } from './request/grpcProto.js';
-export { executeGrpcUnaryCall } from './request/grpc.js';
+export { executeGrpcUnaryCall, grpcServerMethod, type GrpcServerMethod } from './request/grpc.js';
 export { reflectGrpcServer, type GrpcReflectionResult } from './request/grpcReflection.js';
+export { probeTls, type ProbeTlsOptions } from './request/tlsProbe.js';
 
 export { resolveVariables, resolveDeep, findVariables, type VariableReference } from './variables/resolver.js';
 export { parseSetCookie, type SetCookie } from './request/cookies.js';
@@ -180,7 +192,13 @@ export {
 } from './storage/cookies.js';
 export { applyEnvironmentUpdates, diffEnvironment } from './variables/environmentUpdates.js';
 
-export type { ScriptContext, ScriptCookie, ScriptStreamMessage } from './scripting/sandbox.js';
+export type {
+  ScriptContext,
+  ScriptCookie,
+  ScriptStreamMessage,
+  ScriptResponse,
+  ScriptRunResult,
+} from './scripting/sandbox.js';
 export { preloadScriptEngine, runScript } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
 export { unsupportedPostmanCalls, SUPPORTED_PM_API } from './scripting/postman.js';
@@ -206,7 +224,21 @@ export { CODEGEN_LANGUAGES, generateSnippet } from './codegen/snippets.js';
 export { parseCurlCommand } from './import/curl.js';
 export { importPostmanCollection } from './import/postmanCollection.js';
 export { importPostmanEnvironment } from './import/postmanEnvironment.js';
-export { importOpenApi } from './import/openApi.js';
+export {
+  importOpenApi,
+  parseOpenApiText,
+  resolveOpenApiRefs,
+  openApiOperation,
+  openApiResponseExamples,
+  openApiStatus,
+  reasonPhrase,
+  type ImportOpenApiOptions,
+  type OpenApiDocument,
+  type OpenApiOperation,
+  type OpenApiResponse,
+  type OpenApiMediaType,
+  type OpenApiSchema,
+} from './import/openApi.js';
 export {
   importWsdl,
   loadWsdl,
@@ -220,6 +252,20 @@ export { exportNative, serializeNativeExport, isSecretName } from './export/nati
 export { importNative, isNativeExport, previewNativeImport, validateNativeExport } from './import/nativeImport.js';
 export { adaptNativeExport } from './import/adaptNativeExport.js';
 export { rewriteScriptNamespace } from './scripting/scriptNamespace.js';
+export { exampleRequestFrom, defaultExampleMatch, exampleQueryNames } from './request/exampleRequest.js';
+export { SSE_CONTENT_TYPE, sseExampleBlocks, sseExampleBody } from './request/sseExample.js';
+export {
+  GRPC_STREAM_CONTENT_TYPE,
+  grpcStreamExampleBody,
+  grpcStreamRules,
+  isGrpcStreamExample,
+  readGrpcStreamExample,
+  withGrpcStreamRules,
+  type GrpcStreamExample,
+  type GrpcStreamKind,
+  type GrpcStreamRule,
+  type GrpcStreamStep,
+} from './request/grpcStreamExample.js';
 
 export { openDatabase } from './storage/db.js';
 export { DatabaseTooNewError, schemaVersion } from './storage/migrations.js';
@@ -231,16 +277,29 @@ export {
   deleteHistoryEntry,
   clearHistory,
   pruneHistory,
+  latestHistoryResponses,
 } from './storage/history.js';
 export {
   createResponseExample,
   listResponseExamples,
   listWorkspaceResponseExamples,
+  listWorkspaceResponseExamplesFull,
   getResponseExample,
   renameResponseExample,
+  updateResponseExample,
   deleteResponseExample,
   type ResponseExampleInput,
+  type ResponseExampleChanges,
 } from './storage/examples.js';
+export {
+  saveApiSpec,
+  listApiSpecs,
+  listWorkspaceApiSpecs,
+  getApiSpec,
+  findApiSpec,
+  deleteApiSpec,
+  type ApiSpecInput,
+} from './storage/specs.js';
 
 export {
   listWorkspaces,
@@ -285,6 +344,8 @@ export {
   reorderWebSocketConnections,
   listMcpServerConnections,
   getMcpServerConnection,
+  setMcpServerMock,
+  setWebSocketMock,
   createMcpServerConnection,
   renameMcpServerConnection,
   updateMcpServerConnection,

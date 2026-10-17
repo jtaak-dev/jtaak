@@ -8,6 +8,7 @@ import {
   clearHistory,
   deleteHistoryEntry,
   getHistoryEntry,
+  latestHistoryResponses,
   listHistory,
   pruneHistory,
 } from './history';
@@ -211,5 +212,31 @@ describe('history', () => {
 
     expect(clearHistory(db, workspaceId)).toBe(2);
     expect(listHistory(db, workspaceId)).toEqual([]);
+  });
+});
+
+describe('latestHistoryResponses', () => {
+  it("keeps each saved request's most recent whole response", () => {
+    const { db, workspaceId } = setup();
+    const [collection] = getCollectionTree(db, workspaceId);
+    const a = createRequest(db, { collectionId: collection.id, name: 'A', config: config() });
+    const b = createRequest(db, { collectionId: collection.id, name: 'B', config: config() });
+    addHistoryEntry(db, { workspaceId, requestId: a.id, config: config(), response: response('old'), executedAt: 1 });
+    addHistoryEntry(db, { workspaceId, requestId: a.id, config: config(), response: response('new'), executedAt: 2 });
+    // Cut to the size limit, or not kept: passed over.
+    addHistoryEntry(
+      db,
+      { workspaceId, requestId: a.id, config: config(), response: response('x'.repeat(50)), executedAt: 3 },
+      { maxBodyBytes: 10 },
+    );
+    addHistoryEntry(
+      db,
+      { workspaceId, requestId: b.id, config: config(), response: response(), executedAt: 4 },
+      { storeResponse: false },
+    );
+    addHistoryEntry(db, { workspaceId, config: config(), response: response('draft'), executedAt: 5 });
+    const latest = latestHistoryResponses(db, workspaceId);
+    expect([...latest.keys()]).toEqual([a.id]);
+    expect(latest.get(a.id)?.body).toBe('new');
   });
 });

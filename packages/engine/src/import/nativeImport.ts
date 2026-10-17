@@ -3,6 +3,8 @@ import {
   createCollectionNode,
   createEnvironment,
   createMcpServerConnection,
+  setMcpServerMock,
+  setWebSocketMock,
   createMessagingConnection,
   createRequest,
   createWebSocketConnection,
@@ -13,6 +15,7 @@ import {
   updateWebSocketConnection,
 } from '../storage/repository.js';
 import { createResponseExample } from '../storage/examples.js';
+import { saveApiSpec } from '../storage/specs.js';
 import {
   DEFAULT_ENGINE_PROFILE,
   MESSAGING_PROTOCOLS,
@@ -34,6 +37,10 @@ import {
   type HttpMethod,
   type FormField,
   type KeyValue,
+  type ExampleRequest,
+  type McpServerMock,
+  type NativeExportSpec,
+  type WebSocketMock,
   type NativeExportExample,
   type Protocol,
   type RequestBody,
@@ -119,12 +126,34 @@ function example(value: unknown, path: string): NativeExportExample {
   if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 999) {
     fail(`${path}.status`, 'expected an HTTP status code');
   }
+  const isDefault = optBool(e.isDefault, `${path}.isDefault`);
   return {
     name: name(e.name, `${path}.name`),
     status,
     statusText: str(e.statusText ?? '', `${path}.statusText`),
     headers: e.headers === undefined ? {} : stringRecord(e.headers, `${path}.headers`),
     body: str(e.body ?? '', `${path}.body`),
+    ...(e.request !== undefined && { request: exampleRequest(e.request, `${path}.request`) }),
+    ...(isDefault && { isDefault }),
+  };
+}
+
+function exampleRequest(value: unknown, path: string): ExampleRequest {
+  const r = obj(value, path);
+  const match = r.match === undefined ? undefined : obj(r.match, `${path}.match`);
+  const body = optBool(match?.body, `${path}.match.body`);
+  return {
+    method: str(r.method, `${path}.method`),
+    url: str(r.url, `${path}.url`),
+    headers: r.headers === undefined ? {} : stringRecord(r.headers, `${path}.headers`),
+    ...(r.body !== undefined && { body: str(r.body, `${path}.body`) }),
+    ...(match && {
+      match: {
+        ...(match.query !== undefined && { query: strList(match.query, `${path}.match.query`) }),
+        ...(match.headers !== undefined && { headers: strList(match.headers, `${path}.match.headers`) }),
+        ...(body !== undefined && { body }),
+      },
+    }),
   };
 }
 
@@ -247,6 +276,15 @@ function requestConfig(value: unknown, path: string): Omit<RequestConfig, 'id' |
   if (pre !== undefined) out.preRequestScript = pre;
   const test = optStr(c.testScript, `${path}.testScript`);
   if (test !== undefined) out.testScript = test;
+  const mock = optStr(c.mockScript, `${path}.mockScript`);
+  if (mock !== undefined) out.mockScript = mock;
+  if (c.source !== undefined) {
+    const source = obj(c.source, `${path}.source`);
+    out.source = {
+      specId: str(source.specId, `${path}.source.specId`),
+      operation: str(source.operation, `${path}.source.operation`),
+    };
+  }
   const verifyTls = optBool(c.verifyTls, `${path}.verifyTls`);
   if (verifyTls !== undefined) out.verifyTls = verifyTls;
   const useCookies = optBool(c.useCookies, `${path}.useCookies`);
@@ -302,6 +340,7 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
       auth: auth(i.auth, `${path}.auth`),
       ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
       ...withTestScript(i.testScript, `${path}.testScript`),
+      ...(i.mock !== undefined && { mock: webSocketMock(i.mock, `${path}.mock`) }),
     };
   }
   return {
@@ -313,6 +352,71 @@ function item(value: unknown, category: CollectionCategory, path: string): Nativ
     env: keyValues(i.env, `${path}.env`),
     headers: keyValues(i.headers, `${path}.headers`),
     ...withVerifyTls(i.verifyTls, `${path}.verifyTls`),
+    ...(i.mock !== undefined && { mock: mcpServerMock(i.mock, `${path}.mock`) }),
+  };
+}
+
+const num = (value: unknown, path: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, 'expected a number');
+  return value as number;
+};
+
+/** A WebSocket connection's mock: opening messages and rules, as texts and delays. */
+function webSocketMock(value: unknown, path: string): WebSocketMock {
+  const m = obj(value, path);
+  return {
+    onConnect: (m.onConnect === undefined ? [] : arr(m.onConnect, `${path}.onConnect`)).map((entry, n) => {
+      const o = obj(entry, `${path}.onConnect[${n}]`);
+      return {
+        message: str(o.message, `${path}.onConnect[${n}].message`),
+        delayMs: num(o.delayMs ?? 0, `${path}.onConnect[${n}].delayMs`),
+      };
+    }),
+    rules: (m.rules === undefined ? [] : arr(m.rules, `${path}.rules`)).map((entry, n) => {
+      const o = obj(entry, `${path}.rules[${n}]`);
+      return {
+        match: str(o.match ?? '', `${path}.rules[${n}].match`),
+        reply: str(o.reply, `${path}.rules[${n}].reply`),
+        delayMs: num(o.delayMs ?? 0, `${path}.rules[${n}].delayMs`),
+      };
+    }),
+  };
+}
+
+/** An MCP server's mock: saved tool calls (a JSON result each) and the contract, kept as JSON. */
+function mcpServerMock(value: unknown, path: string): McpServerMock {
+  const m = obj(value, path);
+  return {
+    calls: (m.calls === undefined ? [] : arr(m.calls, `${path}.calls`)).map((entry, n) => {
+      const o = obj(entry, `${path}.calls[${n}]`);
+      return {
+        tool: str(o.tool, `${path}.calls[${n}].tool`),
+        ...(o.arguments !== undefined && {
+          arguments: JSON.parse(JSON.stringify(obj(o.arguments, `${path}.calls[${n}].arguments`))) as Record<
+            string,
+            unknown
+          >,
+        }),
+        result: JSON.parse(JSON.stringify(o.result ?? null)) as unknown,
+      };
+    }),
+    ...(m.contract !== undefined && {
+      contract: JSON.parse(JSON.stringify(obj(m.contract, `${path}.contract`))) as Record<string, unknown>,
+    }),
+  };
+}
+
+const SPEC_KINDS = ['openapi', 'wsdl', 'graphql'] as const;
+
+function spec(value: unknown, path: string): NativeExportSpec {
+  const s = obj(value, path);
+  const location = optStr(s.location, `${path}.location`);
+  return {
+    key: str(s.key, `${path}.key`),
+    kind: oneOf(s.kind, SPEC_KINDS, `${path}.kind`),
+    name: str(s.name, `${path}.name`),
+    ...(location && { location }),
+    source: str(s.source, `${path}.source`),
   };
 }
 
@@ -423,6 +527,7 @@ export function validateNativeExport(
       environments: (doc.environments === undefined ? [] : arr(doc.environments, 'environments')).map((e, i) =>
         environment(e, `environments[${i}]`),
       ),
+      ...(doc.specs !== undefined && { specs: arr(doc.specs, 'specs').map((s, i) => spec(s, `specs[${i}]`)) }),
     };
   } catch (err) {
     if (err instanceof ValidationError) throw new Error(`Invalid ${product} export — ${err.message}`, { cause: err });
@@ -460,7 +565,9 @@ export function previewNativeImport(doc: NativeExportDocument): NativeImportPrev
   const mcpStdioCommands: string[] = [];
   const visit = (i: NativeExportItem) => {
     if (i.type === 'request') {
-      if (i.config.preRequestScript?.trim() || i.config.testScript?.trim()) scriptRequestCount++;
+      if (i.config.preRequestScript?.trim() || i.config.testScript?.trim() || i.config.mockScript?.trim()) {
+        scriptRequestCount++;
+      }
       if (sendsLocalFile(i.config.body)) localFileRequestCount++;
     } else if ((i.type === 'websocket' || i.type === 'messaging') && i.testScript?.trim()) {
       scriptRequestCount++;
@@ -504,14 +611,19 @@ export function importNative(
 ): NativeImportResult {
   const result: NativeImportResult = { collections: [], folderCount: 0, itemCount: 0, environmentCount: 0 };
 
+  // The file's specs, kept here (one per kind and location, as an import keeps them), by their key in it.
+  const specIds = new Map<string, string>();
+
   function insertItem(collectionId: string, i: NativeExportItem) {
     if (i.type === 'request') {
-      const { preRequestScript, testScript, ...rest } = i.config;
+      const { preRequestScript, testScript, mockScript, source, ...rest } = i.config;
+      const specId = source && specIds.get(source.specId);
       const config: RequestConfig = {
         id: '',
         name: i.name,
         ...rest,
-        ...(options.includeScripts && { preRequestScript, testScript }),
+        ...(options.includeScripts && { preRequestScript, testScript, mockScript }),
+        ...(source && specId && { source: { specId, operation: source.operation } }),
       };
       const request = createRequest(db, { collectionId, name: i.name, config });
       for (const e of i.examples ?? []) createResponseExample(db, request.id, e);
@@ -537,6 +649,7 @@ export function importNative(
         ...(i.verifyTls !== undefined && { verifyTls: i.verifyTls }),
         ...(options.includeScripts && i.testScript && { testScript: i.testScript }),
       });
+      if (i.mock) setWebSocketMock(db, created.id, i.mock);
     } else {
       const created = createMcpServerConnection(db, {
         collectionId,
@@ -552,6 +665,7 @@ export function importNative(
         headers: i.headers,
         ...(i.verifyTls !== undefined && { verifyTls: i.verifyTls }),
       });
+      if (i.mock) setMcpServerMock(db, created.id, i.mock);
     }
     result.itemCount++;
   }
@@ -571,6 +685,16 @@ export function importNative(
   }
 
   db.transaction(() => {
+    for (const s of doc.specs ?? []) {
+      const kept = saveApiSpec(db, {
+        workspaceId,
+        kind: s.kind,
+        name: s.name,
+        ...(s.location && { location: s.location }),
+        source: s.source,
+      });
+      specIds.set(s.key, kept.id);
+    }
     const takenByCategory = new Map<CollectionCategory, Set<string>>();
     for (const c of doc.collections) {
       let taken = takenByCategory.get(c.category);

@@ -1,6 +1,6 @@
 {
   "name": "@jtaak/engine",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Local-first API request engine: HTTP, GraphQL, Server-Sent Events, gRPC, WebSocket and MCP, with scripting, collections, import and export, and SQLite storage.",
   "keywords": [
     "api",
@@ -69,7 +69,8 @@
     "quickjs-emscripten-core": "^0.32.0",
     "socket.io-client": "^4.8.4",
     "undici": "^7.30.0",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

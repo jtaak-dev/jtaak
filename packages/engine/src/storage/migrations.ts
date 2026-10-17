@@ -269,6 +269,46 @@ export const MIGRATIONS: Migration[] = [
       ensureColumn(db, 'environments', 'secrets_json', "TEXT NOT NULL DEFAULT '[]'");
     },
   },
+  {
+    // A response example keeps the request it answers and can be its
+    // request's default (storage/examples.ts): what a mock server matches.
+    version: 12,
+    name: 'response examples keep their request',
+    up(db) {
+      ensureColumn(db, 'response_examples', 'request_json', 'TEXT');
+      ensureColumn(db, 'response_examples', 'is_default', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
+  {
+    // API descriptions kept in a workspace (storage/specs.ts): imported
+    // OpenAPI and WSDL documents and introspected GraphQL schemas.
+    version: 13,
+    name: 'API specs',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS api_specs (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          name TEXT NOT NULL,
+          location TEXT,
+          source TEXT NOT NULL,
+          imported_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS api_specs_by_workspace ON api_specs (workspace_id, kind, location);
+      `);
+    },
+  },
+  {
+    // What a mock server serves for a WebSocket connection (rules) or an MCP
+    // server (saved tool results and its contract), kept with the connection.
+    version: 14,
+    name: 'connection mocks',
+    up(db) {
+      ensureColumn(db, 'ws_connections', 'mock_json', 'TEXT');
+      ensureColumn(db, 'mcp_connections', 'mock_json', 'TEXT');
+    },
+  },
 ];
 
 export class DatabaseTooNewError extends Error {
