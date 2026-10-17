@@ -108,7 +108,25 @@ describe('response examples', () => {
     expect(doc.collections[0].items[0]).not.toHaveProperty('examples');
     const [item] = doc.collections[0].items;
     if (item.type === 'request') item.examples = [{ ...ok, status: 42 }];
-    expect(() => validateNativeExport(doc)).toThrow(/examples\[0\]\.status: expected an HTTP status code/);
+    expect(() => validateNativeExport(doc)).toThrow(/examples\[0\]\.status: expected an HTTP or gRPC status code/);
+  });
+
+  it("travel with a gRPC example's status code, 0 for OK, and import back", () => {
+    const { db, workspaceId, requestId } = setup();
+    createResponseExample(db, requestId, { ...ok, name: 'OK', status: 0, statusText: '' });
+    createResponseExample(db, requestId, { ...ok, name: 'Not found', status: 5, statusText: 'No such user' });
+    const doc = exportNative(db, workspaceId, { scope: 'workspace' }, { includeSecrets: false, environmentIds: [] });
+    const target = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(target);
+    importNative(target, workspace.id, validateNativeExport(JSON.parse(JSON.stringify(doc))), {
+      includeScripts: false,
+      includeEnvironments: false,
+    });
+    const imported = [...listWorkspaceResponseExamplesFull(target, workspace.id).values()].flat();
+    expect(imported.map((e) => [e.name, e.status])).toEqual([
+      ['OK', 0],
+      ['Not found', 5],
+    ]);
   });
 
   it("come from a Postman collection's saved responses", () => {
