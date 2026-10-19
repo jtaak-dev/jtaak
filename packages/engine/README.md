@@ -41,6 +41,13 @@ console.log(response.body);
 `executeRequest(config, { signal })` aborts the request when the signal fires;
 `AbortSignal.timeout(10_000)` gives it a time limit.
 
+`executeRequest(config, { maxBodyBytes })` keeps at most that many bytes of the
+response body (after decompression), cut on a character boundary, so a huge
+download can't exhaust memory: the rest is read and counted but not kept.
+`response.bodyTruncated` marks a cut body, and `sizeBytes` is still the whole
+body's size. `runRequestWithScripts` and `runCollection` take it too; scripts
+see the kept part, and `jt.response.truncated`. Unset, the whole body is kept.
+
 `response.timings.phases` breaks the time down: `dnsMs`, `connectMs`, `tlsMs`,
 `waitMs` (from the request being sent to the first byte of the response),
 `downloadMs`, and `reusedConnection` (a reused connection has no DNS, connect or
@@ -251,7 +258,8 @@ console.log(result.testResults); // [{ name: 'status is 200', passed: true }, ..
 
 Scripts use the `jt` object: `jt.test`, `jt.expect` (`toBe`, `toEqual`,
 `toContain`, `toHaveProperty`, `toBeGreaterThan`, `not`, and more),
-`jt.response`, `jt.request` (read-only), `jt.variables` and
+`jt.response` (with `truncated` when only part of its body was kept),
+`jt.request` (read-only), `jt.variables` and
 `jt.environment`. They also get `console`, whose output is returned in
 `scriptLogs`.
 

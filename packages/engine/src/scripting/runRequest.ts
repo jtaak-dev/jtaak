@@ -22,6 +22,8 @@ export interface RunRequestOptions {
    * written to the environment.
    */
   iteration?: ScriptIteration;
+  /** Keep at most this much of the response body (see `ExecuteOptions.maxBodyBytes`); scripts see the kept part. */
+  maxBodyBytes?: number;
 }
 
 /** The jar's cookies for a request's URL, as scripts see them. */
@@ -118,7 +120,7 @@ export async function runRequestWithScripts(
 
   let response;
   try {
-    response = await executeRequest(resolvedConfig, { cookieJar });
+    response = await executeRequest(resolvedConfig, { cookieJar, maxBodyBytes: options.maxBodyBytes });
   } catch (error) {
     return withUpdates({ testResults: [], scriptLogs, sendError: (error as Error).message });
   }

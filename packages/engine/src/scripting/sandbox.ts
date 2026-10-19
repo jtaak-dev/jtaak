@@ -209,7 +209,7 @@ const PRELUDE = String.raw`
   // A response script (input.respond) starts from the answer so far, or an empty 200, and may change it.
   const start = input.response || (input.respond ? { status: 200, statusText: 'OK', headers: {}, body: '' } : undefined);
   const response = start
-    ? Object.assign({}, start, { headers: Object.assign({}, start.headers) }, {
+    ? Object.assign({}, start, { headers: Object.assign({}, start.headers), truncated: start.bodyTruncated === true }, {
         json() {
           return JSON.parse(this.body);
         },
