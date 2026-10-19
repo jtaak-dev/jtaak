@@ -327,6 +327,7 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
     timings: { start, end, durationMs: end - start, phases: timingPhases(marks, end) },
     sizeBytes: bodySize ?? Buffer.byteLength(bodyText, 'utf-8'),
     ...(truncated && { bodyTruncated: true as const }),
+    httpVersion: marks.tls?.alpnProtocol === 'h2' ? '2' : '1.1',
     setCookies,
     ...(marks.tls ? { tls: marks.tls } : {}),
   };

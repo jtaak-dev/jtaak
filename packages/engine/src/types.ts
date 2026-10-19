@@ -153,6 +153,12 @@ export interface NetworkSettings {
   clientCertificates?: ClientCertificate[];
   /** PEM files of certificate authorities to trust as well as the system's. */
   caPaths?: string[];
+  /**
+   * Offer HTTP/2 to HTTPS servers (through a proxy's tunnel too); a server
+   * that doesn't take it gets HTTP/1.1. Off by default. Plain HTTP stays on
+   * HTTP/1.1. The response's `httpVersion` says which was used.
+   */
+  http2?: boolean;
 }
 
 /**
@@ -393,6 +399,8 @@ export interface ExecutedResponse {
   /** The body wasn't kept (`body` is empty): a collection run's `keepBodies`
    * left it out once its scripts had run. */
   bodyDropped?: true;
+  /** The HTTP version it came over: `'2'` only with `network.http2` and a server that agreed to it. */
+  httpVersion?: '1.1' | '2';
   /** Each `Set-Cookie` header as sent: `headers` joins them into one value,
    * which can't be split again (dates contain commas). `parseSetCookie`
    * reads one. With a cookie jar, redirects' cookies are here too, in the

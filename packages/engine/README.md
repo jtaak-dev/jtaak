@@ -156,6 +156,10 @@ await executeRequest({ ...config, network });
   asks. They work for every TLS connection, messaging brokers too.
 - **`caPaths`:** certificate authorities to trust as well as the system's
   (a company's own CA, say).
+- **`http2`:** offer HTTP/2 to HTTPS servers, through a proxy's tunnel and
+  with client certificates too; a server that doesn't take it gets HTTP/1.1.
+  Off by default, and plain HTTP stays on HTTP/1.1. Every response's
+  `httpVersion` (`'1.1'` or `'2'`) says which was used.
 
 The files are read when a connection needs them, and again when they change.
 
