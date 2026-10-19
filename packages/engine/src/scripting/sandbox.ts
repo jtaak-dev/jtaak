@@ -270,6 +270,51 @@ const PRELUDE = String.raw`
   };
 
 
+  // Postman's script API (pm.*) is compiled the first time a script uses
+  // pm (POSTMAN_API below): it's half the prelude, and scripts written
+  // for the namespace never need it. A direct eval, so it sees this scope.
+  const postmanSource = globalThis.__postman;
+  delete globalThis.__postman;
+  let postman;
+  Object.defineProperty(globalThis, 'pm', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (postman === undefined) postman = eval(postmanSource);
+      return postman;
+    },
+    set(value) {
+      Object.defineProperty(globalThis, 'pm', { value, writable: true, configurable: true, enumerable: true });
+    },
+  });
+
+  function responseOut() {
+    if (!input.respond || !response) return undefined;
+    const headers = {};
+    for (const [name, value] of Object.entries(response.headers || {})) {
+      if (value !== undefined && value !== null) headers[String(name)] = String(value);
+    }
+    const status = Math.trunc(Number(response.status));
+    return {
+      status: status >= 100 && status <= 999 ? status : 500,
+      statusText: response.statusText === undefined || response.statusText === null ? '' : String(response.statusText),
+      headers,
+      body:
+        response.body === undefined || response.body === null
+          ? ''
+          : typeof response.body === 'string'
+            ? response.body
+            : JSON.stringify(response.body),
+    };
+  }
+  globalThis.__output = () =>
+    JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
+})();
+`;
+
+// Postman's script API, evaluated inside the prelude on first use of `pm`;
+// its last expression is the `pm` object.
+const POSTMAN_API = String.raw`
   // Postman's script API (pm.*), so scripts imported from Postman run as
   // written: the common calls, over the same values as the namespace above.
   // Anything else throws, saying it isn't supported. See scripting/postman.ts
@@ -477,30 +522,7 @@ const PRELUDE = String.raw`
     },
     'pm',
   );
-  globalThis.pm = pm;
-
-  function responseOut() {
-    if (!input.respond || !response) return undefined;
-    const headers = {};
-    for (const [name, value] of Object.entries(response.headers || {})) {
-      if (value !== undefined && value !== null) headers[String(name)] = String(value);
-    }
-    const status = Math.trunc(Number(response.status));
-    return {
-      status: status >= 100 && status <= 999 ? status : 500,
-      statusText: response.statusText === undefined || response.statusText === null ? '' : String(response.statusText),
-      headers,
-      body:
-        response.body === undefined || response.body === null
-          ? ''
-          : typeof response.body === 'string'
-            ? response.body
-            : JSON.stringify(response.body),
-    };
-  }
-  globalThis.__output = () =>
-    JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
-})();
+  pm;
 `;
 
 let quickJs: Promise<QuickJSWASMModule> | undefined;
@@ -626,6 +648,9 @@ export async function runScript(
       );
       ctx.setProp(ctx.global, '__input', input);
       input.dispose();
+      const postmanApi = ctx.newString(POSTMAN_API);
+      ctx.setProp(ctx.global, '__postman', postmanApi);
+      postmanApi.dispose();
       unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits).dispose();
 
       unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();

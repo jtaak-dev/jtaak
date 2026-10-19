@@ -421,17 +421,18 @@ table in the job summary. One run, on a laptop (Node v24.21.0, Windows_NT 10.0.2
 | A request through executeRequest (p50) | 0.16 ms |  |
 | Engine overhead per request (p50) | 0.01 ms | ≤ 5 ms |
 | Engine overhead per request (p95) | 0.06 ms | ≤ 5 ms |
-| A request with a pre-request and a test script (p50) | 2.40 ms |  |
-| One script in the sandbox (p50) | 0.92 ms | ≤ 10 ms |
-| Resolving 70 {{variables}} in a request (p50) | 0.04 ms | ≤ 1 ms |
-| Collection run, 10,000 requests, no scripts | 3153 ms |  |
-| Collection run, 1,000 requests with tests | 2197 ms |  |
-| Saving 10,000 requests in 100 folders | 880 ms |  |
-| Loading a 10,000-request tree (p50 of 5) | 36.8 ms | ≤ 1000 ms |
-| Exporting the 10,000-request workspace | 84.9 ms |  |
+| A request with a pre-request and a test script (p50) | 2.85 ms |  |
+| One script in the sandbox (p50) | 1.14 ms | ≤ 10 ms |
+| Resolving 70 {{variables}} in a request (p50) | 0.03 ms | ≤ 1 ms |
+| Collection run, 10,000 requests, no scripts | 1532 ms |  |
+| Collection run, 1,000 requests with tests | 1537 ms |  |
+| Saving 10,000 requests in 100 folders | 601 ms |  |
+| Loading a 10,000-request tree (p50 of 5) | 16.4 ms | ≤ 1000 ms |
+| Exporting the 10,000-request workspace | 49.7 ms |  |
 
 The engine adds a few hundredths of a millisecond to a request; what a
-script costs is starting a fresh sandbox for it (about a millisecond).
+script costs is starting a fresh sandbox for it (about a millisecond; Postman's
+`pm.*` API is compiled only for scripts that use it).
 
 ## Storage
 

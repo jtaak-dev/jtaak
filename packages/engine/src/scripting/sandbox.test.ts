@@ -347,6 +347,50 @@ describe('isolation and limits', () => {
     expect(request.url).toBe('https://example.com');
   });
 
+  it('starts every script afresh: nothing one script sets is seen by the next', async () => {
+    await runScript('globalThis.leak = 1; Object.prototype.leaked = 2; jt.extra = 3; Array.prototype.push = null;', {
+      request: baseRequest,
+      variables: {},
+    });
+    const { logs } = await runScript('console.log(typeof leak, typeof ({}).leaked, typeof jt.extra, typeof [].push);', {
+      request: baseRequest,
+      variables: {},
+    });
+    expect(logs).toEqual([{ level: 'log', message: 'undefined undefined undefined function' }]);
+  });
+
+  it('runs the next script normally after one ran out of time or memory', async () => {
+    const script = 'jt.test("t", () => jt.expect(1).toBe(1)); pm.test("p", () => pm.expect(1).to.equal(1));';
+    await expect(runScript('while (true) {}', { request: baseRequest, variables: {} }, limits)).rejects.toThrow(
+      /timed out/,
+    );
+    expect((await runScript(script, { request: baseRequest, variables: {} })).results).toEqual([
+      { name: 't', passed: true },
+      { name: 'p', passed: true },
+    ]);
+    await expect(
+      runScript(
+        'new Uint8Array(32 * 1024 * 1024);',
+        { request: baseRequest, variables: {} },
+        { ...limits, timeoutMs: 1000 },
+      ),
+    ).rejects.toThrow(/out of memory/i);
+    expect((await runScript(script, { request: baseRequest, variables: {} })).results).toHaveLength(2);
+  });
+
+  it('gives Postman scripts pm however they reach it, and lets a script use the name for its own', async () => {
+    const { logs } = await runScript(
+      'console.log(typeof pm, "pm" in globalThis, typeof globalThis["p" + "m"].test, Object.keys(globalThis).includes("pm"));',
+      { request: baseRequest, variables: {} },
+    );
+    expect(logs).toEqual([{ level: 'log', message: 'object true function true' }]);
+    const own = await runScript('var pm = 5; console.log(pm); globalThis.pm = 6; console.log(pm);', {
+      request: baseRequest,
+      variables: {},
+    });
+    expect(own.logs.map((l) => l.message)).toEqual(['5', '6']);
+  });
+
   it('runs promise callbacks the script queued', async () => {
     const { logs } = await runScript('Promise.resolve(7).then((v) => console.log("got", v));', {
       request: baseRequest,
