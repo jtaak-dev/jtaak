@@ -390,6 +390,9 @@ export interface ExecutedResponse {
   /** Only part of the body was kept (`maxBodyBytes`): `body` is its first
    * `maxBodyBytes` at most, cut on a character boundary. */
   bodyTruncated?: true;
+  /** The body wasn't kept (`body` is empty): a collection run's `keepBodies`
+   * left it out once its scripts had run. */
+  bodyDropped?: true;
   /** Each `Set-Cookie` header as sent: `headers` joins them into one value,
    * which can't be split again (dates contain commas). `parseSetCookie`
    * reads one. With a cookie jar, redirects' cookies are here too, in the

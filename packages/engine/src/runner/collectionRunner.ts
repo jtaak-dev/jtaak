@@ -16,6 +16,22 @@ export interface RunCollectionOptions extends RunRequestOptions {
    * `cancelled` and the requests that ran.
    */
   signal?: AbortSignal;
+  /**
+   * Which items keep their response body: `'all'` (the default), `'failed'`
+   * (those that failed to send or failed a test) or `'none'`. The others
+   * lose it as soon as they finish, before `onProgress` sees them, so a long
+   * run doesn't grow with its bodies; their response keeps its status,
+   * headers, timings and size, with `bodyDropped` set. Scripts still see
+   * every body.
+   */
+  keepBodies?: 'all' | 'failed' | 'none';
+}
+
+/** The item without its response body (`RunCollectionOptions.keepBodies`). */
+function withoutBody(item: CollectionRunItemResult): CollectionRunItemResult {
+  const { response } = item.result;
+  if (!response) return item;
+  return { ...item, result: { ...item.result, response: { ...response, body: '', bodyDropped: true } } };
 }
 
 /** Waits `ms`, or until the signal aborts. */
@@ -77,7 +93,7 @@ export async function runCollection(
   let requestsFailedToSend = 0;
   let environment = scopes.environment;
   // Without a token store, the run keeps one of its own, so its requests share a token.
-  const { stopOnFailure, delayMs = 0, signal, ...requestOptions } = options;
+  const { stopOnFailure, delayMs = 0, signal, keepBodies = 'all', ...requestOptions } = options;
   const runOptions: RunRequestOptions = {
     ...requestOptions,
     oauth2Tokens: requestOptions.oauth2Tokens ?? new MemoryOAuth2TokenStore(),
@@ -101,11 +117,12 @@ export async function runCollection(
       else failedAssertions++;
     }
 
-    const item: CollectionRunItemResult = { requestId: request.id, requestName: request.name, result };
-    items.push(item);
-    onProgress?.(item, i, requests.length);
     const failed =
       !!result.preRequestError || !!result.sendError || result.testResults.some((assertion) => !assertion.passed);
+    const ran: CollectionRunItemResult = { requestId: request.id, requestName: request.name, result };
+    const item = keepBodies === 'all' || (keepBodies === 'failed' && failed) ? ran : withoutBody(ran);
+    items.push(item);
+    onProgress?.(item, i, requests.length);
     if (stopOnFailure && failed && i < requests.length - 1) {
       stoppedEarly = true;
       break;

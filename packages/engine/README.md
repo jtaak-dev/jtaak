@@ -328,6 +328,12 @@ between requests (`delayMs`), and stop the run from outside with an
 `AbortSignal` (`signal`; the report then has `cancelled`). Run it once per
 row of test data by passing `iteration: { index, count, data }` each time.
 
+A long run needn't grow with its response bodies: `keepBodies: 'failed'`
+keeps only the bodies of requests that failed to send or failed a test, and
+`'none'` keeps none. A dropped body is left out once the request's scripts have
+run (before `onProgress` sees it); its response keeps status, headers, timings
+and size, marked `bodyDropped`. The JUnit report doesn't change.
+
 ## Cookies
 
 Pass a `CookieJar` and requests keep cookies the way a browser does (RFC
