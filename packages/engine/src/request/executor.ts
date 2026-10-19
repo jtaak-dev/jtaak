@@ -130,6 +130,43 @@ export interface ExecuteOptions {
    * the signal's reason.
    */
   signal?: AbortSignal;
+  /**
+   * Keep at most this many bytes of the response body (after decompression);
+   * the rest is read and counted but not kept. The kept part is cut on a
+   * character boundary, `bodyTruncated` marks it, and `sizeBytes` is still
+   * the whole body's size. Unset: the whole body is kept.
+   */
+  maxBodyBytes?: number;
+}
+
+/**
+ * Reads a body keeping up to `maxBytes` of it (see `ExecuteOptions.maxBodyBytes`),
+ * decoded as UTF-8 as `Response.text()` does.
+ */
+async function readLimitedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<{ text: string; sizeBytes: number; truncated: boolean }> {
+  const chunks: Uint8Array[] = [];
+  let kept = 0;
+  let total = 0;
+  if (response.body) {
+    const reader = response.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (kept < maxBytes) {
+        const part = value.byteLength <= maxBytes - kept ? value : value.subarray(0, maxBytes - kept);
+        chunks.push(part);
+        kept += part.byteLength;
+      }
+    }
+  }
+  const truncated = total > kept;
+  // Streaming decode holds back a character the cut left incomplete, so none is kept half.
+  const text = new TextDecoder().decode(Buffer.concat(chunks, kept), { stream: truncated });
+  return { text, sizeBytes: truncated ? total : Buffer.byteLength(text, 'utf-8'), truncated };
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
@@ -235,7 +272,7 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
 
   const jar = config.useCookies === false ? undefined : options.cookieJar;
   const {
-    result: { response, bodyText, setCookies },
+    result: { response, bodyText, bodySize, truncated, setCookies },
     marks,
   } = await withTiming(async () => {
     try {
@@ -266,7 +303,11 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
         const retried = await send({ ...headers, Authorization: authorization });
         sent = { response: retried.response, setCookies: [...sent.setCookies, ...retried.setCookies] };
       }
-      return { ...sent, bodyText: await sent.response.text() };
+      if (options.maxBodyBytes === undefined) {
+        return { ...sent, bodyText: await sent.response.text(), bodySize: undefined, truncated: false };
+      }
+      const read = await readLimitedBody(sent.response, Math.max(0, Math.floor(options.maxBodyBytes)));
+      return { ...sent, bodyText: read.text, bodySize: read.sizeBytes, truncated: read.truncated };
     } catch (error) {
       throw withErrorDetail(error);
     }
@@ -284,7 +325,9 @@ export async function executeRequest(config: RequestConfig, options: ExecuteOpti
     headers: responseHeaders,
     body: bodyText,
     timings: { start, end, durationMs: end - start, phases: timingPhases(marks, end) },
-    sizeBytes: Buffer.byteLength(bodyText, 'utf-8'),
+    sizeBytes: bodySize ?? Buffer.byteLength(bodyText, 'utf-8'),
+    ...(truncated && { bodyTruncated: true as const }),
+    httpVersion: marks.tls?.alpnProtocol === 'h2' ? '2' : '1.1',
     setCookies,
     ...(marks.tls ? { tls: marks.tls } : {}),
   };

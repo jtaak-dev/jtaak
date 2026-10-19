@@ -20,9 +20,11 @@ const MAX_DISPATCHERS = 32;
 function dispatcherFor(config: Pick<RequestConfig, 'verifyTls' | 'network'>, url: string): Dispatcher | undefined {
   const { host, port } = endpointOf(url);
   const proxy = proxyFor(config.network, url);
-  if (!proxy && !hasCustomTls(config, host, port)) return undefined;
+  const http2 = config.network?.http2 === true;
+  if (!proxy && !http2 && !hasCustomTls(config, host, port)) return undefined;
   const tlsOptions = tlsOptionsFor(config, host, port);
-  const key = JSON.stringify([proxy ?? null, tlsOptions]);
+  // HTTP/1.1 and HTTP/2 connections are kept apart.
+  const key = JSON.stringify([proxy ?? null, tlsOptions, http2]);
   let dispatcher = dispatchers.get(key);
   if (!dispatcher) {
     if (dispatchers.size >= MAX_DISPATCHERS) {
@@ -35,12 +37,14 @@ function dispatcherFor(config: Pick<RequestConfig, 'verifyTls' | 'network'>, url
       ? new ProxyAgent({
           uri: proxy.url,
           ...(authorization && { token: authorization }),
-          requestTls: tlsOptions,
+          // The tunnel's TLS connection to the server offers HTTP/2 only when this is in its own options too.
+          requestTls: http2 ? { ...tlsOptions, allowH2: true } : tlsOptions,
+          allowH2: http2,
           // A plain-HTTP request is sent to the proxy as it is, as curl does; HTTPS goes through a CONNECT tunnel.
           proxyTunnel: false,
           proxyTls: trustOptionsFor(config),
         })
-      : new Agent({ connect: tlsOptions });
+      : new Agent({ connect: tlsOptions, allowH2: http2 });
     dispatchers.set(key, dispatcher);
   }
   return dispatcher;
@@ -62,7 +66,7 @@ function asUndiciBody(body: RequestInit['body']): RequestInit['body'] {
  * client certificates or skip certificate checks without a custom
  * dispatcher, and passing one from the `undici` package to Node's bundled
  * copy is only safe when their versions line up. So a request that needs
- * any of them (`verifyTls: false`, `network`) goes through the `undici`
+ * any of them (`verifyTls: false`, `network`, which includes `http2`) goes through the `undici`
  * package's own fetch and dispatchers together, chosen for each URL it's
  * sent to (a redirect can lead to a host with no proxy or another
  * certificate); every other request uses the built-in fetch. Both publish

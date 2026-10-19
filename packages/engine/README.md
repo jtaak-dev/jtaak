@@ -41,6 +41,13 @@ console.log(response.body);
 `executeRequest(config, { signal })` aborts the request when the signal fires;
 `AbortSignal.timeout(10_000)` gives it a time limit.
 
+`executeRequest(config, { maxBodyBytes })` keeps at most that many bytes of the
+response body (after decompression), cut on a character boundary, so a huge
+download can't exhaust memory: the rest is read and counted but not kept.
+`response.bodyTruncated` marks a cut body, and `sizeBytes` is still the whole
+body's size. `runRequestWithScripts` and `runCollection` take it too; scripts
+see the kept part, and `jt.response.truncated`. Unset, the whole body is kept.
+
 `response.timings.phases` breaks the time down: `dnsMs`, `connectMs`, `tlsMs`,
 `waitMs` (from the request being sent to the first byte of the response),
 `downloadMs`, and `reusedConnection` (a reused connection has no DNS, connect or
@@ -149,6 +156,10 @@ await executeRequest({ ...config, network });
   asks. They work for every TLS connection, messaging brokers too.
 - **`caPaths`:** certificate authorities to trust as well as the system's
   (a company's own CA, say).
+- **`http2`:** offer HTTP/2 to HTTPS servers, through a proxy's tunnel and
+  with client certificates too; a server that doesn't take it gets HTTP/1.1.
+  Off by default, and plain HTTP stays on HTTP/1.1. Every response's
+  `httpVersion` (`'1.1'` or `'2'`) says which was used.
 
 The files are read when a connection needs them, and again when they change.
 
@@ -251,7 +262,8 @@ console.log(result.testResults); // [{ name: 'status is 200', passed: true }, ..
 
 Scripts use the `jt` object: `jt.test`, `jt.expect` (`toBe`, `toEqual`,
 `toContain`, `toHaveProperty`, `toBeGreaterThan`, `not`, and more),
-`jt.response`, `jt.request` (read-only), `jt.variables` and
+`jt.response` (with `truncated` when only part of its body was kept),
+`jt.request` (read-only), `jt.variables` and
 `jt.environment`. They also get `console`, whose output is returned in
 `scriptLogs`.
 
@@ -319,6 +331,12 @@ changes. Its options can stop at the first failure (`stopOnFailure`), wait
 between requests (`delayMs`), and stop the run from outside with an
 `AbortSignal` (`signal`; the report then has `cancelled`). Run it once per
 row of test data by passing `iteration: { index, count, data }` each time.
+
+A long run needn't grow with its response bodies: `keepBodies: 'failed'`
+keeps only the bodies of requests that failed to send or failed a test, and
+`'none'` keeps none. A dropped body is left out once the request's scripts have
+run (before `onProgress` sees it); its response keeps status, headers, timings
+and size, marked `bodyDropped`. The JUnit report doesn't change.
 
 ## Cookies
 
