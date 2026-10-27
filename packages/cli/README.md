@@ -77,9 +77,9 @@ another way (a `{{variable}}` in a Bearer token, say).
 | Option                | What it does                                                                |
 | --------------------- | --------------------------------------------------------------------------- |
 | `-e, --env <name>`    | Use one of the file's environments                                          |
-| `--env-file <file>`   | Variables from JSON: `{ "name": "value" }`, or an exported environment (native or Postman) |
+| `--env-file <file>`   | Variables from JSON: `{ "name": "value" }`, or an exported environment (an environment export, `.env.jt`, or Postman's) |
 | `--var <name=value>`  | Set a variable; repeatable, and wins over the environment                   |
-| `--secret <name>`     | A variable whose value is never printed: `•••` in the output and the JUnit XML; repeatable |
+| `--secret <name>`     | A variable whose value is never printed: `•••` in the output and the JUnit XML; repeatable. Variables the environment marks secret are hidden too |
 | `--folder <name>`     | Only one collection or folder: its name, or a path such as `Shop/Admin`    |
 | `--junit <file>`      | Also write the results as JUnit XML, which CI systems show as test results  |
 | `--bail`              | Stop after the first request that fails                                     |

@@ -456,7 +456,9 @@ is deleted or emptied. `createEnvironment(db, null, name)` makes one and
 `listEnvironments(db, null)` lists them; `listEnvironments(db, workspaceId)`
 lists only the workspace's own. `setEnvironmentSecrets(db, id, names)` marks
 variables secret (`Environment.secrets`): a workspace folder keeps their names
-and never their values, and a native export without secrets blanks them.
+and never their values, and a native export without secrets blanks them. A
+native export lists them (an environment's `secrets`) either way, and an
+import marks them again.
 
 Reordering (`reorderRequests`, `reorderCollectionNodes` and the connections')
 changes only the items that moved, giving a moved item a sort order between
@@ -583,6 +585,10 @@ responses import as examples, with the request Postman kept for each.
   treating the file as untrusted input. Each file records which application
   wrote it in a `generator` block (`name`, an optional `version` from
   `NativeExportOptions.appVersion`, and the `scriptNamespace` its scripts use).
+  Its `scope` is what it holds: a collection or folder, a category, the
+  workspace, or (`{ scope: 'environment', environmentId }`) one environment
+  on its own, with no collections (an application might save that as
+  `.env.jt`).
 - `workspaceFolderFiles(db, workspaceId)` writes a workspace as a folder of
   files, for keeping in Git and sharing: `workspace.json`, then one file per
   collection or folder, request, connection, environment and response example

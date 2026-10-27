@@ -197,6 +197,40 @@ describe('jtaak run', () => {
     expect(fs.readFileSync(junit, 'utf8')).not.toContain('s3cret-value');
   });
 
+  it('takes an environment export as --env-file, hiding the variables it marks secret', async () => {
+    const collections: NativeExportDocument['collections'] = [
+      {
+        name: 'One',
+        category: 'api',
+        folders: [],
+        items: [
+          request(
+            'Key',
+            '{{base}}/key',
+            'console.log("key is " + jt.variables.key); jt.test("key", () => jt.expect(jt.response.json().key).toBe("s3cret-value"));',
+            { headers: [{ key: 'X-Key', value: '{{key}}', enabled: true }] },
+          ),
+        ],
+      },
+    ];
+    const file = exportFile({ environments: [], collections });
+    const marked = { name: 'CI', variables: { base: baseUrl, key: 's3cret-value' }, secrets: ['key'] };
+    const envFile = exportFile({ scope: 'environment', collections: [], environments: [marked] }, 'ci.env.jt');
+    const { code, stdout } = await jtaak('run', file, '--env-file', envFile);
+    expect(code).toBe(0);
+    expect(stdout).toContain('key is •••');
+    expect(stdout).not.toContain('s3cret-value');
+
+    // An export's own environment's marks hide its values too.
+    const own = await jtaak('run', exportFile({ environments: [marked], collections }), '-e', 'CI');
+    expect(own.stdout).toContain('key is •••');
+
+    const two = exportFile({ collections: [], environments: [marked, { ...marked, name: 'Other' }] }, 'two.jt');
+    const refused = await jtaak('run', file, '--env-file', two);
+    expect(refused.code).toBe(2);
+    expect(refused.stderr).toContain('has 2 environments; --env-file takes a file with one');
+  });
+
   it('stops at the first failure with --bail', async () => {
     const file = exportFile({
       collections: [

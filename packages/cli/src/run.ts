@@ -29,10 +29,11 @@ Runs the file's requests with their scripts and tests, in order.
 Options:
   -e, --env <name>         use one of the file's environments
       --env-file <file>    variables from a JSON file: { "name": "value" }, or an
-                           exported environment (native or Postman)
+                           exported environment (.env${profile.exportExtension} or Postman)
       --var <name=value>   set a variable (repeatable; wins over the environment)
       --secret <name>      a variable whose value is never printed: shown as •••
-                           in the output and the JUnit XML (repeatable)
+                           in the output and the JUnit XML (repeatable); those an
+                           environment marks secret are hidden too
       --folder <name>      only this collection or folder (a name, or "Collection/Folder")
       --junit <file>       also write the results as JUnit XML, for CI
       --bail               stop after the first request that fails
@@ -74,21 +75,52 @@ async function readJson(file: string, what: string): Promise<unknown> {
 
 /** Variables from an --env-file: a flat object, an exported environment, or a Postman environment. */
 export function variablesFromJson(json: unknown, file: string): Record<string, string> {
+  return environmentFromJson(json, file).variables;
+}
+
+/**
+ * An --env-file's variables, and those it marks secret: a flat object, an export holding one environment (an
+ * environment export), an exported environment's `{ name, variables, secrets }`, or a Postman environment (its
+ * `secret`-typed values).
+ */
+export function environmentFromJson(
+  json: unknown,
+  file: string,
+): { variables: Record<string, string>; secrets: string[] } {
   const fail = () => new UsageError(`${file} isn't a variables file: expected { "name": "value" } or an environment.`);
   if (typeof json !== 'object' || json === null || Array.isArray(json)) throw fail();
   const object = json as Record<string, unknown>;
-  if (Array.isArray(object.values)) {
-    // Postman: { values: [{ key, value, enabled }] }
-    return Object.fromEntries(
-      (object.values as Array<{ key?: unknown; value?: unknown; enabled?: unknown }>)
-        .filter((entry) => typeof entry.key === 'string' && entry.enabled !== false)
-        .map((entry) => [entry.key as string, String(entry.value ?? '')]),
-    );
+  if (typeof object.format === 'string' && Array.isArray(object.environments)) {
+    const environments = object.environments as unknown[];
+    if (environments.length !== 1) {
+      throw new UsageError(
+        `${file} has ${environments.length} environments; --env-file takes a file with one (an environment export).`,
+      );
+    }
+    return environmentFromJson(environments[0], file);
   }
-  const variables = typeof object.variables === 'object' && object.variables !== null ? object.variables : object;
+  if (Array.isArray(object.values)) {
+    // Postman: { values: [{ key, value, type, enabled }] }
+    const values = (object.values as Array<{ key?: unknown; value?: unknown; type?: unknown; enabled?: unknown }>)
+      .filter((entry) => typeof entry.key === 'string' && entry.enabled !== false)
+      .map((entry) => ({
+        key: entry.key as string,
+        value: String(entry.value ?? ''),
+        secret: entry.type === 'secret',
+      }));
+    return {
+      variables: Object.fromEntries(values.map((entry) => [entry.key, entry.value])),
+      secrets: values.filter((entry) => entry.secret).map((entry) => entry.key),
+    };
+  }
+  const exported = typeof object.variables === 'object' && object.variables !== null;
+  const variables = exported ? object.variables : object;
   const entries = Object.entries(variables as Record<string, unknown>);
   if (entries.some(([, value]) => typeof value === 'object' && value !== null)) throw fail();
-  return Object.fromEntries(entries.map(([key, value]) => [key, String(value ?? '')]));
+  return {
+    variables: Object.fromEntries(entries.map(([key, value]) => [key, String(value ?? '')])),
+    secrets: exported && Array.isArray(object.secrets) ? object.secrets.filter((s) => typeof s === 'string') : [],
+  };
 }
 
 /** The proxy (from --proxy, else the environment) and certificates for every request, if any. */
@@ -255,6 +287,8 @@ export async function prepareRun(argv: string[], options: PrepareRunOptions = {}
 
   let environment: Record<string, string> = {};
   let environmentName: string | undefined;
+  // The variables the environments mark secret, hidden like --secret's.
+  const marked = new Set<string>();
   if (values.env !== undefined) {
     const found = doc.environments.find((env) => env.name === values.env);
     if (!found) {
@@ -263,10 +297,13 @@ export async function prepareRun(argv: string[], options: PrepareRunOptions = {}
     }
     environment = { ...found.variables };
     environmentName = found.name;
+    for (const name of found.secrets ?? []) marked.add(name);
   }
   if (values['env-file']) {
     const envFile = values['env-file'];
-    environment = { ...environment, ...variablesFromJson(await readJson(envFile, 'variables file'), envFile) };
+    const fromFile = environmentFromJson(await readJson(envFile, 'variables file'), envFile);
+    environment = { ...environment, ...fromFile.variables };
+    for (const name of fromFile.secrets) marked.add(name);
     environmentName ??= path.basename(envFile);
   }
   for (const assignment of values.var ?? []) {
@@ -288,10 +325,11 @@ export async function prepareRun(argv: string[], options: PrepareRunOptions = {}
     if (network) request.config.network = network;
   }
 
-  // The secrets' values, never printed: --secret's names, and the host application's (secretVariables).
+  // The secrets' values, never printed: --secret's names, the environments' marked ones, and the host
+  // application's (secretVariables).
   const hide = hider(
     Object.entries(environment)
-      .filter(([name]) => values.secret?.includes(name) || options.secretVariables?.(name))
+      .filter(([name]) => values.secret?.includes(name) || marked.has(name) || options.secretVariables?.(name))
       .map(([, value]) => value),
   );
   return {
