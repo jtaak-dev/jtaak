@@ -1292,8 +1292,9 @@ export const DEFAULT_ENGINE_PROFILE: EngineProfile = {
 // ---- Native export/import format ---------------------------------------------
 
 /** How much of a workspace an export file holds. Every scope is the same
- * document shape — they differ only in which collections/environments are in it. */
-export type ExportScope = 'collection' | 'category' | 'workspace';
+ * document shape — they differ only in which collections/environments are in it
+ * (an `environment` export holds one environment and no collections). */
+export type ExportScope = 'collection' | 'category' | 'workspace' | 'environment';
 
 /** One saved item in an export file, discriminated by `type`. Database ids,
  * sort orders and timestamps are deliberately left out: order is array order,
@@ -1359,6 +1360,9 @@ export interface NativeExportCollection extends NativeExportFolder {
 export interface NativeExportEnvironment {
   name: string;
   variables: Record<string, string>;
+  /** The variables marked secret (`Environment.secrets`), restored on import; absent when none is.
+   * Additive, so it needs no format version bump: older importers ignore it. */
+  secrets?: string[];
 }
 
 export const NATIVE_EXPORT_VERSION = 1;
@@ -1396,14 +1400,17 @@ export interface NativeExportDocument {
 export type NativeExportTarget =
   | { scope: 'collection'; nodeId: string }
   | { scope: 'category'; category: CollectionCategory }
-  | { scope: 'workspace' };
+  | { scope: 'workspace' }
+  /** One environment, the workspace's or a global one, on its own (no collections). */
+  | { scope: 'environment'; environmentId: string };
 
 export interface NativeExportOptions {
   /** Off by default: credentials are blanked unless this is true. */
   includeSecrets: boolean;
   /** Environments to include for collection/category exports, the
    * workspace's or global ones. A workspace export always includes every
-   * environment of the workspace (no global ones) and ignores this. */
+   * environment of the workspace (no global ones), and an environment export
+   * its own; both ignore this. */
   environmentIds: string[];
   /** The exporting application's version, written as `generator.version`. Left out when not given. */
   appVersion?: string;

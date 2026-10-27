@@ -9,6 +9,7 @@ import {
   createRequest,
   createWebSocketConnection,
   listEnvironments,
+  setEnvironmentSecrets,
   updateEnvironmentVariables,
   updateMcpServerConnection,
   updateMessagingConnection,
@@ -64,7 +65,7 @@ const BODY_MODES: readonly RequestBody['mode'][] = ['none', 'raw', 'json', 'form
 const AUTH_TYPES: readonly AuthConfig['type'][] = ['none', 'basic', 'bearer', 'apiKey', 'digest', 'oauth2'];
 const GRANT_TYPES = ['authorization_code', 'client_credentials', 'password'] as const;
 const CATEGORIES: readonly CollectionCategory[] = ['api', 'websocket', 'mcp', 'messaging'];
-const SCOPES: readonly ExportScope[] = ['collection', 'category', 'workspace'];
+const SCOPES: readonly ExportScope[] = ['collection', 'category', 'workspace', 'environment'];
 const ITEM_TYPE_BY_CATEGORY: Record<CollectionCategory, NativeExportItem['type']> = {
   api: 'request',
   websocket: 'websocket',
@@ -463,10 +464,12 @@ function folder(value: unknown, category: CollectionCategory, path: string, dept
 function environment(value: unknown, path: string): NativeExportEnvironment {
   const e = obj(value, path);
   const vars = e.variables === undefined ? {} : obj(e.variables, `${path}.variables`);
-  return {
-    name: name(e.name, `${path}.name`),
-    variables: Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, str(v, `${path}.variables.${k}`)])),
-  };
+  const variables = Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, str(v, `${path}.variables.${k}`)]));
+  // Marks for variables it hasn't got are dropped, as the editor drops them.
+  const secrets = (e.secrets === undefined ? [] : arr(e.secrets, `${path}.secrets`))
+    .map((s, i) => str(s, `${path}.secrets[${i}]`))
+    .filter((s, i, all) => s in variables && all.indexOf(s) === i);
+  return { name: name(e.name, `${path}.name`), variables, ...(secrets.length > 0 && { secrets }) };
 }
 
 /** Which application wrote the file. Informational, so a malformed block is dropped rather than failing the file. */
@@ -726,6 +729,7 @@ export function importNative(
       for (const e of doc.environments) {
         const env = createEnvironment(db, workspaceId, uniqueName(e.name, taken));
         updateEnvironmentVariables(db, env.id, e.variables);
+        if (e.secrets?.length) setEnvironmentSecrets(db, env.id, e.secrets);
         result.environmentCount++;
       }
     }

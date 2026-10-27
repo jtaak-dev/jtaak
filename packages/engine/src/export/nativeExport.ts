@@ -18,6 +18,7 @@ import {
   type NativeExportCollection,
   type NativeExportExample,
   type NativeExportDocument,
+  type NativeExportEnvironment,
   type NativeExportFolder,
   type NativeExportItem,
   type NativeExportOptions,
@@ -325,6 +326,8 @@ export function exportNative(
     roots = [node];
   } else if (target.scope === 'category') {
     roots = categoryTree(db, workspaceId, target.category);
+  } else if (target.scope === 'environment') {
+    roots = [];
   } else {
     roots = COLLECTION_CATEGORIES.flatMap((category) => categoryTree(db, workspaceId, category));
   }
@@ -334,15 +337,21 @@ export function exportNative(
     requestConfigs: loadRequestConfigs(db, workspaceId),
     examples: loadExamples(db, workspaceId),
   };
-  const wanted = new Set(options.environmentIds);
-  const environments = (
+  const wanted = new Set(target.scope === 'environment' ? [target.environmentId] : options.environmentIds);
+  const chosen =
     target.scope === 'workspace'
       ? listEnvironments(db, workspaceId)
-      : [...listEnvironments(db, workspaceId), ...listEnvironments(db, null)].filter((env) => wanted.has(env.id))
-  ).map((env) => ({
-    name: env.name,
-    variables: includeSecrets ? env.variables : stripVariables(env.variables, env.secrets),
-  }));
+      : [...listEnvironments(db, workspaceId), ...listEnvironments(db, null)].filter((env) => wanted.has(env.id));
+  if (target.scope === 'environment' && chosen.length === 0) throw new Error('That environment no longer exists.');
+  const environments = chosen.map((env): NativeExportEnvironment => {
+    // The marks go with the names even when the values are blanked, so an import marks them again.
+    const secrets = (env.secrets ?? []).filter((name) => name in env.variables);
+    return {
+      name: env.name,
+      variables: includeSecrets ? env.variables : stripVariables(env.variables, env.secrets),
+      ...(secrets.length > 0 && { secrets }),
+    };
+  });
 
   const collections = roots.map((node) => toCollection(ctx, node));
   const specs = exportedSpecs(db, workspaceId, target.scope, collections);

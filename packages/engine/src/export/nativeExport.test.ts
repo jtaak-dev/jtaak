@@ -308,7 +308,46 @@ describe('exportNative secrets', () => {
     updateEnvironmentVariables(db, env.id, { baseUrl: 'https://prod', tenant: 'acme-internal' });
     setEnvironmentSecrets(db, env.id, ['tenant']);
     const doc = exportNative(db, workspace.id, { scope: 'workspace' }, { includeSecrets: false, environmentIds: [] });
-    expect(doc.environments).toEqual([{ name: 'Prod', variables: { baseUrl: 'https://prod', tenant: '' } }]);
+    expect(doc.environments).toEqual([
+      { name: 'Prod', variables: { baseUrl: 'https://prod', tenant: '' }, secrets: ['tenant'] },
+    ]);
+  });
+
+  it('exports one environment on its own, a workspace’s or a global one, with its secret marks', () => {
+    const db = openDatabase(':memory:');
+    const { workspace } = getOrCreateDefaultWorkspace(db);
+    const env = createEnvironment(db, workspace.id, 'Prod');
+    updateEnvironmentVariables(db, env.id, { baseUrl: 'https://prod', tenant: 'acme', token: 't' });
+    setEnvironmentSecrets(db, env.id, ['tenant']);
+    createEnvironment(db, workspace.id, 'Other');
+    const global = createEnvironment(db, null, 'Shared');
+    updateEnvironmentVariables(db, global.id, { region: 'eu' });
+
+    const target = { scope: 'environment' as const, environmentId: env.id };
+    const doc = exportNative(db, workspace.id, target, { includeSecrets: false, environmentIds: [global.id] });
+    expect(doc).toMatchObject({ scope: 'environment', collections: [], secretsStripped: true });
+    expect(doc.specs).toBeUndefined();
+    expect(doc.environments).toEqual([
+      { name: 'Prod', variables: { baseUrl: 'https://prod', tenant: '', token: '' }, secrets: ['tenant'] },
+    ]);
+    const withSecrets = exportNative(db, workspace.id, target, { includeSecrets: true, environmentIds: [] });
+    expect(withSecrets.environments[0]?.variables).toEqual({ baseUrl: 'https://prod', tenant: 'acme', token: 't' });
+
+    const shared = exportNative(
+      db,
+      workspace.id,
+      { scope: 'environment', environmentId: global.id },
+      { includeSecrets: false, environmentIds: [] },
+    );
+    expect(shared.environments).toEqual([{ name: 'Shared', variables: { region: 'eu' } }]);
+    expect(() =>
+      exportNative(
+        db,
+        workspace.id,
+        { scope: 'environment', environmentId: 'gone' },
+        { includeSecrets: false, environmentIds: [] },
+      ),
+    ).toThrow('That environment no longer exists.');
   });
 
   it('keeps everything when secrets are included', () => {

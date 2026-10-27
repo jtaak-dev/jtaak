@@ -289,6 +289,25 @@ describe('importNative', () => {
     expect(listEnvironments(db, workspaceId).map((e) => e.variables)).toEqual([{ baseUrl: 'https://staging' }]);
   });
 
+  it('marks the variables the file marks secret, ignoring marks for variables it hasn’t got', () => {
+    const db = openDatabase(':memory:');
+    const workspaceId = workspace(db);
+    const file = {
+      ...doc(),
+      scope: 'environment',
+      collections: [],
+      environments: [{ name: 'Prod', variables: { baseUrl: 'https://prod', token: '' }, secrets: ['token', 'gone'] }],
+    };
+    const valid = validateNativeExport(file);
+    expect(valid.environments[0]?.secrets).toEqual(['token']);
+    expect(previewNativeImport(valid)).toMatchObject({ scope: 'environment', collections: [], environments: ['Prod'] });
+    importNative(db, workspaceId, valid, { includeScripts: true, includeEnvironments: true });
+    expect(listEnvironments(db, workspaceId)).toMatchObject([
+      { name: 'Prod', variables: { baseUrl: 'https://prod', token: '' }, secrets: ['token'] },
+    ]);
+    expect(() => validateNativeExport({ ...file, environments: [{ name: 'X', secrets: 'token' }] })).toThrow(/secrets/);
+  });
+
   it('drops scripts and environments when the user opts out', () => {
     const db = openDatabase(':memory:');
     const workspaceId = workspace(db);
