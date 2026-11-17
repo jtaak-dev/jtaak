@@ -56,6 +56,8 @@ function handle(message) {
     send({ jsonrpc: '2.0', id, result: { contents: [{ uri: params.uri, mimeType: 'text/plain', text: 'hello resource' }] } });
   } else if (method === 'prompts/get') {
     send({ jsonrpc: '2.0', id, result: { description: 'greeting', messages: [{ role: 'user', content: { type: 'text', text: 'Hello!' } }] } });
+  } else if (method === 'test/argv') {
+    send({ jsonrpc: '2.0', id, result: { argv: process.argv.slice(2) } });
   } else if (method === 'test/notify') {
     send({ jsonrpc: '2.0', method: 'notifications/message', params: { data: 'hi' } });
     send({ jsonrpc: '2.0', id, result: { ok: true } });
@@ -179,6 +181,44 @@ describe('connectMcpClient (stdio transport)', () => {
     await client.ready;
     await client.request('test/notify');
     expect(notifications).toEqual([{ jsonrpc: '2.0', method: 'notifications/message', params: { data: 'hi' } }]);
+  });
+});
+
+describe('stdio commands and arguments, as written', () => {
+  // A path with a space (Windows' C:\Program Files) and cmd.exe's own characters must reach the server as written:
+  // on Windows a command runs through cmd.exe only when it's a .cmd or .bat, quoted and escaped for it.
+  let spaced: string;
+  let spacedScript: string;
+  beforeAll(() => {
+    spaced = fs.mkdtempSync(path.join(os.tmpdir(), 'jtaak mcp with spaces '));
+    spacedScript = path.join(spaced, 'fake mcp server.mjs');
+    fs.copyFileSync(serverScriptPath, spacedScript);
+  });
+  afterAll(() => fs.rmSync(spaced, { recursive: true, force: true }));
+
+  const argvOf = async (client: McpClient) => {
+    await client.ready;
+    return ((await client.request('test/argv')) as { argv: string[] }).argv;
+  };
+
+  it('starts a server whose script is in a folder with spaces, its arguments unchanged', async () => {
+    const args = ['two words', 'a&b', 'c|d', 'e^f', '(g)', 'h"i', '50%', 'j<k>l'];
+    const { client } = connect({ protocolConfig: { transport: 'stdio', args: [spacedScript, ...args] } });
+    expect(await argvOf(client)).toEqual(args);
+  });
+
+  it('starts a server through a launcher script whose own path has spaces (a .cmd on Windows)', async () => {
+    const windows = process.platform === 'win32';
+    const launcher = path.join(spaced, windows ? 'run server.cmd' : 'run server.sh');
+    fs.writeFileSync(
+      launcher,
+      windows
+        ? `@echo off\r\n"${process.execPath}" "${spacedScript}" %*\r\n`
+        : `#!/bin/sh\nexec "${process.execPath}" "${spacedScript}" "$@"\n`,
+      { mode: 0o755 },
+    );
+    const { client } = connect({ url: launcher, protocolConfig: { transport: 'stdio', args: ['two words'] } });
+    expect(await argvOf(client)).toEqual(['two words']);
   });
 });
 
