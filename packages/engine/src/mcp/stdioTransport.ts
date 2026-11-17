@@ -1,6 +1,14 @@
-import { spawn } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { createRequire } from 'node:module';
+import type crossSpawn from 'cross-spawn';
 import type { JsonRpcMessage } from './jsonRpc.js';
 import type { McpTransport } from './transport.js';
+
+// cross-spawn, loaded when a stdio server is first started, so nothing loads for HTTP or the CLI (a CommonJS
+// module, required synchronously: connecting returns the transport at once).
+let spawnLoaded: typeof crossSpawn | undefined;
+const spawn: typeof crossSpawn = ((...args: Parameters<typeof crossSpawn>) =>
+  (spawnLoaded ??= createRequire(import.meta.url)('cross-spawn') as typeof crossSpawn)(...args)) as typeof crossSpawn;
 
 /**
  * Spawns the MCP server as a child process and speaks newline-delimited
@@ -10,17 +18,19 @@ import type { McpTransport } from './transport.js';
  * isn't available there.
  */
 export function connectStdioTransport(command: string, args: string[], env: Record<string, string>): McpTransport {
-  // Most real MCP servers are launched via `npx <package>` — on Windows,
-  // npx/npm/yarn/pnpm are .cmd shims, not real executables, so spawn()
-  // without a shell fails with ENOENT even though the command is spelled
-  // correctly. `shell: true` on Windows only (POSIX doesn't need it, and
-  // shell-quoting args there is unnecessary risk this avoids) is the
-  // standard fix Node's own docs recommend for exactly this case.
+  // Most real MCP servers are launched via `npx <package>`: on Windows,
+  // npx/npm/yarn/pnpm are .cmd shims, not real executables, which spawn()
+  // can't start without a shell. cross-spawn finds the command on the PATH
+  // (with PATHEXT), starts an .exe directly, and runs a .cmd or .bat through
+  // cmd.exe with the command and each argument quoted and escaped for it. A
+  // plain `shell: true` doesn't quote: a command or argument with a space
+  // (C:\Program Files\nodejs\node.exe) breaks, and cmd.exe's own characters
+  // in an argument (&, |, ^) would run as commands. On POSIX it's spawn().
+  // A plain ChildProcess by its types; piped, its stdin and stdout are there.
   const child = spawn(command, args, {
     env: { ...process.env, ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
-  });
+  }) as ChildProcessWithoutNullStreams;
 
   const messageListeners: Array<(message: JsonRpcMessage) => void> = [];
   const errorListeners: Array<(error: Error) => void> = [];
