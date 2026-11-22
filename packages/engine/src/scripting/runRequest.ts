@@ -1,7 +1,7 @@
 import { executeRequest } from '../request/executor.js';
 import { resolveDeep } from '../variables/resolver.js';
 import { diffEnvironment } from '../variables/environmentUpdates.js';
-import { runScript, type ScriptConsoleEntry } from './sandbox.js';
+import { runScript, type ScriptConsoleEntry, type ScriptSession } from './sandbox.js';
 import { DEFAULT_ENGINE_PROFILE, type EngineProfile } from '../types.js';
 import type { RequestConfig, RequestRunResult, ScriptIteration, ScriptLogEntry, VariableScope } from '../types.js';
 import type { CookieJar } from '../request/cookieJar.js';
@@ -24,6 +24,12 @@ export interface RunRequestOptions {
   iteration?: ScriptIteration;
   /** Keep at most this much of the response body (see `ExecuteOptions.maxBodyBytes`); scripts see the kept part. */
   maxBodyBytes?: number;
+  /**
+   * Run the scripts in this warm sandbox instead of a fresh one each
+   * (`ScriptSession`): about ten times cheaper, but what a script leaves in
+   * the global scope is still there for the next. For a load test's users.
+   */
+  scriptSession?: ScriptSession;
 }
 
 /** The jar's cookies for a request's URL, as scripts see them. */
@@ -65,6 +71,7 @@ export async function runRequestWithScripts(
   options: RunRequestOptions = {},
 ): Promise<RequestRunResult> {
   const { cookieJar } = options;
+  const run = options.scriptSession ? options.scriptSession.run.bind(options.scriptSession) : runScript;
   // A mutable working copy: a pre-request script can set a variable (e.g. a
   // timestamp or a token) that this same request's URL/headers/body then
   // resolve against, before anything is sent over the network.
@@ -79,7 +86,7 @@ export async function runRequestWithScripts(
 
   if (config.preRequestScript) {
     try {
-      const preRequestRun = await runScript(
+      const preRequestRun = await run(
         config.preRequestScript,
         {
           request: config,
@@ -128,7 +135,7 @@ export async function runRequestWithScripts(
   let testResults: RequestRunResult['testResults'] = [];
   if (config.testScript) {
     try {
-      const testRun = await runScript(
+      const testRun = await run(
         config.testScript,
         {
           request: resolvedConfig,

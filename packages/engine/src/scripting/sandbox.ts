@@ -3,6 +3,7 @@ import {
   shouldInterruptAfterDeadline,
   type QuickJSContext,
   type QuickJSHandle,
+  type QuickJSRuntime,
   type QuickJSWASMModule,
 } from 'quickjs-emscripten-core';
 import quickJsVariant from '@jitl/quickjs-singlefile-cjs-release-sync';
@@ -96,14 +97,18 @@ export const DEFAULT_SCRIPT_LIMITS: ScriptLimits = { timeoutMs: 1000, memoryByte
 // `console`), as JavaScript source evaluated
 // inside QuickJS. It lives in the sandbox rather than being exposed from the
 // host, so scripts never hold a reference to a host object: data goes in and
-// comes out only as JSON (`__input` / `__output()`).
+// comes out only as JSON. Evaluated, it's a function of Postman's API source
+// that returns `setup(inputJson)`, which sets the globals up for one script and
+// returns the function that reads its output. Compiling it is most of a
+// script's cost, so a ScriptSession compiles it once and calls `setup` again.
 const PRELUDE = String.raw`
+(function (postmanSource) {
 'use strict';
-(function () {
-  const input = JSON.parse(globalThis.__input);
-  delete globalThis.__input;
-  const results = [];
-  const logs = [];
+// Captured now, before any script could replace it.
+const NewFunction = Function;
+// Postman's script API, compiled the first time a script reaches pm, then
+// kept: a function of the values it works on (POSTMAN_API).
+let makePostman;
 
   function isDeepEqual(a, b) {
     if (Object.is(a, b)) return true;
@@ -121,13 +126,6 @@ const PRELUDE = String.raw`
       return String(value);
     }
   }
-
-  function capture(level) {
-    return (...args) => {
-      logs.push({ level, message: args.map((v) => (typeof v === 'string' ? v : describe(v))).join(' ') });
-    };
-  }
-  globalThis.console = { log: capture('log'), info: capture('info'), warn: capture('warn'), error: capture('error') };
 
   // A minimal Chai-like matcher set: enough for the common status/body/header
   // assertions a pre-request or test script needs, not a full port.
@@ -186,6 +184,18 @@ const PRELUDE = String.raw`
       },
     };
   }
+
+return function setup(inputJson) {
+  const input = JSON.parse(inputJson);
+  const results = [];
+  const logs = [];
+
+  function capture(level) {
+    return (...args) => {
+      logs.push({ level, message: args.map((v) => (typeof v === 'string' ? v : describe(v))).join(' ') });
+    };
+  }
+  globalThis.console = { log: capture('log'), info: capture('info'), warn: capture('warn'), error: capture('error') };
 
   const variables = input.variables;
   // With separate environment values, a write to the environment is also a
@@ -271,16 +281,19 @@ const PRELUDE = String.raw`
 
 
   // Postman's script API (pm.*) is compiled the first time a script uses
-  // pm (POSTMAN_API below): it's half the prelude, and scripts written
-  // for the namespace never need it. A direct eval, so it sees this scope.
-  const postmanSource = globalThis.__postman;
-  delete globalThis.__postman;
+  // pm (POSTMAN_API below): it's half the prelude, and scripts written for
+  // the namespace never need it. A function of what it works on, not a
+  // direct eval: one would keep this whole scope (and the input) alive in
+  // reference cycles, which QuickJS frees only when its collector runs.
   let postman;
   Object.defineProperty(globalThis, 'pm', {
     configurable: true,
     enumerable: true,
     get() {
-      if (postman === undefined) postman = eval(postmanSource);
+      if (postman === undefined) {
+        makePostman ??= new NewFunction('describe', 'isDeepEqual', "'use strict';" + postmanSource)(describe, isDeepEqual);
+        postman = makePostman(input, environment, variables, cookies);
+      }
       return postman;
     },
     set(value) {
@@ -307,13 +320,15 @@ const PRELUDE = String.raw`
             : JSON.stringify(response.body),
     };
   }
-  globalThis.__output = () =>
-    JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
-})();
+  return () => JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
+};
+})
 `;
 
-// Postman's script API, evaluated inside the prelude on first use of `pm`;
-// its last expression is the `pm` object.
+// Postman's script API, compiled inside the prelude on first use of `pm`
+// (once per sandbox) as the body of a function of describe and isDeepEqual,
+// which returns the function that makes the `pm` object for one script's
+// input, environment, variables and cookies.
 const POSTMAN_API = String.raw`
   // Postman's script API (pm.*), so scripts imported from Postman run as
   // written: the common calls, over the same values as the namespace above.
@@ -324,35 +339,50 @@ const POSTMAN_API = String.raw`
     if (Array.isArray(value)) return 'array';
     return typeof value;
   }
-  function chai(actual, negated) {
-    const self = {};
-    function check(condition, message) {
-      if (condition === Boolean(negated)) {
-        throw new Error('expected ' + describe(actual) + (negated ? ' not to ' : ' to ') + message);
-      }
-      return self;
+  // pm.expect's chain, as a class: methods on the prototype rather than
+  // closures over the object, so an expectation leaves no reference cycle
+  // behind (QuickJS frees cycles only when its collector runs).
+  class Chai {
+    constructor(actual, negated) {
+      this.actual = actual;
+      this.negated = Boolean(negated);
     }
-    const chains = ['to', 'be', 'been', 'is', 'that', 'which', 'and', 'has', 'have', 'with', 'at', 'of', 'same', 'does', 'deep', 'all', 'any', 'own'];
-    for (const word of chains) Object.defineProperty(self, word, { get: () => self });
-    Object.defineProperty(self, 'not', { get: () => chai(actual, !negated) });
-    const flag = (name, test, message) => Object.defineProperty(self, name, { get: () => check(test(), message) });
-    flag('true', () => actual === true, 'be true');
-    flag('false', () => actual === false, 'be false');
-    flag('null', () => actual === null, 'be null');
-    flag('undefined', () => actual === undefined, 'be undefined');
-    flag('ok', () => Boolean(actual), 'be truthy');
-    flag('exist', () => actual !== null && actual !== undefined, 'exist');
-    flag('empty', () => (typeof actual === 'string' || Array.isArray(actual) ? actual.length === 0 : actual && typeof actual === 'object' ? Object.keys(actual).length === 0 : false), 'be empty');
-    self.equal = self.equals = self.eq = (expected) => check(actual === expected, 'equal ' + describe(expected));
-    self.eql = self.eqls = (expected) => check(isDeepEqual(actual, expected), 'deeply equal ' + describe(expected));
-    self.above = self.gt = self.greaterThan = (n) => check(actual > n, 'be above ' + n);
-    self.below = self.lt = self.lessThan = (n) => check(actual < n, 'be below ' + n);
-    self.least = self.gte = (n) => check(actual >= n, 'be at least ' + n);
-    self.most = self.lte = (n) => check(actual <= n, 'be at most ' + n);
-    self.within = (low, high) => check(actual >= low && actual <= high, 'be within ' + low + '..' + high);
-    self.a = self.an = (type) => check(typeName(actual) === String(type).toLowerCase(), 'be a ' + type);
-    self.include = self.includes = self.contain = self.contains = (value) =>
-      check(
+    check(condition, message) {
+      if (condition === this.negated) {
+        throw new Error('expected ' + describe(this.actual) + (this.negated ? ' not to ' : ' to ') + message);
+      }
+      return this;
+    }
+    get not() {
+      return new Chai(this.actual, !this.negated);
+    }
+    equal(expected) {
+      return this.check(this.actual === expected, 'equal ' + describe(expected));
+    }
+    eql(expected) {
+      return this.check(isDeepEqual(this.actual, expected), 'deeply equal ' + describe(expected));
+    }
+    above(n) {
+      return this.check(this.actual > n, 'be above ' + n);
+    }
+    below(n) {
+      return this.check(this.actual < n, 'be below ' + n);
+    }
+    least(n) {
+      return this.check(this.actual >= n, 'be at least ' + n);
+    }
+    most(n) {
+      return this.check(this.actual <= n, 'be at most ' + n);
+    }
+    within(low, high) {
+      return this.check(this.actual >= low && this.actual <= high, 'be within ' + low + '..' + high);
+    }
+    a(type) {
+      return this.check(typeName(this.actual) === String(type).toLowerCase(), 'be a ' + type);
+    }
+    include(value) {
+      const actual = this.actual;
+      return this.check(
         typeof actual === 'string'
           ? actual.includes(value)
           : Array.isArray(actual)
@@ -362,21 +392,50 @@ const POSTMAN_API = String.raw`
               : false,
         'include ' + describe(value),
       );
-    self.property = function (key, value) {
+    }
+    property(key, value) {
+      const actual = this.actual;
       const has = actual !== null && actual !== undefined && typeof actual === 'object' && key in actual;
       return arguments.length < 2
-        ? check(has, 'have property ' + describe(key))
-        : check(has && isDeepEqual(actual[key], value), 'have property ' + describe(key) + ' of ' + describe(value));
-    };
-    self.lengthOf = (n) => check(actual !== null && actual !== undefined && actual.length === n, 'have length ' + n);
-    self.oneOf = (list) => check(list.some((item) => isDeepEqual(item, actual)), 'be one of ' + describe(list));
-    self.match = (pattern) => check(pattern.test(String(actual)), 'match ' + pattern);
-    self.keys = (...keys) => {
+        ? this.check(has, 'have property ' + describe(key))
+        : this.check(has && isDeepEqual(actual[key], value), 'have property ' + describe(key) + ' of ' + describe(value));
+    }
+    lengthOf(n) {
+      return this.check(this.actual !== null && this.actual !== undefined && this.actual.length === n, 'have length ' + n);
+    }
+    oneOf(list) {
+      return this.check(list.some((item) => isDeepEqual(item, this.actual)), 'be one of ' + describe(list));
+    }
+    match(pattern) {
+      return this.check(pattern.test(String(this.actual)), 'match ' + pattern);
+    }
+    keys(...keys) {
       const wanted = keys.length === 1 && Array.isArray(keys[0]) ? keys[0] : keys;
-      return check(actual !== null && typeof actual === 'object' && wanted.every((key) => key in actual), 'have keys ' + describe(wanted));
-    };
-    self.key = self.keys;
-    return self;
+      const actual = this.actual;
+      return this.check(actual !== null && typeof actual === 'object' && wanted.every((key) => key in actual), 'have keys ' + describe(wanted));
+    }
+  }
+  const chainWords = ['to', 'be', 'been', 'is', 'that', 'which', 'and', 'has', 'have', 'with', 'at', 'of', 'same', 'does', 'deep', 'all', 'any', 'own'];
+  for (const word of chainWords) Object.defineProperty(Chai.prototype, word, { get() { return this; } });
+  const flags = {
+    true: [(v) => v === true, 'be true'],
+    false: [(v) => v === false, 'be false'],
+    null: [(v) => v === null, 'be null'],
+    undefined: [(v) => v === undefined, 'be undefined'],
+    ok: [(v) => Boolean(v), 'be truthy'],
+    exist: [(v) => v !== null && v !== undefined, 'exist'],
+    empty: [(v) => (typeof v === 'string' || Array.isArray(v) ? v.length === 0 : v && typeof v === 'object' ? Object.keys(v).length === 0 : false), 'be empty'],
+  };
+  for (const [name, [test, message]] of Object.entries(flags)) {
+    Object.defineProperty(Chai.prototype, name, { get() { return this.check(test(this.actual), message); } });
+  }
+  const aliases = {
+    equal: ['equals', 'eq'], eql: ['eqls'], above: ['gt', 'greaterThan'], below: ['lt', 'lessThan'],
+    least: ['gte'], most: ['lte'], a: ['an'], include: ['includes', 'contain', 'contains'], keys: ['key'],
+  };
+  for (const [name, others] of Object.entries(aliases)) for (const other of others) Chai.prototype[other] = Chai.prototype[name];
+  function chai(actual, negated) {
+    return new Chai(actual, negated);
   }
 
   function unsupported(path) {
@@ -419,6 +478,8 @@ const POSTMAN_API = String.raw`
     return strict({ get: find, has: (name) => find(name) !== undefined }, path);
   }
 
+  // What follows is made afresh for each script, from its values.
+  return function (input, environment, variables, cookies) {
   const pmResponse = input.response
     ? (() => {
         const r = input.response;
@@ -522,7 +583,8 @@ const POSTMAN_API = String.raw`
     },
     'pm',
   );
-  pm;
+  return pm;
+  };
 `;
 
 let quickJs: Promise<QuickJSWASMModule> | undefined;
@@ -544,6 +606,14 @@ export async function preloadScriptEngine(): Promise<void> {
 }
 
 class ScriptError extends Error {}
+
+/**
+ * A script that ran out of time. QuickJS can't always free a runtime after an
+ * interrupt (one inside a promise callback can leave an object behind, and
+ * freeing the runtime then aborts the whole module), so the runtime is never
+ * freed: the module is discarded with it, as after a hard stop.
+ */
+class ScriptTimeout extends ScriptError {}
 
 /** Makes `target` hold exactly `values`, in place. */
 function writeBack(target: Record<string, string>, values: Record<string, string>): void {
@@ -592,9 +662,141 @@ function unwrap(
   result.error.dispose();
   const message = typeof dumped === 'object' && dumped ? (dumped.message ?? String(dumped)) : String(dumped);
   if (typeof dumped === 'object' && dumped?.name === 'InternalError' && message === 'interrupted') {
-    throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+    throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
   }
   throw new ScriptError(message);
+}
+
+/** A runtime and context with the prelude compiled: `setup` sets the globals up for one script. */
+interface Sandbox {
+  module: QuickJSWASMModule;
+  runtime: QuickJSRuntime;
+  ctx: QuickJSContext;
+  setup: QuickJSHandle;
+}
+
+function newSandbox(module: QuickJSWASMModule, limits: ScriptLimits): Sandbox {
+  const runtime = module.newRuntime();
+  runtime.setMaxStackSize(1024 * 1024);
+  runtime.setMemoryLimit(limits.memoryBytes);
+  const ctx = runtime.newContext();
+  try {
+    const factory = unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits);
+    const postmanApi = ctx.newString(POSTMAN_API);
+    const setup = unwrap(ctx, ctx.callFunction(factory, ctx.undefined, postmanApi), limits);
+    postmanApi.dispose();
+    factory.dispose();
+    return { module, runtime, ctx, setup };
+  } catch (error) {
+    ctx.dispose();
+    runtime.dispose();
+    throw error;
+  }
+}
+
+function disposeSandbox(sandbox: Sandbox): void {
+  sandbox.setup.dispose();
+  sandbox.ctx.dispose();
+  sandbox.runtime.dispose();
+}
+
+/** Runs one script in `sandbox` within the limits, and returns its output's JSON. */
+function runInSandbox(
+  sandbox: Sandbox,
+  code: string,
+  context: ScriptContext,
+  limits: ScriptLimits,
+  profile: EngineProfile,
+): string {
+  const { runtime, ctx } = sandbox;
+  runtime.setMemoryLimit(limits.memoryBytes);
+  const deadline = Date.now() + limits.timeoutMs;
+  runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
+  const input = ctx.newString(
+    JSON.stringify({
+      namespace: profile.scriptNamespace,
+      request: context.request,
+      response: context.response,
+      variables: context.variables,
+      environment: context.environment,
+      cookies: context.cookies,
+      messages: context.messages,
+      iteration: context.iteration ?? { index: 0, count: 1, data: {} },
+      respond: context.respond === true,
+    }),
+  );
+  const setupResult = ctx.callFunction(sandbox.setup, ctx.undefined, input);
+  input.dispose();
+  const output = unwrap(ctx, setupResult, limits);
+  try {
+    unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
+    // Let promise callbacks the script queued run too, within the same deadline.
+    const jobs = runtime.executePendingJobs();
+    if (jobs.error) {
+      const dumped = ctx.dump(jobs.error) as { name?: string; message?: string };
+      jobs.error.dispose();
+      if (dumped?.name === 'InternalError' && dumped.message === 'interrupted') {
+        throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+      }
+      throw new ScriptError(dumped?.message ?? String(dumped));
+    }
+    // An interrupt inside a promise callback rejects that promise rather than
+    // failing the call, so check the deadline directly.
+    if (Date.now() >= deadline) throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+
+    const outputHandle = unwrap(ctx, ctx.callFunction(output, ctx.undefined), limits);
+    const text = ctx.getString(outputHandle);
+    outputHandle.dispose();
+    return text;
+  } finally {
+    output.dispose();
+  }
+}
+
+/** Turns the sandbox's output into the result, writing the variables back. */
+function finish(text: string, context: ScriptContext): ScriptRunResult {
+  const output = JSON.parse(text) as ScriptRunResult & {
+    variables: Record<string, string>;
+    environment?: Record<string, string>;
+  };
+  // Write variable changes back, so a pre-request script's `jt.variables.x = …`
+  // reaches this request's variable resolution (see runRequest.ts), and
+  // environment changes reach the caller.
+  writeBack(context.variables, output.variables);
+  if (context.environment && output.environment) writeBack(context.environment, output.environment);
+  return { results: output.results, logs: output.logs, ...(output.response && { response: output.response }) };
+}
+
+function checkNamespace(profile: EngineProfile): void {
+  // The namespace becomes a global name inside the sandbox; only a plain
+  // identifier is accepted.
+  if (!/^[A-Za-z_$][\w$]*$/.test(profile.scriptNamespace)) {
+    throw new Error(`Invalid script namespace: ${JSON.stringify(profile.scriptNamespace)}`);
+  }
+}
+
+/**
+ * Stopped mid-call, or timed out (ScriptTimeout), the module's memory is in an
+ * unknown state, so it's never used again: the next script loads a fresh one
+ * (a few ms).
+ */
+function discardModule(module: QuickJSWASMModule, limits: ScriptLimits): never {
+  discarded.add(module);
+  quickJs = undefined;
+  throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+}
+
+/** Runs `task` with the hard stop (unless `hardStop` is false); a timeout of either kind discards the module. */
+function guarded<T>(module: QuickJSWASMModule, limits: ScriptLimits, task: () => T, hardStop = true): T {
+  let run: { value: T } | undefined;
+  try {
+    run = hardStop ? withHardStop(task, limits.timeoutMs + HARD_STOP_GRACE_MS) : { value: task() };
+  } catch (error) {
+    if (error instanceof ScriptTimeout) discardModule(module, limits);
+    throw error;
+  }
+  if (!run) discardModule(module, limits);
+  return run.value;
 }
 
 /**
@@ -616,82 +818,105 @@ export async function runScript(
   limits: ScriptLimits = DEFAULT_SCRIPT_LIMITS,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
 ): Promise<ScriptRunResult> {
-  // The namespace becomes a global name inside the sandbox; only a plain
-  // identifier is accepted.
-  if (!/^[A-Za-z_$][\w$]*$/.test(profile.scriptNamespace)) {
-    throw new Error(`Invalid script namespace: ${JSON.stringify(profile.scriptNamespace)}`);
-  }
+  checkNamespace(profile);
   let module = await loadQuickJs();
-  // Another script's hard stop may have discarded this module while we waited.
+  // Another script's hard stop may have discarded this module while we
+  // waited; checked with no await between it and the run.
   while (discarded.has(module)) module = await loadQuickJs();
-
-  const run = withHardStop(() => {
-    const runtime = module.newRuntime();
-    runtime.setMemoryLimit(limits.memoryBytes);
-    runtime.setMaxStackSize(1024 * 1024);
-    const deadline = Date.now() + limits.timeoutMs;
-    runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
-    const ctx = runtime.newContext();
+  const text = guarded(module, limits, () => {
+    const sandbox = newSandbox(module, limits);
+    let ok = false;
     try {
-      const input = ctx.newString(
-        JSON.stringify({
-          namespace: profile.scriptNamespace,
-          request: context.request,
-          response: context.response,
-          variables: context.variables,
-          environment: context.environment,
-          cookies: context.cookies,
-          messages: context.messages,
-          iteration: context.iteration ?? { index: 0, count: 1, data: {} },
-          respond: context.respond === true,
-        }),
-      );
-      ctx.setProp(ctx.global, '__input', input);
-      input.dispose();
-      const postmanApi = ctx.newString(POSTMAN_API);
-      ctx.setProp(ctx.global, '__postman', postmanApi);
-      postmanApi.dispose();
-      unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits).dispose();
-
-      unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
-      // Let promise callbacks the script queued run too, within the same deadline.
-      const jobs = runtime.executePendingJobs();
-      if (jobs.error) {
-        const dumped = ctx.dump(jobs.error) as { message?: string };
-        jobs.error.dispose();
-        throw new ScriptError(dumped?.message ?? String(dumped));
-      }
-      // An interrupt inside a promise callback rejects that promise rather than
-      // failing the call, so check the deadline directly.
-      if (Date.now() >= deadline) throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
-
-      const outputHandle = unwrap(ctx, ctx.evalCode('__output()', 'output.js'), limits);
-      const output = ctx.getString(outputHandle);
-      outputHandle.dispose();
+      const output = runInSandbox(sandbox, code, context, limits, profile);
+      ok = true;
       return output;
+    } catch (error) {
+      ok = !(error instanceof ScriptTimeout);
+      throw error;
     } finally {
-      ctx.dispose();
-      runtime.dispose();
+      if (ok) disposeSandbox(sandbox);
     }
-  }, limits.timeoutMs + HARD_STOP_GRACE_MS);
+  });
+  return finish(text, context);
+}
 
-  if (!run) {
-    // Stopped mid-call, the module's memory is in an unknown state, so it's
-    // never used again: the next script loads a fresh one (a few ms).
-    discarded.add(module);
-    quickJs = undefined;
-    throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+/** How a ScriptSession runs its scripts. */
+export interface ScriptSessionOptions {
+  /**
+   * Terminate a script still running just after its deadline, even inside one
+   * long built-in call (as runScript does); default true. The hard stop runs
+   * each script under a Node `vm` timeout, which costs more than the warm
+   * script itself (about 0.1 ms a script). Without it the deadline still holds
+   * between QuickJS's bytecode instructions, but one long built-in call (a
+   * default `sort` of a million numbers, say) can hold up the event loop for
+   * seconds past it. For a load test running its user's own scripts.
+   */
+  hardStop?: boolean;
+}
+
+/**
+ * Runs scripts one after another in one sandbox that stays warm: the runtime,
+ * the context and the compiled script API are made once and reused, which
+ * makes each script about ten times cheaper than `runScript`. For a load
+ * test's virtual user, say, running the same scripts thousands of times.
+ *
+ * The price is a clean slate: what one script leaves in the global scope (a
+ * global variable, a changed built-in) is still there for the next. The
+ * script API itself (`<namespace>`, `pm`, `console`) is set up afresh for
+ * each script, and the sandbox is as closed to the host as `runScript`'s.
+ * After a script throws, runs out of time or memory, the sandbox is thrown
+ * away and the next script gets a new one. Same limits and errors as
+ * `runScript`. Call `dispose()` when done (a disposed session makes a new
+ * sandbox if used again).
+ */
+export class ScriptSession {
+  private sandbox: Sandbox | undefined;
+  private readonly hardStop: boolean;
+
+  constructor(options: ScriptSessionOptions = {}) {
+    this.hardStop = options.hardStop !== false;
   }
-  const output = JSON.parse(run.value) as ScriptRunResult & {
-    variables: Record<string, string>;
-    environment?: Record<string, string>;
-  };
 
-  // Write variable changes back, so a pre-request script's `jt.variables.x = …`
-  // reaches this request's variable resolution (see runRequest.ts), and
-  // environment changes reach the caller.
-  writeBack(context.variables, output.variables);
-  if (context.environment && output.environment) writeBack(context.environment, output.environment);
+  async run(
+    code: string,
+    context: ScriptContext,
+    limits: ScriptLimits = DEFAULT_SCRIPT_LIMITS,
+    profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
+  ): Promise<ScriptRunResult> {
+    checkNamespace(profile);
+    let module = await loadQuickJs();
+    // Another script's hard stop may have discarded this module while we
+    // waited; checked with no await between it and the run.
+    while (discarded.has(module)) module = await loadQuickJs();
+    if (this.sandbox && this.sandbox.module !== module) this.sandbox = undefined;
+    try {
+      const text = guarded(
+        module,
+        limits,
+        () => {
+          this.sandbox ??= newSandbox(module, limits);
+          try {
+            return runInSandbox(this.sandbox, code, context, limits, profile);
+          } catch (error) {
+            // A timed-out sandbox goes with its module (guarded); any other failure starts a new one.
+            if (error instanceof ScriptTimeout) this.sandbox = undefined;
+            else this.dispose();
+            throw error;
+          }
+        },
+        this.hardStop,
+      );
+      return finish(text, context);
+    } catch (error) {
+      // Stopped by the hard stop, the module was discarded with this sandbox in it.
+      if (this.sandbox && discarded.has(this.sandbox.module)) this.sandbox = undefined;
+      throw error;
+    }
+  }
 
-  return { results: output.results, logs: output.logs, ...(output.response && { response: output.response }) };
+  dispose(): void {
+    const sandbox = this.sandbox;
+    this.sandbox = undefined;
+    if (sandbox && !discarded.has(sandbox.module)) disposeSandbox(sandbox);
+  }
 }

@@ -307,6 +307,29 @@ built-in call such as a large `sort`, is terminated. They get no
 Node.js or host objects, no timers and no network; data goes in and out only as
 JSON.
 
+Running the same scripts thousands of times (a load test's users, say), pass
+a `ScriptSession` as `runRequestWithScripts`' `scriptSession` option, or call
+its `run` as you would `runScript`. It keeps one sandbox warm, with the
+script API compiled once, which makes each script about ten times cheaper.
+The price is a clean slate: what one script leaves in the global scope (a
+global variable, a changed built-in) is still there for the next, though the
+script API itself is set up afresh each time. After a script fails, the
+session starts a new sandbox. `dispose()` it when done.
+
+`new ScriptSession({ hardStop: false })` also skips the hard stop, which
+costs more than a warm script itself. The deadline still holds between
+QuickJS's instructions, but one long built-in call (a large `sort`) can run
+past it, holding up the event loop. For a load test of the user's own scripts.
+
+```ts
+const scriptSession = new ScriptSession();
+try {
+  for (const config of requests) await runRequestWithScripts(config, scopes, undefined, { scriptSession });
+} finally {
+  scriptSession.dispose();
+}
+```
+
 `runConnectionTests(script, { request, messages })` runs a test script over
 what a WebSocket, SSE or messaging connection has sent and received. Each of
 `jt.messages` has `direction`, `channel`, `data`, `at` (milliseconds since
