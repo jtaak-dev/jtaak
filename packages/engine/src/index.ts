@@ -199,7 +199,7 @@ export type {
   ScriptResponse,
   ScriptRunResult,
 } from './scripting/sandbox.js';
-export { preloadScriptEngine, runScript, ScriptSession } from './scripting/sandbox.js';
+export { preloadScriptEngine, runScript, ScriptSession, type ScriptSessionOptions } from './scripting/sandbox.js';
 export { runRequestWithScripts, type RunRequestOptions } from './scripting/runRequest.js';
 export { unsupportedPostmanCalls, SUPPORTED_PM_API } from './scripting/postman.js';
 export {

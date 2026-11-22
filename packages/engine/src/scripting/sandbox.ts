@@ -794,11 +794,11 @@ function discardModule(module: QuickJSWASMModule, limits: ScriptLimits): never {
   throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
 }
 
-/** Runs `task` with the hard stop; a timeout of either kind discards the module. */
-function guarded<T>(module: QuickJSWASMModule, limits: ScriptLimits, task: () => T): T {
+/** Runs `task` with the hard stop (unless `hardStop` is false); a timeout of either kind discards the module. */
+function guarded<T>(module: QuickJSWASMModule, limits: ScriptLimits, task: () => T, hardStop = true): T {
   let run: { value: T } | undefined;
   try {
-    run = withHardStop(task, limits.timeoutMs + HARD_STOP_GRACE_MS);
+    run = hardStop ? withHardStop(task, limits.timeoutMs + HARD_STOP_GRACE_MS) : { value: task() };
   } catch (error) {
     if (error instanceof ScriptTimeout) discardModule(module, limits);
     throw error;
@@ -845,6 +845,20 @@ export async function runScript(
   return finish(text, context);
 }
 
+/** How a ScriptSession runs its scripts. */
+export interface ScriptSessionOptions {
+  /**
+   * Terminate a script still running just after its deadline, even inside one
+   * long built-in call (as runScript does); default true. The hard stop runs
+   * each script under a Node `vm` timeout, which costs more than the warm
+   * script itself (about 0.1 ms a script). Without it the deadline still holds
+   * between QuickJS's bytecode instructions, but one long built-in call (a
+   * default `sort` of a million numbers, say) can hold up the event loop for
+   * seconds past it. For a load test running its user's own scripts.
+   */
+  hardStop?: boolean;
+}
+
 /**
  * Runs scripts one after another in one sandbox that stays warm: the runtime,
  * the context and the compiled script API are made once and reused, which
@@ -862,6 +876,11 @@ export async function runScript(
  */
 export class ScriptSession {
   private sandbox: Sandbox | undefined;
+  private readonly hardStop: boolean;
+
+  constructor(options: ScriptSessionOptions = {}) {
+    this.hardStop = options.hardStop !== false;
+  }
 
   async run(
     code: string,
@@ -873,17 +892,22 @@ export class ScriptSession {
     const module = await liveModule();
     if (this.sandbox && this.sandbox.module !== module) this.sandbox = undefined;
     try {
-      const text = guarded(module, limits, () => {
-        this.sandbox ??= newSandbox(module, limits);
-        try {
-          return runInSandbox(this.sandbox, code, context, limits, profile);
-        } catch (error) {
-          // A timed-out sandbox goes with its module (guarded); any other failure starts a new one.
-          if (error instanceof ScriptTimeout) this.sandbox = undefined;
-          else this.dispose();
-          throw error;
-        }
-      });
+      const text = guarded(
+        module,
+        limits,
+        () => {
+          this.sandbox ??= newSandbox(module, limits);
+          try {
+            return runInSandbox(this.sandbox, code, context, limits, profile);
+          } catch (error) {
+            // A timed-out sandbox goes with its module (guarded); any other failure starts a new one.
+            if (error instanceof ScriptTimeout) this.sandbox = undefined;
+            else this.dispose();
+            throw error;
+          }
+        },
+        this.hardStop,
+      );
       return finish(text, context);
     } catch (error) {
       // Stopped by the hard stop, the module was discarded with this sandbox in it.

@@ -511,6 +511,21 @@ describe('a warm sandbox (ScriptSession)', () => {
     }
   });
 
+  it('keeps the deadline without the hard stop (hardStop: false), between bytecode instructions', async () => {
+    const session = new ScriptSession({ hardStop: false });
+    const context = () => ({ request: baseRequest, response: baseResponse, variables: {} });
+    try {
+      expect((await session.run(test, context(), limits)).results).toHaveLength(1);
+      await expect(session.run('while (true) {}', context(), limits)).rejects.toThrow(/timed out/);
+      await expect(
+        session.run('const loop = () => Promise.resolve().then(loop); loop();', context(), limits),
+      ).rejects.toThrow(/timed out/);
+      expect((await session.run(test, context(), limits)).results).toHaveLength(1);
+    } finally {
+      session.dispose();
+    }
+  });
+
   it('can be used again after dispose', async () => {
     const session = new ScriptSession();
     await session.run('globalThis.leak = 1;', { request: baseRequest, variables: {} });

@@ -316,6 +316,11 @@ global variable, a changed built-in) is still there for the next, though the
 script API itself is set up afresh each time. After a script fails, the
 session starts a new sandbox. `dispose()` it when done.
 
+`new ScriptSession({ hardStop: false })` also skips the hard stop, which
+costs more than a warm script itself. The deadline still holds between
+QuickJS's instructions, but one long built-in call (a large `sort`) can run
+past it, holding up the event loop. For a load test of the user's own scripts.
+
 ```ts
 const scriptSession = new ScriptSession();
 try {
