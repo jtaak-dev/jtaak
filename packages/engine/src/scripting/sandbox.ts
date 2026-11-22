@@ -3,6 +3,7 @@ import {
   shouldInterruptAfterDeadline,
   type QuickJSContext,
   type QuickJSHandle,
+  type QuickJSRuntime,
   type QuickJSWASMModule,
 } from 'quickjs-emscripten-core';
 import quickJsVariant from '@jitl/quickjs-singlefile-cjs-release-sync';
@@ -96,12 +97,15 @@ export const DEFAULT_SCRIPT_LIMITS: ScriptLimits = { timeoutMs: 1000, memoryByte
 // `console`), as JavaScript source evaluated
 // inside QuickJS. It lives in the sandbox rather than being exposed from the
 // host, so scripts never hold a reference to a host object: data goes in and
-// comes out only as JSON (`__input` / `__output()`).
+// comes out only as JSON. Evaluated, it's a function of Postman's API source
+// that returns `setup(inputJson)`, which sets the globals up for one script and
+// returns the function that reads its output. Compiling it is most of a
+// script's cost, so a ScriptSession compiles it once and calls `setup` again.
 const PRELUDE = String.raw`
+(function (postmanSource) {
 'use strict';
-(function () {
-  const input = JSON.parse(globalThis.__input);
-  delete globalThis.__input;
+return function setup(inputJson) {
+  const input = JSON.parse(inputJson);
   const results = [];
   const logs = [];
 
@@ -273,8 +277,6 @@ const PRELUDE = String.raw`
   // Postman's script API (pm.*) is compiled the first time a script uses
   // pm (POSTMAN_API below): it's half the prelude, and scripts written
   // for the namespace never need it. A direct eval, so it sees this scope.
-  const postmanSource = globalThis.__postman;
-  delete globalThis.__postman;
   let postman;
   Object.defineProperty(globalThis, 'pm', {
     configurable: true,
@@ -307,9 +309,9 @@ const PRELUDE = String.raw`
             : JSON.stringify(response.body),
     };
   }
-  globalThis.__output = () =>
-    JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
-})();
+  return () => JSON.stringify({ results, logs, variables, environment: environmentValues, response: responseOut() });
+};
+})
 `;
 
 // Postman's script API, evaluated inside the prelude on first use of `pm`;
@@ -545,6 +547,14 @@ export async function preloadScriptEngine(): Promise<void> {
 
 class ScriptError extends Error {}
 
+/**
+ * A script that ran out of time. QuickJS can't always free a runtime after an
+ * interrupt (one inside a promise callback can leave an object behind, and
+ * freeing the runtime then aborts the whole module), so the runtime is never
+ * freed: the module is discarded with it, as after a hard stop.
+ */
+class ScriptTimeout extends ScriptError {}
+
 /** Makes `target` hold exactly `values`, in place. */
 function writeBack(target: Record<string, string>, values: Record<string, string>): void {
   for (const key of Object.keys(target)) {
@@ -592,9 +602,149 @@ function unwrap(
   result.error.dispose();
   const message = typeof dumped === 'object' && dumped ? (dumped.message ?? String(dumped)) : String(dumped);
   if (typeof dumped === 'object' && dumped?.name === 'InternalError' && message === 'interrupted') {
-    throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+    throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
   }
   throw new ScriptError(message);
+}
+
+/** A runtime and context with the prelude compiled: `setup` sets the globals up for one script. */
+interface Sandbox {
+  module: QuickJSWASMModule;
+  runtime: QuickJSRuntime;
+  ctx: QuickJSContext;
+  setup: QuickJSHandle;
+}
+
+function newSandbox(module: QuickJSWASMModule, limits: ScriptLimits): Sandbox {
+  const runtime = module.newRuntime();
+  runtime.setMaxStackSize(1024 * 1024);
+  runtime.setMemoryLimit(limits.memoryBytes);
+  const ctx = runtime.newContext();
+  try {
+    const factory = unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits);
+    const postmanApi = ctx.newString(POSTMAN_API);
+    const setup = unwrap(ctx, ctx.callFunction(factory, ctx.undefined, postmanApi), limits);
+    postmanApi.dispose();
+    factory.dispose();
+    return { module, runtime, ctx, setup };
+  } catch (error) {
+    ctx.dispose();
+    runtime.dispose();
+    throw error;
+  }
+}
+
+function disposeSandbox(sandbox: Sandbox): void {
+  sandbox.setup.dispose();
+  sandbox.ctx.dispose();
+  sandbox.runtime.dispose();
+}
+
+/** Runs one script in `sandbox` within the limits, and returns its output's JSON. */
+function runInSandbox(
+  sandbox: Sandbox,
+  code: string,
+  context: ScriptContext,
+  limits: ScriptLimits,
+  profile: EngineProfile,
+): string {
+  const { runtime, ctx } = sandbox;
+  runtime.setMemoryLimit(limits.memoryBytes);
+  const deadline = Date.now() + limits.timeoutMs;
+  runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
+  const input = ctx.newString(
+    JSON.stringify({
+      namespace: profile.scriptNamespace,
+      request: context.request,
+      response: context.response,
+      variables: context.variables,
+      environment: context.environment,
+      cookies: context.cookies,
+      messages: context.messages,
+      iteration: context.iteration ?? { index: 0, count: 1, data: {} },
+      respond: context.respond === true,
+    }),
+  );
+  const setupResult = ctx.callFunction(sandbox.setup, ctx.undefined, input);
+  input.dispose();
+  const output = unwrap(ctx, setupResult, limits);
+  try {
+    unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
+    // Let promise callbacks the script queued run too, within the same deadline.
+    const jobs = runtime.executePendingJobs();
+    if (jobs.error) {
+      const dumped = ctx.dump(jobs.error) as { name?: string; message?: string };
+      jobs.error.dispose();
+      if (dumped?.name === 'InternalError' && dumped.message === 'interrupted') {
+        throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+      }
+      throw new ScriptError(dumped?.message ?? String(dumped));
+    }
+    // An interrupt inside a promise callback rejects that promise rather than
+    // failing the call, so check the deadline directly.
+    if (Date.now() >= deadline) throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+
+    const outputHandle = unwrap(ctx, ctx.callFunction(output, ctx.undefined), limits);
+    const text = ctx.getString(outputHandle);
+    outputHandle.dispose();
+    return text;
+  } finally {
+    output.dispose();
+  }
+}
+
+/** Loads the module, waiting out a discarded one (see withHardStop). */
+async function liveModule(): Promise<QuickJSWASMModule> {
+  let module = await loadQuickJs();
+  // Another script's hard stop may have discarded this module while we waited.
+  while (discarded.has(module)) module = await loadQuickJs();
+  return module;
+}
+
+/** Turns the sandbox's output into the result, writing the variables back. */
+function finish(text: string, context: ScriptContext): ScriptRunResult {
+  const output = JSON.parse(text) as ScriptRunResult & {
+    variables: Record<string, string>;
+    environment?: Record<string, string>;
+  };
+  // Write variable changes back, so a pre-request script's `jt.variables.x = …`
+  // reaches this request's variable resolution (see runRequest.ts), and
+  // environment changes reach the caller.
+  writeBack(context.variables, output.variables);
+  if (context.environment && output.environment) writeBack(context.environment, output.environment);
+  return { results: output.results, logs: output.logs, ...(output.response && { response: output.response }) };
+}
+
+function checkNamespace(profile: EngineProfile): void {
+  // The namespace becomes a global name inside the sandbox; only a plain
+  // identifier is accepted.
+  if (!/^[A-Za-z_$][\w$]*$/.test(profile.scriptNamespace)) {
+    throw new Error(`Invalid script namespace: ${JSON.stringify(profile.scriptNamespace)}`);
+  }
+}
+
+/**
+ * Stopped mid-call, or timed out (ScriptTimeout), the module's memory is in an
+ * unknown state, so it's never used again: the next script loads a fresh one
+ * (a few ms).
+ */
+function discardModule(module: QuickJSWASMModule, limits: ScriptLimits): never {
+  discarded.add(module);
+  quickJs = undefined;
+  throw new ScriptTimeout(`Script timed out after ${limits.timeoutMs} ms`);
+}
+
+/** Runs `task` with the hard stop; a timeout of either kind discards the module. */
+function guarded<T>(module: QuickJSWASMModule, limits: ScriptLimits, task: () => T): T {
+  let run: { value: T } | undefined;
+  try {
+    run = withHardStop(task, limits.timeoutMs + HARD_STOP_GRACE_MS);
+  } catch (error) {
+    if (error instanceof ScriptTimeout) discardModule(module, limits);
+    throw error;
+  }
+  if (!run) discardModule(module, limits);
+  return run.value;
 }
 
 /**
@@ -616,82 +766,75 @@ export async function runScript(
   limits: ScriptLimits = DEFAULT_SCRIPT_LIMITS,
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
 ): Promise<ScriptRunResult> {
-  // The namespace becomes a global name inside the sandbox; only a plain
-  // identifier is accepted.
-  if (!/^[A-Za-z_$][\w$]*$/.test(profile.scriptNamespace)) {
-    throw new Error(`Invalid script namespace: ${JSON.stringify(profile.scriptNamespace)}`);
-  }
-  let module = await loadQuickJs();
-  // Another script's hard stop may have discarded this module while we waited.
-  while (discarded.has(module)) module = await loadQuickJs();
-
-  const run = withHardStop(() => {
-    const runtime = module.newRuntime();
-    runtime.setMemoryLimit(limits.memoryBytes);
-    runtime.setMaxStackSize(1024 * 1024);
-    const deadline = Date.now() + limits.timeoutMs;
-    runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
-    const ctx = runtime.newContext();
+  checkNamespace(profile);
+  const module = await liveModule();
+  const text = guarded(module, limits, () => {
+    const sandbox = newSandbox(module, limits);
+    let ok = false;
     try {
-      const input = ctx.newString(
-        JSON.stringify({
-          namespace: profile.scriptNamespace,
-          request: context.request,
-          response: context.response,
-          variables: context.variables,
-          environment: context.environment,
-          cookies: context.cookies,
-          messages: context.messages,
-          iteration: context.iteration ?? { index: 0, count: 1, data: {} },
-          respond: context.respond === true,
-        }),
-      );
-      ctx.setProp(ctx.global, '__input', input);
-      input.dispose();
-      const postmanApi = ctx.newString(POSTMAN_API);
-      ctx.setProp(ctx.global, '__postman', postmanApi);
-      postmanApi.dispose();
-      unwrap(ctx, ctx.evalCode(PRELUDE, 'prelude.js'), limits).dispose();
-
-      unwrap(ctx, ctx.evalCode(code, 'script.js'), limits).dispose();
-      // Let promise callbacks the script queued run too, within the same deadline.
-      const jobs = runtime.executePendingJobs();
-      if (jobs.error) {
-        const dumped = ctx.dump(jobs.error) as { message?: string };
-        jobs.error.dispose();
-        throw new ScriptError(dumped?.message ?? String(dumped));
-      }
-      // An interrupt inside a promise callback rejects that promise rather than
-      // failing the call, so check the deadline directly.
-      if (Date.now() >= deadline) throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
-
-      const outputHandle = unwrap(ctx, ctx.evalCode('__output()', 'output.js'), limits);
-      const output = ctx.getString(outputHandle);
-      outputHandle.dispose();
+      const output = runInSandbox(sandbox, code, context, limits, profile);
+      ok = true;
       return output;
+    } catch (error) {
+      ok = !(error instanceof ScriptTimeout);
+      throw error;
     } finally {
-      ctx.dispose();
-      runtime.dispose();
+      if (ok) disposeSandbox(sandbox);
     }
-  }, limits.timeoutMs + HARD_STOP_GRACE_MS);
+  });
+  return finish(text, context);
+}
 
-  if (!run) {
-    // Stopped mid-call, the module's memory is in an unknown state, so it's
-    // never used again: the next script loads a fresh one (a few ms).
-    discarded.add(module);
-    quickJs = undefined;
-    throw new ScriptError(`Script timed out after ${limits.timeoutMs} ms`);
+/**
+ * Runs scripts one after another in one sandbox that stays warm: the runtime,
+ * the context and the compiled script API are made once and reused, which
+ * makes each script about ten times cheaper than `runScript`. For a load
+ * test's virtual user, say, running the same scripts thousands of times.
+ *
+ * The price is a clean slate: what one script leaves in the global scope (a
+ * global variable, a changed built-in) is still there for the next. The
+ * script API itself (`<namespace>`, `pm`, `console`) is set up afresh for
+ * each script, and the sandbox is as closed to the host as `runScript`'s.
+ * After a script throws, runs out of time or memory, the sandbox is thrown
+ * away and the next script gets a new one. Same limits and errors as
+ * `runScript`. Call `dispose()` when done (a disposed session makes a new
+ * sandbox if used again).
+ */
+export class ScriptSession {
+  private sandbox: Sandbox | undefined;
+
+  async run(
+    code: string,
+    context: ScriptContext,
+    limits: ScriptLimits = DEFAULT_SCRIPT_LIMITS,
+    profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
+  ): Promise<ScriptRunResult> {
+    checkNamespace(profile);
+    const module = await liveModule();
+    if (this.sandbox && this.sandbox.module !== module) this.sandbox = undefined;
+    try {
+      const text = guarded(module, limits, () => {
+        this.sandbox ??= newSandbox(module, limits);
+        try {
+          return runInSandbox(this.sandbox, code, context, limits, profile);
+        } catch (error) {
+          // A timed-out sandbox goes with its module (guarded); any other failure starts a new one.
+          if (error instanceof ScriptTimeout) this.sandbox = undefined;
+          else this.dispose();
+          throw error;
+        }
+      });
+      return finish(text, context);
+    } catch (error) {
+      // Stopped by the hard stop, the module was discarded with this sandbox in it.
+      if (this.sandbox && discarded.has(this.sandbox.module)) this.sandbox = undefined;
+      throw error;
+    }
   }
-  const output = JSON.parse(run.value) as ScriptRunResult & {
-    variables: Record<string, string>;
-    environment?: Record<string, string>;
-  };
 
-  // Write variable changes back, so a pre-request script's `jt.variables.x = …`
-  // reaches this request's variable resolution (see runRequest.ts), and
-  // environment changes reach the caller.
-  writeBack(context.variables, output.variables);
-  if (context.environment && output.environment) writeBack(context.environment, output.environment);
-
-  return { results: output.results, logs: output.logs, ...(output.response && { response: output.response }) };
+  dispose(): void {
+    const sandbox = this.sandbox;
+    this.sandbox = undefined;
+    if (sandbox && !discarded.has(sandbox.module)) disposeSandbox(sandbox);
+  }
 }

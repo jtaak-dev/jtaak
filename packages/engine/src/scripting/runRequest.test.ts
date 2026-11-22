@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runRequestWithScripts } from './runRequest';
+import { ScriptSession } from './sandbox';
 import { CookieJar } from '../request/cookieJar';
 import { emptyScopes } from '../types';
 import type { RequestConfig, VariableScope } from '../types';
@@ -36,6 +37,26 @@ function baseConfig(overrides: Partial<RequestConfig> = {}): RequestConfig {
 }
 
 describe('runRequestWithScripts', () => {
+  it('runs both scripts in a warm sandbox when given one (scriptSession)', async () => {
+    const scriptSession = new ScriptSession();
+    try {
+      const config = baseConfig({
+        url: '{{base}}/n/{{n}}',
+        preRequestScript: 'globalThis.runs = (globalThis.runs || 0) + 1; jt.variables.n = String(runs);',
+        testScript: 'jt.test("path", () => jt.expect(jt.response.json().path).toBe("/n/" + runs));',
+      });
+      const scopes = { ...emptyScopes(), environment: { base: baseUrl } };
+      for (let i = 0; i < 2; i++) {
+        const result = await runRequestWithScripts(config, scopes, undefined, { scriptSession });
+        expect(result.testResults).toEqual([{ name: 'path', passed: true }]);
+        // What the scripts left in the global scope lasts from one request to the next.
+        expect(result.response?.body).toContain(`/n/${i + 1}`);
+      }
+    } finally {
+      scriptSession.dispose();
+    }
+  });
+
   it("lets scripts read the jar's cookies for the URL, before and after the send", async () => {
     const cookieJar = new CookieJar();
     cookieJar.store(`${baseUrl}/`, ['session=s1; HttpOnly', 'theme=dark']);

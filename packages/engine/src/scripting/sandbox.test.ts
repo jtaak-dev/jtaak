@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { preloadScriptEngine, runScript } from './sandbox';
+import { preloadScriptEngine, runScript, ScriptSession } from './sandbox';
 import { DEFAULT_ENGINE_PROFILE, type ExecutedResponse, type RequestConfig } from '../types';
 
 const baseRequest: RequestConfig = {
@@ -378,6 +378,18 @@ describe('isolation and limits', () => {
     expect((await runScript(script, { request: baseRequest, variables: {} })).results).toHaveLength(2);
   });
 
+  it('times out a script whose promise callbacks run past the deadline, again and again', async () => {
+    // QuickJS can abort when freeing a runtime interrupted inside a promise callback (only sometimes, by
+    // where the interrupt lands), so a timed-out runtime is discarded with its module, never freed.
+    const loop = 'const loop = () => Promise.resolve().then(loop); loop();';
+    for (let i = 0; i < 5; i++) {
+      await expect(runScript(loop, { request: baseRequest, variables: {} }, limits)).rejects.toThrow(/timed out/);
+    }
+    expect((await runScript('jt.test("t", () => {});', { request: baseRequest, variables: {} })).results).toHaveLength(
+      1,
+    );
+  });
+
   it('gives Postman scripts pm however they reach it, and lets a script use the name for its own', async () => {
     const { logs } = await runScript(
       'console.log(typeof pm, "pm" in globalThis, typeof globalThis["p" + "m"].test, Object.keys(globalThis).includes("pm"));',
@@ -397,5 +409,103 @@ describe('isolation and limits', () => {
       variables: {},
     });
     expect(logs).toEqual([{ level: 'log', message: 'got 7' }]);
+  });
+});
+
+describe('a warm sandbox (ScriptSession)', () => {
+  const limits = { timeoutMs: 100, memoryBytes: 16 * 1024 * 1024 };
+  const test = 'jt.test("status is 200", () => jt.expect(jt.response.status).toBe(200));';
+
+  it('runs scripts as runScript does, with the script API set up afresh for each', async () => {
+    const session = new ScriptSession();
+    try {
+      const variables: Record<string, string> = { count: '1' };
+      const first = await session.run(
+        'jt.variables.count = String(Number(jt.variables.count) + 1); jt.extra = 1; console.log("one");',
+        { request: baseRequest, variables },
+      );
+      expect(variables.count).toBe('2');
+      expect(first.logs).toEqual([{ level: 'log', message: 'one' }]);
+      const second = await session.run(
+        test + ' pm.test("pm", () => pm.expect(pm.response.code).to.equal(200)); console.log(typeof jt.extra);',
+        { request: baseRequest, response: baseResponse, variables },
+      );
+      expect(second.results).toEqual([
+        { name: 'status is 200', passed: true },
+        { name: 'pm', passed: true },
+      ]);
+      // The last script's logs and results aren't carried over; nor is what it put on jt.
+      expect(second.logs).toEqual([{ level: 'log', message: 'undefined' }]);
+      // A script that took pm for its own name doesn't break the next one's.
+      await session.run('var pm = 5; globalThis.pm = 6;', { request: baseRequest, variables: {} });
+      const third = await session.run('pm.test("again", () => {});', { request: baseRequest, variables: {} });
+      expect(third.results).toEqual([{ name: 'again', passed: true }]);
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('keeps what a script leaves in the global scope, until a script fails', async () => {
+    const session = new ScriptSession();
+    try {
+      await session.run('globalThis.leak = 1;', { request: baseRequest, variables: {} });
+      const seen = await session.run('console.log(typeof leak);', { request: baseRequest, variables: {} });
+      expect(seen.logs[0].message).toBe('number');
+      await expect(session.run('throw new Error("boom")', { request: baseRequest, variables: {} })).rejects.toThrow(
+        'boom',
+      );
+      const after = await session.run('console.log(typeof leak);', { request: baseRequest, variables: {} });
+      expect(after.logs[0].message).toBe('undefined');
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('starts a new sandbox after a script ran out of time or memory', async () => {
+    const session = new ScriptSession();
+    const context = () => ({ request: baseRequest, response: baseResponse, variables: {} });
+    try {
+      await expect(session.run('globalThis.leak = 1; while (true) {}', context(), limits)).rejects.toThrow(/timed out/);
+      expect((await session.run('console.log(typeof leak);', context(), limits)).logs[0].message).toBe('undefined');
+      await expect(
+        session.run('new Uint8Array(32 * 1024 * 1024);', context(), { ...limits, timeoutMs: 1000 }),
+      ).rejects.toThrow(/out of memory/i);
+      expect((await session.run(test, context(), limits)).results).toHaveLength(1);
+      // A promise callback still queued at the deadline doesn't run in the next script's time.
+      await expect(
+        session.run('globalThis.leak = 1; const loop = () => Promise.resolve().then(loop); loop();', context(), limits),
+      ).rejects.toThrow(/timed out/);
+      expect((await session.run('console.log(typeof leak);', context(), limits)).logs[0].message).toBe('undefined');
+    } finally {
+      session.dispose();
+    }
+  });
+
+  it('can be used again after dispose', async () => {
+    const session = new ScriptSession();
+    await session.run('globalThis.leak = 1;', { request: baseRequest, variables: {} });
+    session.dispose();
+    const after = await session.run('console.log(typeof leak);', { request: baseRequest, variables: {} });
+    expect(after.logs[0].message).toBe('undefined');
+    session.dispose();
+  });
+
+  it('performance budget: runs a script several times cheaper than a fresh sandbox', async () => {
+    const context = () => ({ request: baseRequest, response: baseResponse, variables: {} });
+    const time = async (run: () => Promise<unknown>) => {
+      for (let i = 0; i < 20; i++) await run();
+      const start = performance.now();
+      for (let i = 0; i < 100; i++) await run();
+      return performance.now() - start;
+    };
+    const session = new ScriptSession();
+    try {
+      const fresh = await time(() => runScript(test, context()));
+      const warm = await time(() => session.run(test, context()));
+      // About 10x on a quiet machine; 3x leaves room for a busy one.
+      expect(warm * 3).toBeLessThan(fresh);
+    } finally {
+      session.dispose();
+    }
   });
 });
