@@ -753,14 +753,6 @@ function runInSandbox(
   }
 }
 
-/** Loads the module, waiting out a discarded one (see withHardStop). */
-async function liveModule(): Promise<QuickJSWASMModule> {
-  let module = await loadQuickJs();
-  // Another script's hard stop may have discarded this module while we waited.
-  while (discarded.has(module)) module = await loadQuickJs();
-  return module;
-}
-
 /** Turns the sandbox's output into the result, writing the variables back. */
 function finish(text: string, context: ScriptContext): ScriptRunResult {
   const output = JSON.parse(text) as ScriptRunResult & {
@@ -827,7 +819,10 @@ export async function runScript(
   profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
 ): Promise<ScriptRunResult> {
   checkNamespace(profile);
-  const module = await liveModule();
+  let module = await loadQuickJs();
+  // Another script's hard stop may have discarded this module while we
+  // waited; checked with no await between it and the run.
+  while (discarded.has(module)) module = await loadQuickJs();
   const text = guarded(module, limits, () => {
     const sandbox = newSandbox(module, limits);
     let ok = false;
@@ -889,7 +884,10 @@ export class ScriptSession {
     profile: EngineProfile = DEFAULT_ENGINE_PROFILE,
   ): Promise<ScriptRunResult> {
     checkNamespace(profile);
-    const module = await liveModule();
+    let module = await loadQuickJs();
+    // Another script's hard stop may have discarded this module while we
+    // waited; checked with no await between it and the run.
+    while (discarded.has(module)) module = await loadQuickJs();
     if (this.sandbox && this.sandbox.module !== module) this.sandbox = undefined;
     try {
       const text = guarded(

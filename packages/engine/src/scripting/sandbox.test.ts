@@ -535,7 +535,7 @@ describe('a warm sandbox (ScriptSession)', () => {
     session.dispose();
   });
 
-  it('performance budget: runs a script several times cheaper than a fresh sandbox', async () => {
+  it('performance budget: runs a script several times cheaper than a fresh sandbox, without the hard stop', async () => {
     const context = () => ({ request: baseRequest, response: baseResponse, variables: {} });
     const time = async (run: () => Promise<unknown>) => {
       for (let i = 0; i < 20; i++) await run();
@@ -543,7 +543,8 @@ describe('a warm sandbox (ScriptSession)', () => {
       for (let i = 0; i < 100; i++) await run();
       return performance.now() - start;
     };
-    const session = new ScriptSession();
+    // As a load test runs it: the hard stop's watchdog costs more than a warm script.
+    const session = new ScriptSession({ hardStop: false });
     try {
       const fresh = await time(() => runScript(test, context()));
       const warm = await time(() => session.run(test, context()));
