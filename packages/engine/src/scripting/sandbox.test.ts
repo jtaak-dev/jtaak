@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { preloadScriptEngine, runScript, ScriptSession } from './sandbox';
+import type { QuickJSContext, QuickJSRuntime } from 'quickjs-emscripten-core';
 import { DEFAULT_ENGINE_PROFILE, type ExecutedResponse, type RequestConfig } from '../types';
 
 const baseRequest: RequestConfig = {
@@ -478,6 +479,35 @@ describe('a warm sandbox (ScriptSession)', () => {
       expect((await session.run('console.log(typeof leak);', context(), limits)).logs[0].message).toBe('undefined');
     } finally {
       session.dispose();
+    }
+  });
+
+  it('leaves no garbage behind from one script to the next (QuickJS frees cycles only now and then)', async () => {
+    const scripts = [
+      test + ' jt.test("deep", () => jt.expect(jt.response.json()).toEqual(jt.response.json()));',
+      'pm.test("status", () => pm.response.to.have.status(200)); pm.test("json", () => pm.expect(pm.response.json()).to.have.property("id", 1)); pm.environment.set("x", "1");',
+    ];
+    for (const script of scripts) {
+      const session = new ScriptSession();
+      try {
+        const used = async (runs: number) => {
+          for (let i = 0; i < runs; i++) {
+            await session.run(script, { request: baseRequest, response: baseResponse, variables: {}, environment: {} });
+          }
+          // The session's own runtime, which nothing outside reads.
+          const { runtime, ctx } = (session as unknown as { sandbox: { runtime: QuickJSRuntime; ctx: QuickJSContext } })
+            .sandbox;
+          const usage = runtime.computeMemoryUsage();
+          const { memory_used_size } = ctx.dump(usage) as { memory_used_size: number };
+          usage.dispose();
+          return memory_used_size;
+        };
+        const after5 = await used(5);
+        const after100 = await used(95);
+        expect(after100).toBeLessThan(after5 * 1.2);
+      } finally {
+        session.dispose();
+      }
     }
   });
 

@@ -104,10 +104,11 @@ export const DEFAULT_SCRIPT_LIMITS: ScriptLimits = { timeoutMs: 1000, memoryByte
 const PRELUDE = String.raw`
 (function (postmanSource) {
 'use strict';
-return function setup(inputJson) {
-  const input = JSON.parse(inputJson);
-  const results = [];
-  const logs = [];
+// Captured now, before any script could replace it.
+const NewFunction = Function;
+// Postman's script API, compiled the first time a script reaches pm, then
+// kept: a function of the values it works on (POSTMAN_API).
+let makePostman;
 
   function isDeepEqual(a, b) {
     if (Object.is(a, b)) return true;
@@ -125,13 +126,6 @@ return function setup(inputJson) {
       return String(value);
     }
   }
-
-  function capture(level) {
-    return (...args) => {
-      logs.push({ level, message: args.map((v) => (typeof v === 'string' ? v : describe(v))).join(' ') });
-    };
-  }
-  globalThis.console = { log: capture('log'), info: capture('info'), warn: capture('warn'), error: capture('error') };
 
   // A minimal Chai-like matcher set: enough for the common status/body/header
   // assertions a pre-request or test script needs, not a full port.
@@ -190,6 +184,18 @@ return function setup(inputJson) {
       },
     };
   }
+
+return function setup(inputJson) {
+  const input = JSON.parse(inputJson);
+  const results = [];
+  const logs = [];
+
+  function capture(level) {
+    return (...args) => {
+      logs.push({ level, message: args.map((v) => (typeof v === 'string' ? v : describe(v))).join(' ') });
+    };
+  }
+  globalThis.console = { log: capture('log'), info: capture('info'), warn: capture('warn'), error: capture('error') };
 
   const variables = input.variables;
   // With separate environment values, a write to the environment is also a
@@ -275,14 +281,19 @@ return function setup(inputJson) {
 
 
   // Postman's script API (pm.*) is compiled the first time a script uses
-  // pm (POSTMAN_API below): it's half the prelude, and scripts written
-  // for the namespace never need it. A direct eval, so it sees this scope.
+  // pm (POSTMAN_API below): it's half the prelude, and scripts written for
+  // the namespace never need it. A function of what it works on, not a
+  // direct eval: one would keep this whole scope (and the input) alive in
+  // reference cycles, which QuickJS frees only when its collector runs.
   let postman;
   Object.defineProperty(globalThis, 'pm', {
     configurable: true,
     enumerable: true,
     get() {
-      if (postman === undefined) postman = eval(postmanSource);
+      if (postman === undefined) {
+        makePostman ??= new NewFunction('describe', 'isDeepEqual', "'use strict';" + postmanSource)(describe, isDeepEqual);
+        postman = makePostman(input, environment, variables, cookies);
+      }
       return postman;
     },
     set(value) {
@@ -314,8 +325,10 @@ return function setup(inputJson) {
 })
 `;
 
-// Postman's script API, evaluated inside the prelude on first use of `pm`;
-// its last expression is the `pm` object.
+// Postman's script API, compiled inside the prelude on first use of `pm`
+// (once per sandbox) as the body of a function of describe and isDeepEqual,
+// which returns the function that makes the `pm` object for one script's
+// input, environment, variables and cookies.
 const POSTMAN_API = String.raw`
   // Postman's script API (pm.*), so scripts imported from Postman run as
   // written: the common calls, over the same values as the namespace above.
@@ -326,35 +339,50 @@ const POSTMAN_API = String.raw`
     if (Array.isArray(value)) return 'array';
     return typeof value;
   }
-  function chai(actual, negated) {
-    const self = {};
-    function check(condition, message) {
-      if (condition === Boolean(negated)) {
-        throw new Error('expected ' + describe(actual) + (negated ? ' not to ' : ' to ') + message);
-      }
-      return self;
+  // pm.expect's chain, as a class: methods on the prototype rather than
+  // closures over the object, so an expectation leaves no reference cycle
+  // behind (QuickJS frees cycles only when its collector runs).
+  class Chai {
+    constructor(actual, negated) {
+      this.actual = actual;
+      this.negated = Boolean(negated);
     }
-    const chains = ['to', 'be', 'been', 'is', 'that', 'which', 'and', 'has', 'have', 'with', 'at', 'of', 'same', 'does', 'deep', 'all', 'any', 'own'];
-    for (const word of chains) Object.defineProperty(self, word, { get: () => self });
-    Object.defineProperty(self, 'not', { get: () => chai(actual, !negated) });
-    const flag = (name, test, message) => Object.defineProperty(self, name, { get: () => check(test(), message) });
-    flag('true', () => actual === true, 'be true');
-    flag('false', () => actual === false, 'be false');
-    flag('null', () => actual === null, 'be null');
-    flag('undefined', () => actual === undefined, 'be undefined');
-    flag('ok', () => Boolean(actual), 'be truthy');
-    flag('exist', () => actual !== null && actual !== undefined, 'exist');
-    flag('empty', () => (typeof actual === 'string' || Array.isArray(actual) ? actual.length === 0 : actual && typeof actual === 'object' ? Object.keys(actual).length === 0 : false), 'be empty');
-    self.equal = self.equals = self.eq = (expected) => check(actual === expected, 'equal ' + describe(expected));
-    self.eql = self.eqls = (expected) => check(isDeepEqual(actual, expected), 'deeply equal ' + describe(expected));
-    self.above = self.gt = self.greaterThan = (n) => check(actual > n, 'be above ' + n);
-    self.below = self.lt = self.lessThan = (n) => check(actual < n, 'be below ' + n);
-    self.least = self.gte = (n) => check(actual >= n, 'be at least ' + n);
-    self.most = self.lte = (n) => check(actual <= n, 'be at most ' + n);
-    self.within = (low, high) => check(actual >= low && actual <= high, 'be within ' + low + '..' + high);
-    self.a = self.an = (type) => check(typeName(actual) === String(type).toLowerCase(), 'be a ' + type);
-    self.include = self.includes = self.contain = self.contains = (value) =>
-      check(
+    check(condition, message) {
+      if (condition === this.negated) {
+        throw new Error('expected ' + describe(this.actual) + (this.negated ? ' not to ' : ' to ') + message);
+      }
+      return this;
+    }
+    get not() {
+      return new Chai(this.actual, !this.negated);
+    }
+    equal(expected) {
+      return this.check(this.actual === expected, 'equal ' + describe(expected));
+    }
+    eql(expected) {
+      return this.check(isDeepEqual(this.actual, expected), 'deeply equal ' + describe(expected));
+    }
+    above(n) {
+      return this.check(this.actual > n, 'be above ' + n);
+    }
+    below(n) {
+      return this.check(this.actual < n, 'be below ' + n);
+    }
+    least(n) {
+      return this.check(this.actual >= n, 'be at least ' + n);
+    }
+    most(n) {
+      return this.check(this.actual <= n, 'be at most ' + n);
+    }
+    within(low, high) {
+      return this.check(this.actual >= low && this.actual <= high, 'be within ' + low + '..' + high);
+    }
+    a(type) {
+      return this.check(typeName(this.actual) === String(type).toLowerCase(), 'be a ' + type);
+    }
+    include(value) {
+      const actual = this.actual;
+      return this.check(
         typeof actual === 'string'
           ? actual.includes(value)
           : Array.isArray(actual)
@@ -364,21 +392,50 @@ const POSTMAN_API = String.raw`
               : false,
         'include ' + describe(value),
       );
-    self.property = function (key, value) {
+    }
+    property(key, value) {
+      const actual = this.actual;
       const has = actual !== null && actual !== undefined && typeof actual === 'object' && key in actual;
       return arguments.length < 2
-        ? check(has, 'have property ' + describe(key))
-        : check(has && isDeepEqual(actual[key], value), 'have property ' + describe(key) + ' of ' + describe(value));
-    };
-    self.lengthOf = (n) => check(actual !== null && actual !== undefined && actual.length === n, 'have length ' + n);
-    self.oneOf = (list) => check(list.some((item) => isDeepEqual(item, actual)), 'be one of ' + describe(list));
-    self.match = (pattern) => check(pattern.test(String(actual)), 'match ' + pattern);
-    self.keys = (...keys) => {
+        ? this.check(has, 'have property ' + describe(key))
+        : this.check(has && isDeepEqual(actual[key], value), 'have property ' + describe(key) + ' of ' + describe(value));
+    }
+    lengthOf(n) {
+      return this.check(this.actual !== null && this.actual !== undefined && this.actual.length === n, 'have length ' + n);
+    }
+    oneOf(list) {
+      return this.check(list.some((item) => isDeepEqual(item, this.actual)), 'be one of ' + describe(list));
+    }
+    match(pattern) {
+      return this.check(pattern.test(String(this.actual)), 'match ' + pattern);
+    }
+    keys(...keys) {
       const wanted = keys.length === 1 && Array.isArray(keys[0]) ? keys[0] : keys;
-      return check(actual !== null && typeof actual === 'object' && wanted.every((key) => key in actual), 'have keys ' + describe(wanted));
-    };
-    self.key = self.keys;
-    return self;
+      const actual = this.actual;
+      return this.check(actual !== null && typeof actual === 'object' && wanted.every((key) => key in actual), 'have keys ' + describe(wanted));
+    }
+  }
+  const chainWords = ['to', 'be', 'been', 'is', 'that', 'which', 'and', 'has', 'have', 'with', 'at', 'of', 'same', 'does', 'deep', 'all', 'any', 'own'];
+  for (const word of chainWords) Object.defineProperty(Chai.prototype, word, { get() { return this; } });
+  const flags = {
+    true: [(v) => v === true, 'be true'],
+    false: [(v) => v === false, 'be false'],
+    null: [(v) => v === null, 'be null'],
+    undefined: [(v) => v === undefined, 'be undefined'],
+    ok: [(v) => Boolean(v), 'be truthy'],
+    exist: [(v) => v !== null && v !== undefined, 'exist'],
+    empty: [(v) => (typeof v === 'string' || Array.isArray(v) ? v.length === 0 : v && typeof v === 'object' ? Object.keys(v).length === 0 : false), 'be empty'],
+  };
+  for (const [name, [test, message]] of Object.entries(flags)) {
+    Object.defineProperty(Chai.prototype, name, { get() { return this.check(test(this.actual), message); } });
+  }
+  const aliases = {
+    equal: ['equals', 'eq'], eql: ['eqls'], above: ['gt', 'greaterThan'], below: ['lt', 'lessThan'],
+    least: ['gte'], most: ['lte'], a: ['an'], include: ['includes', 'contain', 'contains'], keys: ['key'],
+  };
+  for (const [name, others] of Object.entries(aliases)) for (const other of others) Chai.prototype[other] = Chai.prototype[name];
+  function chai(actual, negated) {
+    return new Chai(actual, negated);
   }
 
   function unsupported(path) {
@@ -421,6 +478,8 @@ const POSTMAN_API = String.raw`
     return strict({ get: find, has: (name) => find(name) !== undefined }, path);
   }
 
+  // What follows is made afresh for each script, from its values.
+  return function (input, environment, variables, cookies) {
   const pmResponse = input.response
     ? (() => {
         const r = input.response;
@@ -524,7 +583,8 @@ const POSTMAN_API = String.raw`
     },
     'pm',
   );
-  pm;
+  return pm;
+  };
 `;
 
 let quickJs: Promise<QuickJSWASMModule> | undefined;
